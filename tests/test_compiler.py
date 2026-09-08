@@ -50,9 +50,15 @@ def test_compile(tmp_path):
     assert voice_items[2]["Serif"] == "今日はいい天気ですね"
     assert voice_items[2]["Frame"] == voice_items[0]["Length"] + voice_items[1]["Length"]
 
-    # Ensure other fields aren't touched (check a few)
-    assert voice_items[0]["VoiceFadeIn"] == 0.0
-    assert voice_items[0]["Font"] == "けいふぉんと"
+    # Ensure other fields aren't touched (full check)
+    mutated_fields = {"Serif", "Hatsuon", "Frame", "Length", "VoiceCache"}
+
+    for v_item in voice_items:
+        char_name = v_item["CharacterName"]
+        template_item = compiler.character_templates[char_name]["voice"]
+        for key, template_value in template_item.items():
+            if key not in mutated_fields:
+                assert v_item[key] == template_value
 
     # Missing character handling
     script_with_missing_char = [
@@ -60,3 +66,26 @@ def test_compile(tmp_path):
     ]
     with pytest.raises(ValueError):
         compiler.compile(script_with_missing_char, str(tmp_path / "output2.ymmp"))
+
+
+def test_compile_tachie_filtering(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_tachie.ymmp"
+
+    # Template has 2 characters (霊夢 and 魔理沙), script only uses 1 (霊夢)
+    script_one_char = [
+        { "character": "ゆっくり霊夢", "text": "こんにちは" }
+    ]
+
+    compiler = YMMPCompiler(template_path)
+    compiler.compile(script_one_char, str(output_path))
+
+    with open(output_path, 'r', encoding='utf-8') as f:
+        output_data = json.load(f)
+
+    items = output_data["Timeline"]["Items"]
+    tachie_items = [i for i in items if "TachieItem" in i.get("$type", "")]
+
+    # Should only contain 1 TachieItem for 霊夢, the one for 魔理沙 should be filtered out
+    assert len(tachie_items) == 1
+    assert tachie_items[0]["CharacterName"] == "ゆっくり霊夢"

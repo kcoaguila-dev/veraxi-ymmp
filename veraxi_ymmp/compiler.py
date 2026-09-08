@@ -43,9 +43,12 @@ class YMMPCompiler:
 
         total_length = current_frame
 
+        # Build set of character names actually used in the script
+        used_characters = set(line["character"] for line in script)
+
         # Add TachieItems
         for char_name, templates in self.character_templates.items():
-            if templates["tachie"] is not None:
+            if char_name in used_characters and templates["tachie"] is not None:
                 # Add tachie item covering the whole timeline
                 tachie_item = copy.deepcopy(templates["tachie"])
                 tachie_item["Frame"] = 0
