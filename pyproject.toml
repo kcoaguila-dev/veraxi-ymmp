@@ -9,7 +9,8 @@ dependencies = [
     "pykakasi",
     "mecab-python3",
     "ipadic",
-    "alkana"
+    "alkana",
+    "requests"
 ]
 description = "A Python tool that generates YMM4 .ymmp dialogue timelines"
 
