@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.egg-info/
 test_output.ymmp
+
+# Virtual environment
+venv/

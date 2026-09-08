@@ -4,6 +4,10 @@ import sys
 from .compiler import YMMPCompiler
 from .voicevox import VoicevoxClient, VoicevoxError
 
+# Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 def main():
     parser = argparse.ArgumentParser(description="Generate YMM4 .ymmp timelines from a template and script.")
     parser.add_argument("template", nargs='?', help="Path to the template .ymmp file")
