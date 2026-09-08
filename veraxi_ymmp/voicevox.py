@@ -1,17 +1,59 @@
-import requests
-import wave
+"""
+VOICEVOX Engine client for text-to-speech synthesis.
+
+Provides a Python interface to the VOICEVOX HTTP API for:
+- Checking engine availability
+- Synthesizing speech from text
+- Listing available speakers
+"""
+
+from __future__ import annotations
+
 import io
 import json
-from typing import Tuple
+import wave
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
+
 
 class VoicevoxError(Exception):
+    """Exception raised when VOICEVOX API operations fail."""
     pass
 
+
 class VoicevoxClient:
-    def __init__(self, base_url: str = "http://localhost:50021"):
+    """
+    Client for interacting with VOICEVOX Engine API.
+    
+    The VOICEVOX Engine provides a REST API for speech synthesis.
+    This client encapsulates the API calls and handles errors.
+    
+    Attributes:
+        base_url: Base URL of the VOICEVOX Engine (default: http://localhost:50021)
+        timeout: Default timeout for API requests in seconds (default: 30)
+    """
+    
+    DEFAULT_TIMEOUT = 30
+    
+    def __init__(self, base_url: str = "http://localhost:50021", timeout: int = DEFAULT_TIMEOUT):
+        """
+        Initialize VOICEVOX client.
+        
+        Args:
+            base_url: Base URL of the VOICEVOX Engine.
+            timeout: Timeout in seconds for API requests.
+        """
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
 
     def is_available(self) -> bool:
+        """
+        Check if VOICEVOX Engine is available and responding.
+        
+        Returns:
+            True if the engine responds to the version endpoint, False otherwise.
+        """
         try:
             response = requests.get(f"{self.base_url}/version", timeout=3)
             return response.status_code == 200
@@ -19,6 +61,19 @@ class VoicevoxClient:
             return False
 
     def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+        """
+        Synthesize speech from text using a specific speaker.
+        
+        Args:
+            text: Text to synthesize.
+            speaker_id: ID of the speaker to use.
+            
+        Returns:
+            Tuple of (WAV audio bytes, duration in seconds).
+            
+        Raises:
+            VoicevoxError: If synthesis fails at any step.
+        """
         try:
             query_res = requests.post(
                 f"{self.base_url}/audio_query",
@@ -36,7 +91,7 @@ class VoicevoxClient:
                 params={"speaker": speaker_id},
                 json=audio_query,
                 headers={"Content-Type": "application/json"},
-                timeout=30
+                timeout=self.timeout
             )
             synth_res.raise_for_status()
             wav_bytes = synth_res.content
@@ -53,7 +108,16 @@ class VoicevoxClient:
 
         return wav_bytes, duration
 
-    def get_speakers(self):
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        """
+        Get list of available speakers from VOICEVOX Engine.
+        
+        Returns:
+            List of speaker dictionaries, each containing name, speaker_uuid, and styles.
+            
+        Raises:
+            VoicevoxError: If the request fails.
+        """
         try:
             res = requests.get(f"{self.base_url}/speakers", timeout=5)
             res.raise_for_status()
