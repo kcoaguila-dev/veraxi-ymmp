@@ -9,5 +9,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e .
-      - run: pip install pytest
+      - run: pip install pytest pytest-asyncio
       - run: pytest tests/ -v
