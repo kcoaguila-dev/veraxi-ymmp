@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "veraxi-ymmp"
+version = "0.1.0"
+dependencies = [
+    "pykakasi",
+    "mecab-python3",
+    "ipadic",
+    "alkana"
+]
+description = "A Python tool that generates YMM4 .ymmp dialogue timelines"
+
+[project.scripts]
+veraxi-ymmp = "veraxi_ymmp.cli:main"
