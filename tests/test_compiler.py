@@ -3,6 +3,8 @@ import json
 import pytest
 import copy
 from veraxi_ymmp.compiler import YMMPCompiler
+from veraxi_ymmp.voicevox import VoicevoxClient
+from unittest.mock import Mock, patch
 
 def test_compile(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
@@ -89,3 +91,66 @@ def test_compile_tachie_filtering(tmp_path):
     # Should only contain 1 TachieItem for 霊夢, the one for 魔理沙 should be filtered out
     assert len(tachie_items) == 1
     assert tachie_items[0]["CharacterName"] == "ゆっくり霊夢"
+
+
+def test_compile_tts(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_tts.ymmp"
+
+    script = [
+        { "character": "ゆっくり霊夢", "text": "こんにちは" },
+        { "character": "ゆっくり魔理沙", "text": "こんばんは" }
+    ]
+
+    mock_client = Mock(spec=VoicevoxClient)
+    mock_client.is_available.return_value = True
+    # 2.0 seconds duration * 60 FPS (from template) = 120 frames
+    mock_client.synthesize.return_value = (b'fake_wav', 2.0)
+
+    speaker_map = {"ゆっくり霊夢": 10}
+
+    compiler = YMMPCompiler(
+        template_path=template_path,
+        voicevox_client=mock_client,
+        speaker_map=speaker_map,
+        default_speaker_id=3
+    )
+
+    compiler.compile(script, str(output_path))
+
+    with open(output_path, 'r', encoding='utf-8') as f:
+        output_data = json.load(f)
+
+    voice_items = [i for i in output_data["Timeline"]["Items"] if "VoiceItem" in i.get("$type", "")]
+
+    assert len(voice_items) == 2
+    assert voice_items[0]["Length"] == 120
+    assert voice_items[1]["Length"] == 120
+
+    # Assert synthesized audio was saved correctly
+    audio_dir = output_path.parent / "audio"
+    assert (audio_dir / "000_ゆっくり霊夢.wav").exists()
+    assert (audio_dir / "001_ゆっくり魔理沙.wav").exists()
+
+    # Assert proper speaker routing
+    assert mock_client.synthesize.call_count == 2
+    mock_client.synthesize.assert_any_call("こんにちは", 10)
+    mock_client.synthesize.assert_any_call("こんばんは", 3)
+
+
+def test_compile_tts_unavailable(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_unavailable.ymmp"
+
+    script = [
+        { "character": "ゆっくり霊夢", "text": "こんにちは" }
+    ]
+
+    mock_client = Mock(spec=VoicevoxClient)
+    mock_client.is_available.return_value = False
+    mock_client.base_url = "http://localhost:50021"
+
+    compiler = YMMPCompiler(template_path=template_path, voicevox_client=mock_client)
+
+    with pytest.raises(RuntimeError, match="VOICEVOX server not reachable"):
+        compiler.compile(script, str(output_path))
