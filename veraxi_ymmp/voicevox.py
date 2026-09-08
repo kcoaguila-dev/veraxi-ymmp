@@ -11,10 +11,39 @@ from __future__ import annotations
 
 import io
 import json
+import asyncio
 import wave
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Protocol
 
 import requests
+
+from .logging import logger
+
+
+class TTSBackend(Protocol):
+    """Protocol defining the interface for TTS backends."""
+
+    def is_available(self) -> bool:
+        ...
+
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+        ...
+
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        ...
+
+
+class NullTTSBackend:
+    """A dummy TTS backend for testing or placeholder generation."""
+
+    def is_available(self) -> bool:
+        return True
+
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+        return b"", 0.0
+
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        return []
 
 
 class VoicevoxError(Exception):
@@ -46,6 +75,16 @@ class VoicevoxClient:
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+
+    async def is_available_async(self) -> bool:
+        """Async check if the VOICEVOX server is running and accessible."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.is_available)
+
+    async def synthesize_async(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+        """Async version of synthesize."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.synthesize, text, speaker_id)
 
     def is_available(self) -> bool:
         """

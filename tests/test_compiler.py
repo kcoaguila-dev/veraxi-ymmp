@@ -152,5 +152,5 @@ def test_compile_tts_unavailable(tmp_path):
 
     compiler = YMMPCompiler(template_path=template_path, voicevox_client=mock_client)
 
-    with pytest.raises(RuntimeError, match="VOICEVOX server not reachable"):
+    with pytest.raises(RuntimeError, match="TTS Backend not reachable"):
         compiler.compile(script, str(output_path))

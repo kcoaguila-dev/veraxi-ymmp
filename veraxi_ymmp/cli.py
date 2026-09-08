@@ -5,13 +5,18 @@ Provides a CLI for generating YMM4 .ymmp dialogue timelines from templates and s
 """
 
 import argparse
+import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Optional
 
-from .compiler import YMMPCompiler, CompilerError
-from .voicevox import VoicevoxClient, VoicevoxError
+from .compiler import YMMPCompiler, CompilerError, CompilationResult
+from .async_compiler import AsyncYMMPCompiler
+from .config import CompilerConfig
+from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend
+from .logging import setup_logging, logger
 
 # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
 if sys.stdout.encoding != 'utf-8':
@@ -56,7 +61,24 @@ def main():
         help="Queries GET /speakers and prints the list, then exits"
     )
 
+    # New architecture arguments
+    parser.add_argument("--no-cache", action="store_true", help="Disable TTS caching")
+    parser.add_argument("--cache-dir", type=str, help="Directory for disk caching")
+    parser.add_argument("--async", dest="use_async", action="store_true", help="Use async compilation for parallel TTS")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Suppress info logging, only show warnings/errors")
+    parser.add_argument("--log-file", type=str, help="Write logs to file")
+
     args = parser.parse_args()
+
+    # Setup logging based on args
+    level = logging.INFO
+    if getattr(args, 'verbose', False):
+        level = logging.DEBUG
+    elif getattr(args, 'quiet', False):
+        level = logging.WARNING
+
+    setup_logging(level=level, log_file=getattr(args, 'log_file', None))
 
     if args.list_speakers:
         _list_speakers(args)
@@ -123,45 +145,53 @@ def _compile(args: argparse.Namespace) -> None:
             )
             sys.exit(1)
 
-    # Initialize VOICEVOX client if TTS is enabled
-    voicevox_client: Optional[VoicevoxClient] = None
-    speaker_map: dict = {}
+    config = CompilerConfig.from_cli_args(args)
 
-    if args.tts:
-        voicevox_client = VoicevoxClient(args.voicevox_url)
-        if not voicevox_client.is_available():
-            print(
-                f"Error: VOICEVOX not available at {args.voicevox_url}",
-                file=sys.stderr
-            )
+    if args.speaker_map:
+        speaker_map_path = Path(args.speaker_map)
+        if not speaker_map_path.exists():
+            logger.error(f"Speaker map file not found: {speaker_map_path}")
+            sys.exit(1)
+        try:
+            with open(speaker_map_path, 'r', encoding='utf-8') as f:
+                config.speaker_map = json.load(f)
+        except Exception as e:
+            logger.error(f"Invalid speaker map file: {e}")
             sys.exit(1)
 
-        if args.speaker_map:
-            speaker_map_path = Path(args.speaker_map)
-            if not speaker_map_path.exists():
-                print(f"Error: Speaker map file not found: {speaker_map_path}", file=sys.stderr)
-                sys.exit(1)
-            try:
-                with open(speaker_map_path, 'r', encoding='utf-8') as f:
-                    speaker_map = json.load(f)
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                print(f"Error: Invalid speaker map file: {e}", file=sys.stderr)
-                sys.exit(1)
+    tts_backend = None
+    if config.use_tts:
+        tts_backend = VoicevoxClient(config.voicevox_url)
+        if not tts_backend.is_available():
+            logger.error(f"VOICEVOX not available at {config.voicevox_url}")
+            sys.exit(1)
+    else:
+        tts_backend = NullTTSBackend()
 
-    # Create compiler and compile
     try:
-        compiler = YMMPCompiler(
-            template_path=str(template_path),
-            voicevox_client=voicevox_client,
-            speaker_map=speaker_map,
-            default_speaker_id=args.default_speaker
+        CompilerClass = AsyncYMMPCompiler if getattr(args, 'use_async', False) else YMMPCompiler
+        compiler = CompilerClass(
+            template_path=template_path,
+            config=config,
+            tts_backend=tts_backend
         )
-        compiler.compile(script, str(output_path), use_bom=args.bom)
+
+        if getattr(args, 'use_async', False):
+            result = asyncio.run(compiler.compile_async(script, output_path, use_bom=config.use_bom))
+        else:
+            result = compiler.compile(script, output_path, use_bom=config.use_bom)
+
+        logger.info(f"Compilation complete: {result.total_frames} frames ({result.total_duration_seconds:.2f}s)")
+        logger.info(f"Items: {result.item_count} total, {result.voice_item_count} voice, {result.tachie_item_count} tachie")
+        if not getattr(args, 'quiet', False):
+            print(f"Compilation complete: saved to {result.output_path}")
+            if result.warnings:
+                print(f"Encountered {len(result.warnings)} warnings")
     except (CompilerError, ValueError) as e:
-        print(f"Compilation error: {e}", file=sys.stderr)
+        logger.error(f"Compilation error: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
+        logger.error(f"Unexpected error: {e}", exc_info=True)
         sys.exit(1)
 
 
