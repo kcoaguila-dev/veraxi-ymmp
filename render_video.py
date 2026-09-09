@@ -27,20 +27,28 @@ def main():
         sys.exit(1)
 
     print(f"Running YMM4 encoding...")
+    print(f"⚠️  WARNING: YMM4 CLI --encode flag is UNVERIFIED. This may not work.")
     ymm4_args = [args.ymm4, "--encode", args.output, "--output", args.video_out]
     try:
         # Check if we're on linux; if so, we can't run a windows executable directly unless it's available via wine
         # Since this script could be run on Windows in actual usage, we just use subprocess.run.
         # But if the file isn't found and we're not testing, it might crash with FileNotFoundError
-        if Path(args.ymm4).exists() or sys.platform == 'win32':
-             subprocess.run(ymm4_args, check=True)
+        if not Path(args.ymm4).exists():
+            print(f"❌ YMM4 executable not found at {args.ymm4}")
+            print(f"   Command would be: {' '.join(ymm4_args)}")
+            print(f"   Please verify YMM4 path and try manually first.")
+            sys.exit(1)
+        
+        result = subprocess.run(ymm4_args, check=False)
+        if result.returncode != 0:
+            print(f"⚠️  YMM4 encoding returned exit code {result.returncode}")
+            print(f"   This may be expected (YMM4 is a GUI app that exits immediately).")
+            print(f"   Check if {args.video_out} was created.")
         else:
-             print(f"YMM4 executable not found at {args.ymm4}. Skipping encoding. Command would be:")
-             print(" ".join(ymm4_args))
+            print(f"✓ YMM4 encoding completed")
     except Exception as e:
-        print(f"Error running YMM4 encoding: {e}")
-        # In a real environment, this shouldn't just pass silently, but we don't want to crash on devbox if not available
-        pass
+        print(f"❌ Error running YMM4 encoding: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
