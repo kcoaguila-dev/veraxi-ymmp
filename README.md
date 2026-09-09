@@ -1,6 +1,6 @@
 # veraxi_ymmp
 
-**Disclaimer:** The generated `.ymmp` outputs have NOT been validated by opening in a real YMM4 install. Before trusting this for real work, open a generated `output.ymmp` in YMM4 and confirm it loads and plays correctly. The `VoiceCache` field wiring and YMM4 CLI encoding are **unverified guesses**.
+**Disclaimer:** The generated `.ymmp` outputs have NOT been validated by opening in a real YMM4 install with audio playback. Before trusting this for real work, open a generated `output.ymmp` in YMM4 and confirm it loads and plays correctly. WAV files are saved to `{output}/audio/` but audio wiring into YMM4 is NOT implemented.
 
 A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real template items.
 
@@ -8,10 +8,10 @@ A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real tem
 
 By default, without `--tts`, `veraxi-ymmp` uses a placeholder heuristic (`max(30, len(text) * 5)`) for frame timing.
 
-When `--tts` is enabled, `veraxi-ymmp` generates audio via a local VOICEVOX engine and calculates exact frame lengths based on the generated audio and your template's configured `FPS`.
+When `--tts` is enabled, `veraxi-ymmp` generates audio via a local VOICEVOX engine and calculates exact frame lengths based on the generated audio and your template's configured `FPS`. **Note: The generated WAV files are saved to `{output}/audio/` but are NOT automatically wired into the .ymmp file.**
 
-### Audio Playback Integration (UNVERIFIED)
-The `VoiceCache` field is **attempted** to be populated with the relative path to the generated synthesized `.wav` files in the `{output}/audio/` directory. This has NOT been confirmed to work with real YMM4 — it may require a different path format or approach.
+### Audio Playback (UNVERIFIED)
+The `VoiceCache` field is intentionally left empty (following AutoYukkuri's approach). Generated WAV files are saved to `{output}/audio/` for manual use, but automatic audio integration into YMM4 is not yet implemented. How to properly reference external WAV files in YMM4 needs investigation.
 
 ### Automation Script (UNVERIFIED)
 A convenience script `render_video.py` is included at the project root which **attempts** to chain generating the `.ymmp` and executing the YMM4 CLI for direct `.mp4` video rendering. Neither the YMM4 CLI `--encode` flag nor the full chain have been verified end-to-end:
