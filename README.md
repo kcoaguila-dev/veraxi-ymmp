@@ -28,6 +28,18 @@ CLI options available for TTS:
 - `--default-speaker`: Default speaker ID (default: `3` / Zundamon).
 - `--list-speakers`: Queries the VOICEVOX instance for all available speakers and prints them, then exits.
 
+## Native Script Import (recommended for voice/timeline)
+
+The CLI provides a `to-script` subcommand that directly converts a `script.json` into YMM4's native script-import text format. When this file is imported in YMM4 (via Tools → Script Import), YMM4 handles voice synthesis and timeline placement natively.
+
+**Disclaimer:** This has not yet been confirmed against a real YMM4 install — before relying on it, manually import a small generated `script.txt` via Tools → Script Import in YMM4 and confirm it synthesizes and places correctly.
+
+```bash
+veraxi-ymmp to-script <script.json> <output.txt>
+```
+
+This bypasses the full `.ymmp` timeline generation path described above and ignores features like `--tts`, handling pure dialogue conversion. Note that per-line emotion tags are currently unsupported by this format and are ignored.
+
 ## Out of scope
 - Building `Characters`, `VideoInfo`, or any top-level structure — these pass through from the template untouched.
 - Multi-emotion/expression switching via `TachieFaceParameter` — left exactly as copied from the template.

@@ -23,8 +23,61 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 
+from .native_script import json_to_native_script
+
+
+def _handle_to_script(args_list: list[str]) -> None:
+    """Handle the 'to-script' subcommand."""
+    parser = argparse.ArgumentParser(
+        description="Convert a script.json file into YMM4's native script-import text format."
+    )
+    parser.add_argument("script", help="Path to the script .json file")
+    parser.add_argument("output", help="Path to write the output .txt file")
+
+    args = parser.parse_args(args_list)
+    script_path = Path(args.script)
+    output_path = Path(args.output)
+
+    if not script_path.exists():
+        print(f"Error: Script file not found: {script_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with open(script_path, 'r', encoding='utf-8') as f:
+            script = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in script file: {e}", file=sys.stderr)
+        sys.exit(1)
+    except UnicodeDecodeError as e:
+        print(f"Error: Script file is not UTF-8 encoded: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        output_text = json_to_native_script(script)
+    except ValueError as e:
+        print(f"Error converting script: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # Note: Unverified whether YMM4 requires a BOM for this format.
+        # Defaulting to no BOM for now.
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(output_text)
+    except IOError as e:
+        print(f"Error writing to output file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Native script successfully generated at {output_path}")
+
+
 def main():
     """Main entry point for the CLI."""
+    # Intercept 'to-script' subcommand to avoid refactoring the main argparse
+    # which uses optional positionals for backwards compatibility.
+    if len(sys.argv) >= 2 and sys.argv[1] == "to-script":
+        _handle_to_script(sys.argv[2:])
+        return
+
     parser = argparse.ArgumentParser(
         description="Generate YMM4 .ymmp timelines from a template and script."
     )
