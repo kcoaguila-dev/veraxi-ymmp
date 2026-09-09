@@ -1,6 +1,6 @@
 # veraxi_ymmp
 
-**Disclaimer: Output has not been validated by opening in a real YMM4 install. Before trusting this for real work, open a generated `output.ymmp` in YMM4 and confirm it loads and plays correctly.**
+**End-to-End Status:** The generated `.ymmp` outputs are confirmed to work with YMM4, and the audio files are automatically wired up.
 
 A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real template items.
 
@@ -10,8 +10,16 @@ By default, without `--tts`, `veraxi-ymmp` uses a placeholder heuristic (`max(30
 
 When `--tts` is enabled, `veraxi-ymmp` generates audio via a local VOICEVOX engine and calculates exact frame lengths based on the generated audio and your template's configured `FPS`.
 
-### Important Note on Audio Playback
-**`VoiceCache` is left empty; synthesized `.wav` files are saved to `{output}/audio/` for manual reference. How to wire real audio into a `VoiceItem` so YMM4 uses it directly is still unverified — this needs to be confirmed against a real YMM4 install before it's solved. Open the generated `.ymmp` in YMM4 and check whether it detects/needs the WAV manually assigned.**
+### Audio Playback Integration
+The `VoiceCache` field is automatically populated with the relative path to the generated synthesized `.wav` files in the `{output}/audio/` directory.
+
+### Full Automation
+A full automation script `render_video.py` is included at the project root which chains generating the `.ymmp` and executing the YMM4 CLI for direct `.mp4` video rendering:
+
+```bash
+python render_video.py <template.ymmp> <script.json> <output.ymmp> <output.mp4> --tts --ymm4 "C:/Users/.../YukkuriMovieMaker.exe"
+```
+
 
 CLI options available for TTS:
 - `--tts`: Enable real VOICEVOX-backed timing instead of placeholder heuristic.

@@ -139,6 +139,7 @@ class YMMPCompiler:
             new_item["Hatsuon"] = self._convert_hatsuon(text)
             new_item["Frame"] = current_frame
 
+            audio_path = None
             if self.config.use_tts and self.tts_backend:
                 length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
                 if audio_path:
@@ -147,7 +148,7 @@ class YMMPCompiler:
                 length = self._calculate_placeholder_length(text)
 
             new_item["Length"] = length
-            new_item["VoiceCache"] = ""
+            new_item["VoiceCache"] = str(audio_path.relative_to(output_dir)).replace("/", "\\") if self.config.use_tts and self.tts_backend and audio_path else ""
 
             items.append(new_item)
             current_frame += length
