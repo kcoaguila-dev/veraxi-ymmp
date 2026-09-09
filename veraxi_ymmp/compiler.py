@@ -148,7 +148,7 @@ class YMMPCompiler:
                 length = self._calculate_placeholder_length(text)
 
             new_item["Length"] = length
-            new_item["VoiceCache"] = str(audio_path.relative_to(output_dir)).replace("/", "\\") if self.config.use_tts and self.tts_backend and audio_path else ""
+            new_item["VoiceCache"] = ""
 
             items.append(new_item)
             current_frame += length

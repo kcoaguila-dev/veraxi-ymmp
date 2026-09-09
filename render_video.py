@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 def main():
-    parser = argparse.ArgumentParser(description="Full automation script for YMM4 video rendering.")
+    parser = argparse.ArgumentParser(description="Convenience script for YMM4 .ymmp generation and encoding (UNVERIFIED).")
     parser.add_argument("template", help="Path to template .ymmp")
     parser.add_argument("script", help="Path to script .json")
     parser.add_argument("output", help="Path to output .ymmp")
