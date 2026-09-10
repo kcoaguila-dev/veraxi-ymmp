@@ -26,6 +26,9 @@ class AsyncYMMPCompiler(YMMPCompiler):
         """
         Compile script asynchronously to speed up TTS.
         """
+        self.warnings = []
+        self.errors = []
+
         logger.info(f"Starting async compilation for {len(script)} items")
         output_data = copy.deepcopy(self.template_data)
         items: List[Dict[str, Any]] = []

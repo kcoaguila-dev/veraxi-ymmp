@@ -81,10 +81,10 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"Entry {idx} 'text' must be a non-empty string")
 
-        if emotion not in valid_emotions:
+        if not isinstance(emotion, str) or emotion not in valid_emotions:
             raise ValueError(f"Entry {idx} 'emotion' must be one of {valid_emotions}")
 
-        if motion not in valid_motions:
+        if not isinstance(motion, str) or motion not in valid_motions:
             raise ValueError(f"Entry {idx} 'motion' must be one of {valid_motions}")
 
         if bgm is not None and (not isinstance(bgm, str) or not bgm.strip()):

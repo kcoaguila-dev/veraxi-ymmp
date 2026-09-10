@@ -6,7 +6,6 @@ from veraxi_ymmp.script import (
 )
 
 def test_validate_writer_script_valid():
-    """Accept valid writer entries and preserve their dialogue fields."""
     data = [
         {"character": "A", "text": "Hello"},
         {"character": "B", "text": "World"}
@@ -17,7 +16,6 @@ def test_validate_writer_script_valid():
     assert result[0]["text"] == "Hello"
 
 def test_validate_writer_script_invalid():
-    """Reject malformed writer entries while allowing legacy extra fields."""
     with pytest.raises(ValueError, match="Writer script must be a JSON array"):
         validate_writer_script({})
 
@@ -33,7 +31,6 @@ def test_validate_writer_script_invalid():
         validate_writer_script([{"character": "", "text": "Hello"}])
 
 def test_validate_director_script_valid():
-    """Accept director entries containing all supported metadata fields."""
     data = [
         {
             "character": "A",
@@ -52,7 +49,6 @@ def test_validate_director_script_valid():
     assert result[0]["sfx"] is None
 
 def test_validate_director_script_invalid():
-    """Reject director entries with missing or invalid metadata."""
     with pytest.raises(ValueError, match="Director script must be a JSON array"):
         validate_director_script({})
 
@@ -60,21 +56,23 @@ def test_validate_director_script_invalid():
     with pytest.raises(ValueError, match="must contain exactly"):
         validate_director_script([{"character": "A", "text": "Hello"}])
 
-    # Invalid emotion
-    invalid_emotion = [{
-        "character": "A", "text": "Hello", "emotion": "weird",
-        "motion": "none", "bgm": None, "sfx": None
-    }]
-    with pytest.raises(ValueError, match="'emotion' must be one of"):
-        validate_director_script(invalid_emotion)
+    # Invalid emotion types and values
+    for bad_emotion in ["weird", 123, [], {}, None]:
+        invalid_emotion = [{
+            "character": "A", "text": "Hello", "emotion": bad_emotion,
+            "motion": "none", "bgm": None, "sfx": None
+        }]
+        with pytest.raises(ValueError, match="'emotion' must be one of"):
+            validate_director_script(invalid_emotion)
 
-    # Invalid motion
-    invalid_motion = [{
-        "character": "A", "text": "Hello", "emotion": "neutral",
-        "motion": "dance", "bgm": None, "sfx": None
-    }]
-    with pytest.raises(ValueError, match="'motion' must be one of"):
-        validate_director_script(invalid_motion)
+    # Invalid motion types and values
+    for bad_motion in ["dance", 123, [], {}, None]:
+        invalid_motion = [{
+            "character": "A", "text": "Hello", "emotion": "neutral",
+            "motion": bad_motion, "bgm": None, "sfx": None
+        }]
+        with pytest.raises(ValueError, match="'motion' must be one of"):
+            validate_director_script(invalid_motion)
 
     # Invalid bgm (empty string)
     empty_bgm = [{
@@ -86,7 +84,6 @@ def test_validate_director_script_invalid():
 
 
 def test_validate_director_against_writer():
-    """Reject director scripts that alter writer dialogue or ordering."""
     writer = [
         {"character": "A", "text": "Hello"},
         {"character": "B", "text": "World"}
