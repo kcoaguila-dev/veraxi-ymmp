@@ -138,6 +138,33 @@ def test_compile_tts(tmp_path):
     mock_client.synthesize.assert_any_call("こんばんは", 3)
 
 
+def test_compile_director_script(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_director.ymmp"
+
+    script = [
+        {
+            "character": "ゆっくり霊夢",
+            "text": "こんにちは",
+            "emotion": "happy",
+            "motion": "jump",
+            "bgm": "theme.mp3",
+            "sfx": "bang.wav"
+        }
+    ]
+
+    compiler = YMMPCompiler(template_path)
+    original_template_data = copy.deepcopy(compiler.template_data)
+
+    result = compiler.compile(script, str(output_path))
+
+    assert compiler.template_data == original_template_data
+    assert len(result.warnings) == 4
+    assert any("Emotion 'happy'" in w for w in result.warnings)
+    assert any("Motion 'jump'" in w for w in result.warnings)
+    assert any("BGM 'theme.mp3'" in w for w in result.warnings)
+    assert any("SFX 'bang.wav'" in w for w in result.warnings)
+
 def test_compile_tts_unavailable(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_unavailable.ymmp"

@@ -4,6 +4,36 @@
 
 A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real template items.
 
+## Pipeline Architecture
+
+This tool uses a two-stage script pipeline:
+
+1. **Writer Stage:** Generates a purely factual dialogue script.
+   ```json
+   [
+     {
+       "character": "ゆっくり霊夢",
+       "text": "こんにちは"
+     }
+   ]
+   ```
+2. **Director Stage:** Enriches the dialogue with execution metadata (`emotion`, `motion`, `bgm`, `sfx`) strictly without altering the factual text or character sequence.
+   ```json
+   [
+     {
+       "character": "ゆっくり霊夢",
+       "text": "こんにちは",
+       "emotion": "neutral",
+       "motion": "none",
+       "bgm": null,
+       "sfx": null
+     }
+   ]
+   ```
+   *Note on limits:* Currently, non-neutral `emotion`, non-none `motion`, `bgm`, and `sfx` metadata are parsed, strictly validated, and preserved in the code, but they are NOT implemented in the final YMMP generation because we lack sufficient YMMP template fixtures for those features. Supplying non-default values will emit a warning during compilation.
+
+You can validate a director script against its original writer script before compiling by providing the `--writer-script` flag to ensure the factual content wasn't altered.
+
 ## Usage and TTS (VOICEVOX)
 
 By default, without `--tts`, `veraxi-ymmp` uses a placeholder heuristic (`max(30, len(text) * 5)`) for frame timing.
@@ -21,12 +51,13 @@ python render_video.py <template.ymmp> <script.json> <output.ymmp> <output.mp4> 
 ```
 
 
-CLI options available for TTS:
+CLI options available:
 - `--tts`: Enable real VOICEVOX-backed timing instead of placeholder heuristic.
 - `--voicevox-url`: Base URL for VOICEVOX Engine (default: `http://localhost:50021`).
 - `--speaker-map`: Path to a JSON file mapping `CharacterName` to a speaker_id (e.g. `{"ゆっくり霊夢": 10}`).
 - `--default-speaker`: Default speaker ID (default: `3` / Zundamon).
 - `--list-speakers`: Queries the VOICEVOX instance for all available speakers and prints them, then exits.
+- `--writer-script`: Path to a Writer JSON script to validate the Director script against before compiling.
 
 ## Out of scope
 - Building `Characters`, `VideoInfo`, or any top-level structure — these pass through from the template untouched.

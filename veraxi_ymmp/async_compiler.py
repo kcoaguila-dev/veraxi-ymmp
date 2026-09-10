@@ -85,6 +85,27 @@ class AsyncYMMPCompiler(YMMPCompiler):
             char_name = line.get("character", "")
             text = line.get("text", "")
 
+            # Validate director metadata if present and emit warnings
+            if "emotion" in line and line["emotion"] != "neutral":
+                msg = f"Emotion '{line['emotion']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if "motion" in line and line["motion"] != "none":
+                msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if line.get("bgm") is not None:
+                msg = f"BGM '{line['bgm']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if line.get("sfx") is not None:
+                msg = f"SFX '{line['sfx']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
             if char_name not in self.character_templates:
                 raise ValueError(f"Missing template for character: {char_name}")
 
@@ -139,6 +160,6 @@ class AsyncYMMPCompiler(YMMPCompiler):
             total_frames=total_length,
             total_duration_seconds=total_duration,
             audio_files=audio_files,
-            warnings=[],
-            errors=[]
+            warnings=self.warnings,
+            errors=self.errors
         )

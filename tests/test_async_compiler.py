@@ -49,3 +49,38 @@ async def test_compile_async(tmp_path):
     assert result.total_frames == 120
     assert result.total_duration_seconds == 2.0
     assert len(result.audio_files) == 2
+
+
+@pytest.mark.asyncio
+async def test_compile_async_director_script(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_async_director.ymmp"
+
+    script = [
+        {
+            "character": "ゆっくり霊夢",
+            "text": "こんにちは",
+            "emotion": "happy",
+            "motion": "jump",
+            "bgm": "theme.mp3",
+            "sfx": "bang.wav"
+        }
+    ]
+
+    config = CompilerConfig(use_tts=True, speaker_map={"ゆっくり霊夢": 10})
+    backend = MockAsyncTTSBackend()
+
+    compiler = AsyncYMMPCompiler(
+        template_path=template_path,
+        config=config,
+        tts_backend=backend
+    )
+
+    result = await compiler.compile_async(script, output_path)
+
+    assert result.output_path == output_path
+    assert len(result.warnings) == 4
+    assert any("Emotion 'happy'" in w for w in result.warnings)
+    assert any("Motion 'jump'" in w for w in result.warnings)
+    assert any("BGM 'theme.mp3'" in w for w in result.warnings)
+    assert any("SFX 'bang.wav'" in w for w in result.warnings)
