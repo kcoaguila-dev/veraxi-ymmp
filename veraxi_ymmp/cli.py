@@ -169,6 +169,9 @@ def _compile(args: argparse.Namespace) -> None:
         except json.JSONDecodeError as e:
             print(f"Error: Invalid JSON in writer script file: {e}", file=sys.stderr)
             sys.exit(1)
+        except UnicodeDecodeError as e:
+            print(f"Error: Writer script file is not UTF-8 encoded: {e}", file=sys.stderr)
+            sys.exit(1)
         except ValueError as e:
             print(f"Error: Invalid writer script schema: {e}", file=sys.stderr)
             sys.exit(1)
