@@ -4,7 +4,6 @@ TTS caching layer to prevent redundant synthesis.
 
 import hashlib
 import json
-import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 

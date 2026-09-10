@@ -13,19 +13,18 @@ from __future__ import annotations
 
 import copy
 import json
-import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from .template import load_template, extract_character_templates
 from .hatsuon import Hatsuon, HatsuonError
 from dataclasses import dataclass
-from .voicevox import VoicevoxClient, VoicevoxError, TTSBackend
+from .voicevox import VoicevoxClient, TTSBackend
 from .config import CompilerConfig
-from .constants import DEFAULT_FPS, FRAMES_PER_CHAR, MIN_LENGTH_FRAMES
 from .utils import resolve_path, ensure_path
 from .cache import TTSCache
 from .validation import validate_output_path, sanitize_filename
 from .logging import logger
+from .script import WriterScriptEntry, DirectorScriptEntry
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -49,8 +48,6 @@ class CompilerError(Exception):
     pass
 
 
-from .script import WriterScriptEntry, DirectorScriptEntry
-
 # Type alias for script entries
 ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 
@@ -58,11 +55,11 @@ ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 class YMMPCompiler:
     """
     Compiler for generating YMM4 .ymmp dialogue timelines.
-    
+
     Takes a template file and a script (list of character/text pairs) and generates
     a complete .ymmp file with properly timed voice items and tachie items.
     """
-    
+
     def __init__(
         self,
         template_path: Union[str, "Path"],
@@ -124,7 +121,7 @@ class YMMPCompiler:
         for idx, line in enumerate(script):
             char_name = line.get("character")
             text = line.get("text")
-            
+
             if not char_name or not text:
                 raise ValueError(f"Invalid script entry at index {idx}: missing character or text")
 
@@ -212,7 +209,7 @@ class YMMPCompiler:
 
     def _synthesize_audio(self, idx: int, char_name: str, text: str, audio_dir: "Path") -> Tuple[int, Optional["Path"]]:
         speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
-        
+
         cached = self.cache.get(text, speaker_id)
         if cached:
             wav_bytes, duration = cached
@@ -238,14 +235,14 @@ class YMMPCompiler:
 
     def _add_tachie_items(self, used_characters: set[str], total_length: int) -> List[Dict[str, Any]]:
         result: List[Dict[str, Any]] = []
-        
+
         for char_name, templates in self.character_templates.items():
             if char_name in used_characters and templates["tachie"] is not None:
                 tachie_item = copy.deepcopy(templates["tachie"])
                 tachie_item["Frame"] = 0
                 tachie_item["Length"] = total_length
                 result.append(tachie_item)
-        
+
         return result
 
     def _write_output(self, output_data: Dict[str, Any], output_path: "Path", use_bom: bool) -> None:

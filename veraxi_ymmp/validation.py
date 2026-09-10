@@ -2,7 +2,6 @@
 Validation utilities for paths and filenames to ensure security.
 """
 
-import os
 import re
 from pathlib import Path
 from typing import Optional

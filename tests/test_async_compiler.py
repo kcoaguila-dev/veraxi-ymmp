@@ -1,10 +1,7 @@
 import os
 import pytest
-from unittest.mock import AsyncMock
-from pathlib import Path
 from veraxi_ymmp.async_compiler import AsyncYMMPCompiler
 from veraxi_ymmp.config import CompilerConfig
-from veraxi_ymmp.voicevox import TTSBackend
 
 class MockAsyncTTSBackend:
     def is_available(self):

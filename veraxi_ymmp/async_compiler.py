@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 
 from .compiler import YMMPCompiler, ScriptEntry, CompilationResult
 from .logging import logger
-from .voicevox import VoicevoxError
 
 
 class AsyncYMMPCompiler(YMMPCompiler):
