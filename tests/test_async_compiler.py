@@ -53,6 +53,7 @@ async def test_compile_async(tmp_path):
 
 @pytest.mark.asyncio
 async def test_compile_async_director_script(tmp_path):
+    """Compile director metadata asynchronously and report unsupported fields."""
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_async_director.ymmp"
 

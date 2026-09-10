@@ -139,6 +139,7 @@ def test_compile_tts(tmp_path):
 
 
 def test_compile_director_script(tmp_path):
+    """Compile director metadata without mutating the source template."""
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_director.ymmp"
 
