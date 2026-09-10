@@ -49,8 +49,10 @@ class CompilerError(Exception):
     pass
 
 
+from .script import WriterScriptEntry, DirectorScriptEntry
+
 # Type alias for script entries
-ScriptEntry = Dict[str, str]
+ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 
 
 class YMMPCompiler:
@@ -125,6 +127,27 @@ class YMMPCompiler:
             
             if not char_name or not text:
                 raise ValueError(f"Invalid script entry at index {idx}: missing character or text")
+
+            # Validate director metadata if present and emit warnings
+            if "emotion" in line and line["emotion"] != "neutral":
+                msg = f"Emotion '{line['emotion']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if "motion" in line and line["motion"] != "none":
+                msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if line.get("bgm") is not None:
+                msg = f"BGM '{line['bgm']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
+
+            if line.get("sfx") is not None:
+                msg = f"SFX '{line['sfx']}' on entry {idx} is preserved but unsupported in generated YMMP."
+                logger.warning(msg)
+                self.warnings.append(msg)
 
             if char_name not in self.character_templates:
                 raise ValueError(f"Missing template for character: {char_name}")

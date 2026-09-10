@@ -17,6 +17,7 @@ from .async_compiler import AsyncYMMPCompiler
 from .config import CompilerConfig
 from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend
 from .logging import setup_logging, logger
+from .script import validate_writer_script, validate_director_script, validate_director_against_writer
 
 # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
 if sys.stdout.encoding != 'utf-8':
@@ -31,6 +32,7 @@ def main():
     parser.add_argument("template", nargs='?', help="Path to the template .ymmp file")
     parser.add_argument("script", nargs='?', help="Path to the script .json file")
     parser.add_argument("output", nargs='?', help="Path to write the output .ymmp file")
+    parser.add_argument("--writer-script", type=str, help="Path to the writer script .json file to validate against")
     parser.add_argument("--bom", action="store_true", help="Add UTF-8 BOM to the output file")
 
     # TTS features
@@ -129,21 +131,42 @@ def _compile(args: argparse.Namespace) -> None:
         print(f"Error: Script file is not UTF-8 encoded: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Validate script structure
-    if not isinstance(script, list):
-        print("Error: Script must be a JSON array of objects", file=sys.stderr)
-        sys.exit(1)
+    # Try validating as Director script first, fallback to Writer script
+    try:
+        validated_script = validate_director_script(script)
+    except ValueError as e:
+        # Fallback to Writer Script validation
+        try:
+            validated_script = validate_writer_script(script)
+        except ValueError as e2:
+            print(f"Error: Invalid script schema: {e2} (and failed director validation: {e})", file=sys.stderr)
+            sys.exit(1)
 
-    for idx, entry in enumerate(script):
-        if not isinstance(entry, dict):
-            print(f"Error: Script entry {idx} must be an object", file=sys.stderr)
+    # If a writer script is provided, validate the script against it
+    if args.writer_script:
+        writer_script_path = Path(args.writer_script)
+        if not writer_script_path.exists():
+            print(f"Error: Writer script file not found: {writer_script_path}", file=sys.stderr)
             sys.exit(1)
-        if "character" not in entry or "text" not in entry:
-            print(
-                f"Error: Script entry {idx} must have 'character' and 'text' fields",
-                file=sys.stderr
-            )
+
+        try:
+            with open(writer_script_path, 'r', encoding='utf-8') as f:
+                writer_script_raw = json.load(f)
+            writer_script = validate_writer_script(writer_script_raw)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in writer script file: {e}", file=sys.stderr)
             sys.exit(1)
+        except ValueError as e:
+            print(f"Error: Invalid writer script schema: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            validate_director_against_writer(validated_script, writer_script)  # type: ignore
+        except ValueError as e:
+            print(f"Error: Director script validation failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    script = validated_script  # type: ignore
 
     config = CompilerConfig.from_cli_args(args)
 
