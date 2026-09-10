@@ -2,7 +2,7 @@
 Models and validation logic for the two-stage script pipeline.
 """
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, List, Literal, Optional, TypedDict
 
 Emotion = Literal["neutral", "happy", "angry", "sad", "surprised"]
 Motion = Literal["none", "jump", "shake", "nod"]

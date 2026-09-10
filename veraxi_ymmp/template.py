@@ -20,13 +20,13 @@ class CharacterTemplates(TypedDict):
 def load_template(filepath: str) -> Dict[str, Any]:
     """
     Load a YMM4 template file.
-    
+
     Args:
         filepath: Path to the .ymmp template file.
-        
+
     Returns:
         Parsed JSON data from the template file.
-        
+
     Raises:
         FileNotFoundError: If the template file doesn't exist.
         json.JSONDecodeError: If the template file contains invalid JSON.
@@ -39,14 +39,14 @@ def load_template(filepath: str) -> Dict[str, Any]:
 def extract_character_templates(template_data: Dict[str, Any]) -> Dict[str, CharacterTemplates]:
     """
     Extracts the first VoiceItem and TachieItem for each character from template.
-    
+
     Scans the template for character definitions in both the Characters section
     and the Timeline Items section. Builds a mapping of character names to their
     voice and tachie templates.
-    
+
     Args:
         template_data: Loaded template JSON data.
-        
+
     Returns:
         Dictionary mapping character names to {"voice": item, "tachie": item}.
         Voice or tachie will be None if not found in the template.
