@@ -3,7 +3,6 @@ import pytest
 from unittest.mock import patch
 from veraxi_ymmp.cli import _compile
 from argparse import Namespace
-import sys
 import io
 
 def _create_temp_json(tmp_path, data, name="script.json"):

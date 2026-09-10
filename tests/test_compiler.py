@@ -4,7 +4,7 @@ import pytest
 import copy
 from veraxi_ymmp.compiler import YMMPCompiler
 from veraxi_ymmp.voicevox import VoicevoxClient
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 def test_compile(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')

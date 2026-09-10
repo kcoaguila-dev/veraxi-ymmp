@@ -1,5 +1,4 @@
 import os
-import pytest
 from veraxi_ymmp.template import load_template, extract_character_templates
 
 def test_extract_character_templates():

@@ -25,7 +25,7 @@ import MeCab
 from pykakasi import kakasi
 
 if TYPE_CHECKING:
-    from typing import Any, Dict
+    pass
 
 
 class HatsuonError(Exception):
@@ -36,30 +36,30 @@ class HatsuonError(Exception):
 class Hatsuon:
     """
     Phonetic converter for Japanese text.
-    
+
     Converts Japanese text to pronunciation format suitable for VOICEVOX/AquesTalk.
     Handles kanji, hiragana, katakana, and romanji conversion.
-    
+
     Attributes:
         kakasi: The kakasi converter instance for kanji-to-kana conversion.
         _tagger: Lazy-loaded MeCab tagger for morphological analysis.
     """
-    
+
     # Module-level constants for MeCab configuration
     _MECAB_ARGS = ipadic.MECAB_ARGS
-    
+
     def __init__(self) -> None:
         """Initialize Hatsuon converter with kakasi instance."""
         self.kakasi = kakasi()
         self._tagger: Optional[MeCab.Tagger] = None
-    
+
     def _get_tagger(self) -> MeCab.Tagger:
         """
         Lazy initialization of MeCab tagger.
-        
+
         Returns:
             MeCab.Tagger: Initialized tagger instance.
-            
+
         Raises:
             HatsuonError: If MeCab tagger cannot be initialized.
         """
@@ -69,14 +69,14 @@ class Hatsuon:
             except Exception as e:
                 raise HatsuonError(f"Failed to initialize MeCab tagger: {e}")
         return self._tagger
-    
+
     def unify(self, sentence: str) -> str:
         """
         Normalize and uppercase text.
-        
+
         Args:
             sentence: Input text to normalize.
-            
+
         Returns:
             Normalized text in uppercase with NFKC normalization.
         """
@@ -87,12 +87,12 @@ class Hatsuon:
     def word_replace(self, sentence: str) -> str:
         """
         Replace specific words and convert kanji to kana.
-        
+
         Handles special cases like は->わ and converts kanji to kana using alkana.
-        
+
         Args:
             sentence: Input text to process.
-            
+
         Returns:
             Processed text with replacements and kana conversion.
         """
@@ -109,16 +109,16 @@ class Hatsuon:
     def bunsetsuWakachi(self, text: str) -> List[str]:
         """
         Split text into phrases (bunsetsu) using MeCab.
-        
+
         Uses morphological analysis to identify phrase boundaries.
         Breaks at nouns, verbs, adjectives, etc.
-        
+
         Args:
             text: Input text to split.
-            
+
         Returns:
             List of phrases.
-            
+
         Raises:
             HatsuonError: If morphological analysis fails.
         """
@@ -127,7 +127,7 @@ class Hatsuon:
             m_result = tagger.parse(text).splitlines()
             # Last line is EOS marker, skip it
             m_result = m_result[:-1]
-            
+
             break_pos = ['名詞', '動詞', '接頭詞', '副詞', '感動詞', '形容詞', '形容動詞', '連体詞']
             wakachi: List[str] = ['']
             after_prepos = False
@@ -136,7 +136,7 @@ class Hatsuon:
             for v in m_result:
                 if '\t' not in v:
                     continue
-                    
+
                 surface = v.split('\t')[0]
                 pos = v.split('\t')[1].split(',')
                 pos_detail = ','.join(pos[1:4])
@@ -157,17 +157,17 @@ class Hatsuon:
             if wakachi and wakachi[0] == '':
                 wakachi = wakachi[1:]
             return wakachi
-            
+
         except Exception as e:
             raise HatsuonError(f"Morphological analysis failed for '{text}': {e}")
 
     def kanji_reverse_conv(self, word: str) -> str:
         """
         Convert kanji to hiragana readings.
-        
+
         Args:
             word: Input text containing kanji.
-            
+
         Returns:
             Space-separated hiragana readings.
         """
@@ -181,13 +181,13 @@ class Hatsuon:
     def number(self, sentence: str) -> str:
         """
         Handle numbers in text.
-        
+
         Currently a placeholder - numbers are left as-is since YMM4/AquesTalk
         typically handles simple numbers or needs them converted to kana.
-        
+
         Args:
             sentence: Input text containing numbers.
-            
+
         Returns:
             Input text unchanged (placeholder implementation).
         """
@@ -202,17 +202,17 @@ class Hatsuon:
     def convert(self, sentence: str) -> str:
         """
         Convert text to pronunciation format.
-        
+
         Main conversion method that applies all transformation steps:
         1. Unify and normalize text
         2. Apply word replacements
         3. Split into phrases
         4. Convert kanji to readings
         5. Remove slash separators (AquesTalk doesn't use them)
-        
+
         Args:
             sentence: Input Japanese text to convert.
-            
+
         Returns:
             Pronunciation string suitable for VOICEVOX/AquesTalk.
             Falls back to original sentence if conversion fails.

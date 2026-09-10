@@ -10,9 +10,8 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
-from .compiler import YMMPCompiler, CompilerError, CompilationResult
+from .compiler import YMMPCompiler, CompilerError
 from .async_compiler import AsyncYMMPCompiler
 from .config import CompilerConfig
 from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend
@@ -37,29 +36,29 @@ def main():
 
     # TTS features
     parser.add_argument(
-        "--tts", 
-        action="store_true", 
+        "--tts",
+        action="store_true",
         help="Enable real VOICEVOX-backed timing instead of placeholder heuristic"
     )
     parser.add_argument(
-        "--voicevox-url", 
+        "--voicevox-url",
         default="http://localhost:50021",
         help="Base URL for VOICEVOX Engine (default: http://localhost:50021)"
     )
     parser.add_argument(
-        "--speaker-map", 
+        "--speaker-map",
         type=str,
         help="Path to a JSON file mapping CharacterName to speaker_id"
     )
     parser.add_argument(
-        "--default-speaker", 
-        type=int, 
-        default=3, 
+        "--default-speaker",
+        type=int,
+        default=3,
         help="Default speaker ID (default: 3 / Zundamon)"
     )
     parser.add_argument(
-        "--list-speakers", 
-        action="store_true", 
+        "--list-speakers",
+        action="store_true",
         help="Queries GET /speakers and prints the list, then exits"
     )
 
