@@ -53,7 +53,6 @@ async def test_compile_async(tmp_path):
 
 @pytest.mark.asyncio
 async def test_compile_async_director_script(tmp_path):
-    """Compile director metadata asynchronously and report unsupported fields."""
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_async_director.ymmp"
 
@@ -85,3 +84,44 @@ async def test_compile_async_director_script(tmp_path):
     assert any("Motion 'jump'" in w for w in result.warnings)
     assert any("BGM 'theme.mp3'" in w for w in result.warnings)
     assert any("SFX 'bang.wav'" in w for w in result.warnings)
+
+@pytest.mark.asyncio
+async def test_compile_async_diagnostics_reset(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    output_path = tmp_path / "output_async_director_1.ymmp"
+    output_path_2 = tmp_path / "output_async_director_2.ymmp"
+
+    script_director = [
+        {
+            "character": "ゆっくり霊夢",
+            "text": "こんにちは",
+            "emotion": "happy",
+            "motion": "jump",
+            "bgm": "theme.mp3",
+            "sfx": "bang.wav"
+        }
+    ]
+
+    script_writer = [
+        {
+            "character": "ゆっくり霊夢",
+            "text": "こんにちは"
+        }
+    ]
+
+    config = CompilerConfig(use_tts=True, speaker_map={"ゆっくり霊夢": 10})
+    backend = MockAsyncTTSBackend()
+
+    compiler = AsyncYMMPCompiler(
+        template_path=template_path,
+        config=config,
+        tts_backend=backend
+    )
+
+    # First compilation issues warnings
+    result1 = await compiler.compile_async(script_director, output_path)
+    assert len(result1.warnings) == 4
+
+    # Second compilation with normal writer script should have NO warnings
+    result2 = await compiler.compile_async(script_writer, output_path_2)
+    assert len(result2.warnings) == 0

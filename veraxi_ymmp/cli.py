@@ -131,19 +131,32 @@ def _compile(args: argparse.Namespace) -> None:
         print(f"Error: Script file is not UTF-8 encoded: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Try validating as Director script first, fallback to Writer script
-    try:
-        validated_script = validate_director_script(script)
-    except ValueError as e:
-        # Fallback to Writer Script validation
+    # Determine if script should be validated as Director script
+    is_director = False
+    if getattr(args, "writer_script", None):
+        is_director = True
+    else:
+        # Check if any entry has director-specific metadata
+        for entry in script:
+            if isinstance(entry, dict) and any(key in entry for key in ("emotion", "motion", "bgm", "sfx")):
+                is_director = True
+                break
+
+    if is_director:
+        try:
+            validated_script = validate_director_script(script)
+        except ValueError as e:
+            print(f"Error: Invalid director script schema: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
         try:
             validated_script = validate_writer_script(script)
-        except ValueError as e2:
-            print(f"Error: Invalid script schema: {e2} (and failed director validation: {e})", file=sys.stderr)
+        except ValueError as e:
+            print(f"Error: Invalid writer script schema: {e}", file=sys.stderr)
             sys.exit(1)
 
     # If a writer script is provided, validate the script against it
-    if args.writer_script:
+    if getattr(args, "writer_script", None):
         writer_script_path = Path(args.writer_script)
         if not writer_script_path.exists():
             print(f"Error: Writer script file not found: {writer_script_path}", file=sys.stderr)

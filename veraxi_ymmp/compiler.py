@@ -100,7 +100,6 @@ class YMMPCompiler:
         output_path: Union[str, "Path"],
         use_bom: bool = False
     ) -> CompilationResult:
-        """Compile script entries into a YMMP timeline at the requested path."""
         self.warnings = []
         self.errors = []
 
