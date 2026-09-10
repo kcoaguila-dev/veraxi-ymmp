@@ -14,7 +14,7 @@ def main():
     parser.add_argument("--tts", action="store_true", help="Enable real VOICEVOX-backed timing instead of placeholder heuristic")
     args = parser.parse_args()
 
-    print(f"Running veraxi-ymmp generation...")
+    print("Running veraxi-ymmp generation...")
     # Generate the .ymmp
     gen_args = ["python", "-m", "veraxi_ymmp.cli", args.template, args.script, args.output]
     if args.tts:
@@ -26,8 +26,8 @@ def main():
         print(f"Error generating .ymmp: {e}")
         sys.exit(1)
 
-    print(f"Running YMM4 encoding...")
-    print(f"⚠️  WARNING: YMM4 CLI --encode flag is UNVERIFIED. This may not work.")
+    print("Running YMM4 encoding...")
+    print("⚠️  WARNING: YMM4 CLI --encode flag is UNVERIFIED. This may not work.")
     ymm4_args = [args.ymm4, "--encode", args.output, "--output", args.video_out]
     try:
         # Check if we're on linux; if so, we can't run a windows executable directly unless it's available via wine
@@ -36,16 +36,16 @@ def main():
         if not Path(args.ymm4).exists():
             print(f"❌ YMM4 executable not found at {args.ymm4}")
             print(f"   Command would be: {' '.join(ymm4_args)}")
-            print(f"   Please verify YMM4 path and try manually first.")
+            print("   Please verify YMM4 path and try manually first.")
             sys.exit(1)
-        
+
         result = subprocess.run(ymm4_args, check=False)
         if result.returncode != 0:
             print(f"⚠️  YMM4 encoding returned exit code {result.returncode}")
-            print(f"   This may be expected (YMM4 is a GUI app that exits immediately).")
+            print("   This may be expected (YMM4 is a GUI app that exits immediately).")
             print(f"   Check if {args.video_out} was created.")
         else:
-            print(f"✓ YMM4 encoding completed")
+            print("✓ YMM4 encoding completed")
     except Exception as e:
         print(f"❌ Error running YMM4 encoding: {e}")
         sys.exit(1)

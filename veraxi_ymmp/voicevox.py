@@ -10,14 +10,12 @@ Provides a Python interface to the VOICEVOX HTTP API for:
 from __future__ import annotations
 
 import io
-import json
 import asyncio
 import wave
-from typing import Any, Dict, List, Optional, Tuple, Protocol
+from typing import Any, Dict, List, Tuple, Protocol
 
 import requests
 
-from .logging import logger
 
 
 class TTSBackend(Protocol):
@@ -54,21 +52,21 @@ class VoicevoxError(Exception):
 class VoicevoxClient:
     """
     Client for interacting with VOICEVOX Engine API.
-    
+
     The VOICEVOX Engine provides a REST API for speech synthesis.
     This client encapsulates the API calls and handles errors.
-    
+
     Attributes:
         base_url: Base URL of the VOICEVOX Engine (default: http://localhost:50021)
         timeout: Default timeout for API requests in seconds (default: 30)
     """
-    
+
     DEFAULT_TIMEOUT = 30
-    
+
     def __init__(self, base_url: str = "http://localhost:50021", timeout: int = DEFAULT_TIMEOUT):
         """
         Initialize VOICEVOX client.
-        
+
         Args:
             base_url: Base URL of the VOICEVOX Engine.
             timeout: Timeout in seconds for API requests.
@@ -89,7 +87,7 @@ class VoicevoxClient:
     def is_available(self) -> bool:
         """
         Check if VOICEVOX Engine is available and responding.
-        
+
         Returns:
             True if the engine responds to the version endpoint, False otherwise.
         """
@@ -102,14 +100,14 @@ class VoicevoxClient:
     def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
         """
         Synthesize speech from text using a specific speaker.
-        
+
         Args:
             text: Text to synthesize.
             speaker_id: ID of the speaker to use.
-            
+
         Returns:
             Tuple of (WAV audio bytes, duration in seconds).
-            
+
         Raises:
             VoicevoxError: If synthesis fails at any step.
         """
@@ -150,10 +148,10 @@ class VoicevoxClient:
     def get_speakers(self) -> List[Dict[str, Any]]:
         """
         Get list of available speakers from VOICEVOX Engine.
-        
+
         Returns:
             List of speaker dictionaries, each containing name, speaker_uuid, and styles.
-            
+
         Raises:
             VoicevoxError: If the request fails.
         """
