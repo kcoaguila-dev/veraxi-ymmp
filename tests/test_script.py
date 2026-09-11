@@ -48,6 +48,27 @@ def test_validate_director_script_valid():
     assert result[0]["bgm"] == "theme.mp3"
     assert result[0]["sfx"] is None
 
+    layout_data = [{
+        "character": "A",
+        "text": "Hello",
+        "emotion": "neutral",
+        "motion": "none",
+        "bgm": None,
+        "sfx": None,
+        "character_position": "right",
+        "subtitle_position": "bottom_center",
+        "subtitle_style": "outlined",
+    }]
+    layout_result = validate_director_script(layout_data)
+    assert layout_result[0]["character_position"] == "right"
+    assert layout_result[0]["subtitle_position"] == "bottom_center"
+    assert layout_result[0]["subtitle_style"] == "outlined"
+
+    defaults = validate_director_script(data)
+    assert defaults[0]["character_position"] == "center"
+    assert defaults[0]["subtitle_position"] == "bottom_center"
+    assert defaults[0]["subtitle_style"] == "outlined"
+
 def test_validate_director_script_invalid():
     with pytest.raises(ValueError, match="Director script must be a JSON array"):
         validate_director_script({})
@@ -81,6 +102,19 @@ def test_validate_director_script_invalid():
     }]
     with pytest.raises(ValueError, match="'bgm' must be null or a non-empty string"):
         validate_director_script(empty_bgm)
+
+    base = {
+        "character": "A", "text": "Hello", "emotion": "neutral",
+        "motion": "none", "bgm": None, "sfx": None,
+    }
+    for field, value in {
+        "character_position": "diagonal",
+        "subtitle_position": "bottom_right",
+        "subtitle_style": "neon",
+    }.items():
+        invalid_layout = [{**base, field: value}]
+        with pytest.raises(ValueError, match=field):
+            validate_director_script(invalid_layout)
 
 
 def test_validate_director_against_writer():

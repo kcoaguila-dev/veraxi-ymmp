@@ -24,7 +24,7 @@ class TTSBackend(Protocol):
     def is_available(self) -> bool:
         ...
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
         ...
 
     def get_speakers(self) -> List[Dict[str, Any]]:
@@ -37,8 +37,8 @@ class NullTTSBackend:
     def is_available(self) -> bool:
         return True
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
-        return b"", 0.0
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+        return b"", 0.0, {}
 
     def get_speakers(self) -> List[Dict[str, Any]]:
         return []
@@ -97,7 +97,7 @@ class VoicevoxClient:
         except requests.exceptions.RequestException:
             return False
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
         """
         Synthesize speech from text using a specific speaker.
 
@@ -106,7 +106,7 @@ class VoicevoxClient:
             speaker_id: ID of the speaker to use.
 
         Returns:
-            Tuple of (WAV audio bytes, duration in seconds).
+            Tuple of (WAV audio bytes, duration in seconds, AudioQuery dictionary).
 
         Raises:
             VoicevoxError: If synthesis fails at any step.
@@ -115,7 +115,7 @@ class VoicevoxClient:
             query_res = requests.post(
                 f"{self.base_url}/audio_query",
                 params={"text": text, "speaker": speaker_id},
-                timeout=10
+                timeout=30
             )
             query_res.raise_for_status()
             audio_query = query_res.json()
@@ -143,7 +143,7 @@ class VoicevoxClient:
         except wave.Error as e:
             raise VoicevoxError(f"Failed to parse returned wav file: {e}")
 
-        return wav_bytes, duration
+        return wav_bytes, duration, audio_query
 
     def get_speakers(self) -> List[Dict[str, Any]]:
         """

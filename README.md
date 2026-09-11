@@ -34,6 +34,24 @@ This tool uses a two-stage script pipeline:
 
 You can validate a director script against its original writer script before compiling by providing the `--writer-script` flag to ensure the factual content wasn't altered.
 
+### Conversational MCP workflow
+
+Install the optional MCP dependency with `pip install -e ".[mcp]"`. VS Code will discover the local server from `.vscode/mcp.json`. Copilot can then inspect templates, validate Writer/Director JSON, and compile `.ymmp` projects through the `veraxi-ymmp` tools without a separate model API key. The model remains hosted by Copilot; the MCP server only exposes local project tools.
+
+Director scripts may also use semantic layout cues:
+
+```json
+{
+  "character_position": "right",
+  "subtitle_position": "bottom_center",
+  "subtitle_style": "outlined"
+}
+```
+
+The compiler maps these choices to fixed YMM4 presets. Valid values are `left`, `center`, or `right` for character position; `top_center`, `center`, or `bottom_center` for subtitle position; and `default` or `outlined` for subtitle style. These fields are optional and default to a centered character, bottom-centered outlined subtitles.
+
+When the template contains saved PSD `TachieFaceItem` examples, the compiler recognizes the verified layer-path patterns for happy (`むふ`), angry (`怒り眉2`/`ジト目`), sad (`涙`/`青ざめ`), and surprised (`うわー`/`上がり眉`) expressions. Neutral uses the base TachieItem. Templates without these reference face items continue to emit warnings and leave non-neutral emotion metadata unapplied.
+
 ## Usage and TTS (VOICEVOX)
 
 By default, without `--tts`, `veraxi-ymmp` uses a placeholder heuristic (`max(30, len(text) * 5)`) for frame timing.
@@ -47,7 +65,7 @@ The `VoiceCache` field is intentionally left empty (following AutoYukkuri's appr
 A convenience script `render_video.py` is included at the project root which **attempts** to chain generating the `.ymmp` and executing the YMM4 CLI for direct `.mp4` video rendering. Neither the YMM4 CLI `--encode` flag nor the full chain have been verified end-to-end:
 
 ```bash
-python render_video.py <template.ymmp> <script.json> <output.ymmp> <output.mp4> --tts --ymm4 "C:/Users/.../YukkuriMovieMaker.exe"
+python render_video.py examples/zundamon_template.ymmp examples/zundamon_script.json artifacts/output.ymmp artifacts/output.mp4 --tts --ymm4 "C:/Users/.../YukkuriMovieMaker.exe"
 ```
 
 
