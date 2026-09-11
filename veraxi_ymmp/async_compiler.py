@@ -178,6 +178,15 @@ class AsyncYMMPCompiler(YMMPCompiler):
         tachie_items = self._add_tachie_items(used_characters, total_length, character_positions)
         items.extend(tachie_items)
 
+        # Preserve other items (like BGM, Image backgrounds) from the template
+        for template_item in get_timeline(self.template_data).get("Items", []):
+            type_str = template_item.get("$type", "")
+            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str:
+                preserved_item = copy.deepcopy(template_item)
+                if "Length" in preserved_item:
+                    preserved_item["Length"] = total_length
+                items.append(preserved_item)
+
         timeline = get_timeline(output_data)
         timeline["Items"] = items
         timeline["Length"] = total_length
