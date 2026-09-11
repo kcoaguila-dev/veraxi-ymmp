@@ -122,10 +122,16 @@ def test_compile_tts(tmp_path):
         output_data = json.load(f)
 
     voice_items = [i for i in output_data["Timeline"]["Items"] if "VoiceItem" in i.get("$type", "")]
+    audio_items = [i for i in output_data["Timeline"]["Items"] if "AudioItem" in i.get("$type", "")]
 
     assert len(voice_items) == 2
+    assert len(audio_items) == 2
     assert voice_items[0]["Length"] == 120
     assert voice_items[1]["Length"] == 120
+    assert audio_items[0]["Frame"] == voice_items[0]["Frame"]
+    assert audio_items[0]["Length"] == voice_items[0]["Length"]
+    assert audio_items[0]["FilePath"] == str((output_path.parent / "audio" / "000_ゆっくり霊夢.wav").resolve())
+    assert voice_items[0]["Volume"]["Values"][0]["Value"] == 0.0
 
     # Assert synthesized audio was saved correctly
     audio_dir = output_path.parent / "audio"

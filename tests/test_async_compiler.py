@@ -1,4 +1,5 @@
 import os
+import json
 import pytest
 from veraxi_ymmp.async_compiler import AsyncYMMPCompiler
 from veraxi_ymmp.config import CompilerConfig
@@ -40,13 +41,17 @@ async def test_compile_async(tmp_path):
     assert result.output_path == output_path
     assert result.voice_item_count == 2
     assert result.tachie_item_count == 2  # Based on template fixtures
-    assert result.item_count == 4
+    assert result.item_count == 6
 
     # Each synthesizes 1 second, at 60fps = 60 frames, so 120 frames total for 2 items
     assert result.total_frames == 120
     assert result.total_duration_seconds == 2.0
     assert len(result.audio_files) == 2
 
+    with open(output_path, 'r', encoding='utf-8') as f:
+        output_data = json.load(f)
+    audio_items = [i for i in output_data["Timeline"]["Items"] if "AudioItem" in i.get("$type", "")]
+    assert len(audio_items) == 2
 
 @pytest.mark.asyncio
 async def test_compile_async_director_script(tmp_path):

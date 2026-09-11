@@ -15,7 +15,13 @@ import copy
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from .template import load_template, extract_character_templates
+from .template import (
+    extract_character_templates,
+    extract_face_templates,
+    extract_text_template,
+    get_timeline,
+    load_template,
+)
 from .hatsuon import Hatsuon, HatsuonError
 from dataclasses import dataclass
 from .voicevox import VoicevoxClient, TTSBackend
@@ -73,6 +79,8 @@ class YMMPCompiler:
         self.template_path = ensure_path(template_path)
         self.template_data = load_template(str(self.template_path))
         self.character_templates = extract_character_templates(self.template_data)
+        self.text_template = extract_text_template(self.template_data)
+        self.face_templates = extract_face_templates(self.template_data)
         self.hatsuon = hatsuon_converter or Hatsuon()
         self.tts_backend = tts_backend or voicevox_client
         self.voicevox_client = voicevox_client  # for backward compatibility checks
@@ -107,6 +115,7 @@ class YMMPCompiler:
             raise RuntimeError("TTS Backend not reachable - is it running?")
 
         current_frame = 0
+        character_positions: Dict[str, str] = {}
 
         resolved_output = resolve_path(output_path)
         # Ensure output is within the current working directory to prevent path traversal
@@ -127,9 +136,11 @@ class YMMPCompiler:
 
             # Validate director metadata if present and emit warnings
             if "emotion" in line and line["emotion"] != "neutral":
-                msg = f"Emotion '{line['emotion']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
-                self.warnings.append(msg)
+                char_faces = self.face_templates.get(char_name, {})
+                if line["emotion"] not in char_faces:
+                    msg = f"Emotion '{line['emotion']}' for character '{char_name}' on entry {idx} is preserved but unsupported in generated YMMP."
+                    logger.warning(msg)
+                    self.warnings.append(msg)
 
             if "motion" in line and line["motion"] != "none":
                 msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
@@ -158,12 +169,34 @@ class YMMPCompiler:
             new_item["Serif"] = text
             new_item["Hatsuon"] = self._convert_hatsuon(text)
             new_item["Frame"] = current_frame
+            character_positions.setdefault(char_name, line.get("character_position", "center"))
 
             audio_path = None
             if self.config.use_tts and self.tts_backend:
                 length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
                 if audio_path:
                     audio_files.append(audio_path)
+                    new_item["FilePath"] = str(audio_path.resolve())
+                    # Convert duration in frames back to TimeSpan string HH:MM:SS.fffffff
+                    sec = length / self._get_fps()
+                    hours = int(sec // 3600)
+                    mins = int((sec % 3600) // 60)
+                    secs = sec % 60
+                    new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+                    new_item["Length"] = length
+                    new_item["VoiceCache"] = ""
+                    self._mute_voice_item(new_item)
+                    text_item = self._make_text_item(text, current_frame, length, line)
+                    new_item["IsHidden"] = True
+                    items.append(new_item)
+                    items.append(self._make_audio_item(new_item, audio_path))
+                    if text_item is not None:
+                        items.append(text_item)
+                    face_item = self._make_face_item(line, current_frame, length)
+                    if face_item is not None:
+                        items.append(face_item)
+                    current_frame += length
+                    continue
             else:
                 length = self._calculate_placeholder_length(text)
 
@@ -171,15 +204,22 @@ class YMMPCompiler:
             new_item["VoiceCache"] = ""
 
             items.append(new_item)
+            text_item = self._make_text_item(text, current_frame, length, line)
+            if text_item is not None:
+                items.append(text_item)
+            face_item = self._make_face_item(line, current_frame, length)
+            if face_item is not None:
+                items.append(face_item)
             current_frame += length
 
         total_length = current_frame
         used_characters = set(line["character"] for line in script if "character" in line)
-        tachie_items = self._add_tachie_items(used_characters, total_length)
+        tachie_items = self._add_tachie_items(used_characters, total_length, character_positions)
         items.extend(tachie_items)
 
-        output_data["Timeline"]["Items"] = items
-        output_data["Timeline"]["Length"] = total_length
+        timeline = get_timeline(output_data)
+        timeline["Items"] = items
+        timeline["Length"] = total_length
 
         self._write_output(output_data, resolved_output, use_bom)
 
@@ -196,7 +236,7 @@ class YMMPCompiler:
         )
 
     def _get_fps(self) -> int:
-        return self.template_data.get("Timeline", {}).get("VideoInfo", {}).get("FPS", self.config.fps)
+        return get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps)
 
     def _convert_hatsuon(self, text: str) -> str:
         try:
@@ -233,7 +273,91 @@ class YMMPCompiler:
     def _calculate_placeholder_length(self, text: str) -> int:
         return max(self.config.min_length_frames, len(text) * self.config.frames_per_char)
 
-    def _add_tachie_items(self, used_characters: set[str], total_length: int) -> List[Dict[str, Any]]:
+    def _mute_voice_item(self, voice_item: Dict[str, Any]) -> None:
+        volume = voice_item.get("Volume")
+        if isinstance(volume, dict) and isinstance(volume.get("Values"), list):
+            for value in volume["Values"]:
+                if isinstance(value, dict):
+                    value["Value"] = 0.0
+        elif volume is not None:
+            voice_item["Volume"] = 0.0
+
+    def _make_audio_item(self, voice_item: Dict[str, Any], audio_path: "Path") -> Dict[str, Any]:
+        return {
+            "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+            "FilePath": str(audio_path.resolve()),
+            "Frame": voice_item["Frame"],
+            "Length": voice_item["Length"],
+            "Layer": voice_item.get("Layer", 0) + 1,
+            "PlaybackRate": 100.0,
+            "ContentOffset": "00:00:00",
+            "Volume": 100.0,
+            "FadeIn": 0.0,
+            "FadeOut": 0.0,
+            "Pan": 0.0,
+            "PlaybackRateAudioProcessingMode": "Resampling",
+        }
+
+    def _make_text_item(
+        self,
+        text: str,
+        frame: int,
+        length: int,
+        line: ScriptEntry,
+    ) -> Optional[Dict[str, Any]]:
+        if self.text_template is None:
+            return None
+        text_item = copy.deepcopy(self.text_template)
+        text_item["Text"] = text
+        text_item["Frame"] = frame
+        text_item["Length"] = length
+        text_item["Layer"] = self._get_subtitle_layer()
+        self._set_animated_value(text_item, "X", {"top_center": -480, "center": -480, "bottom_center": -480}[line.get("subtitle_position", "bottom_center")])
+        self._set_animated_value(text_item, "Y", {"top_center": -420, "center": 0, "bottom_center": 420}[line.get("subtitle_position", "bottom_center")])
+        if line.get("subtitle_style", "outlined") == "outlined":
+            self._set_animated_value(text_item, "FontSize", 56.0)
+        return text_item
+
+    def _make_face_item(
+        self,
+        line: ScriptEntry,
+        frame: int,
+        length: int,
+    ) -> Optional[Dict[str, Any]]:
+        emotion = line.get("emotion", "neutral")
+        char_name = line.get("character")
+        if not char_name:
+            return None
+        char_faces = self.face_templates.get(char_name, {})
+        template = char_faces.get(emotion)
+        if template is None:
+            return None
+        face_item = copy.deepcopy(template)
+        face_item["Frame"] = frame
+        face_item["Length"] = length
+        return face_item
+
+    @staticmethod
+    def _set_animated_value(item: Dict[str, Any], key: str, value: float) -> None:
+        property_data = item.get(key)
+        if isinstance(property_data, dict) and isinstance(property_data.get("Values"), list):
+            if property_data["Values"] and isinstance(property_data["Values"][0], dict):
+                property_data["Values"][0]["Value"] = value
+
+    def _get_subtitle_layer(self) -> int:
+        tachie_layers = [
+            templates["tachie"].get("Layer", 0)
+            for templates in self.character_templates.values()
+            if templates["tachie"] is not None
+        ]
+        return max(tachie_layers, default=self.text_template.get("Layer", 0)) + 1
+
+    def _add_tachie_items(
+        self,
+        used_characters: set[str],
+        total_length: int,
+        character_positions: Dict[str, str],
+    ) -> List[Dict[str, Any]]:
         result: List[Dict[str, Any]] = []
 
         for char_name, templates in self.character_templates.items():
@@ -241,6 +365,11 @@ class YMMPCompiler:
                 tachie_item = copy.deepcopy(templates["tachie"])
                 tachie_item["Frame"] = 0
                 tachie_item["Length"] = total_length
+                self._set_animated_value(
+                    tachie_item,
+                    "X",
+                    {"left": -450, "center": 0, "right": 450}.get(character_positions.get(char_name, "center"), 0),
+                )
                 result.append(tachie_item)
 
         return result

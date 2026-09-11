@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 from .compiler import YMMPCompiler, ScriptEntry, CompilationResult
 from .logging import logger
+from .template import get_timeline
 
 
 class AsyncYMMPCompiler(YMMPCompiler):
@@ -29,6 +30,8 @@ class AsyncYMMPCompiler(YMMPCompiler):
         self.errors = []
 
         logger.info(f"Starting async compilation for {len(script)} items")
+        self.warnings = []
+        self.errors = []
         output_data = copy.deepcopy(self.template_data)
         items: List[Dict[str, Any]] = []
 
@@ -46,6 +49,7 @@ class AsyncYMMPCompiler(YMMPCompiler):
 
         # Basic setup
         current_frame = 0
+        character_positions: Dict[str, str] = {}
         output_dir = output_path.parent
         audio_dir = output_dir / "audio"
         fps = self._get_fps()
@@ -89,9 +93,11 @@ class AsyncYMMPCompiler(YMMPCompiler):
 
             # Validate director metadata if present and emit warnings
             if "emotion" in line and line["emotion"] != "neutral":
-                msg = f"Emotion '{line['emotion']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
-                self.warnings.append(msg)
+                char_faces = self.face_templates.get(char_name, {})
+                if line["emotion"] not in char_faces:
+                    msg = f"Emotion '{line['emotion']}' for character '{char_name}' on entry {idx} is preserved but unsupported in generated YMMP."
+                    logger.warning(msg)
+                    self.warnings.append(msg)
 
             if "motion" in line and line["motion"] != "none":
                 msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
@@ -119,6 +125,7 @@ class AsyncYMMPCompiler(YMMPCompiler):
             new_item["Serif"] = text
             new_item["Hatsuon"] = self._convert_hatsuon(text)
             new_item["Frame"] = current_frame
+            character_positions.setdefault(char_name, line.get("character_position", "center"))
 
             audio_path = None
             if self.config.use_tts and self.tts_backend:
@@ -130,6 +137,26 @@ class AsyncYMMPCompiler(YMMPCompiler):
                     length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
                     if audio_path:
                         audio_files.append(audio_path)
+                        new_item["FilePath"] = str(audio_path.resolve())
+                        sec = length / self._get_fps()
+                        hours = int(sec // 3600)
+                        mins = int((sec % 3600) // 60)
+                        secs = sec % 60
+                        new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+                        new_item["Length"] = length
+                        new_item["VoiceCache"] = ""
+                        self._mute_voice_item(new_item)
+                        text_item = self._make_text_item(text, current_frame, length, line)
+                        new_item["IsHidden"] = True
+                        items.append(new_item)
+                        items.append(self._make_audio_item(new_item, audio_path))
+                        if text_item is not None:
+                            items.append(text_item)
+                        face_item = self._make_face_item(line, current_frame, length)
+                        if face_item is not None:
+                            items.append(face_item)
+                        current_frame += length
+                        continue
                 except Exception as e:
                     raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
             else:
@@ -138,15 +165,22 @@ class AsyncYMMPCompiler(YMMPCompiler):
             new_item["Length"] = length
             new_item["VoiceCache"] = ""
             items.append(new_item)
+            text_item = self._make_text_item(text, current_frame, length, line)
+            if text_item is not None:
+                items.append(text_item)
+            face_item = self._make_face_item(line, current_frame, length)
+            if face_item is not None:
+                items.append(face_item)
             current_frame += length
 
         total_length = current_frame
         used_characters = set(line["character"] for line in script if "character" in line)
-        tachie_items = self._add_tachie_items(used_characters, total_length)
+        tachie_items = self._add_tachie_items(used_characters, total_length, character_positions)
         items.extend(tachie_items)
 
-        output_data["Timeline"]["Items"] = items
-        output_data["Timeline"]["Length"] = total_length
+        timeline = get_timeline(output_data)
+        timeline["Items"] = items
+        timeline["Length"] = total_length
 
         self._write_output(output_data, output_path, use_bom)
 
