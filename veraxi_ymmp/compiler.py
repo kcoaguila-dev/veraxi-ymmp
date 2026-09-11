@@ -335,6 +335,12 @@ class YMMPCompiler:
         face_item = copy.deepcopy(template)
         face_item["Frame"] = frame
         face_item["Length"] = length
+        
+        # Enable lip sync for the face item while speaking
+        face_param = face_item.get("TachieFaceParameter", {})
+        if isinstance(face_param, dict) and "MouthAnimation" in face_param:
+            face_param["MouthAnimation"] = "LipSync"
+            
         return face_item
 
     @staticmethod

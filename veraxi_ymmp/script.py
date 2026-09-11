@@ -4,8 +4,11 @@ Models and validation logic for the two-stage script pipeline.
 
 from typing import Any, List, Literal, Optional, TypedDict
 
-Emotion = Literal["neutral", "happy", "angry", "sad", "surprised"]
+Emotion = Literal["neutral", "happy", "angry", "sad", "surprised", "confused", "scared", "excited", "disgusted", "smug", "crying", "blushing"]
 Motion = Literal["none", "jump", "shake", "nod"]
+CharacterPosition = Literal["left", "center", "right"]
+SubtitlePosition = Literal["top_center", "center", "bottom_center"]
+SubtitleStyle = Literal["default", "outlined"]
 
 class WriterScriptEntry(TypedDict):
     """Factual dialogue entry from the writer."""
@@ -20,6 +23,9 @@ class DirectorScriptEntry(TypedDict):
     motion: Motion
     bgm: Optional[str]
     sfx: Optional[str]
+    character_position: CharacterPosition
+    subtitle_position: SubtitlePosition
+    subtitle_style: SubtitleStyle
 
 def validate_writer_script(data: Any) -> List[WriterScriptEntry]:
     """
@@ -56,17 +62,22 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
     if not isinstance(data, list):
         raise ValueError("Director script must be a JSON array of objects")
 
-    valid_emotions = {"neutral", "happy", "angry", "sad", "surprised"}
+    valid_emotions = {"neutral", "happy", "angry", "sad", "surprised", "confused", "scared", "excited", "disgusted", "smug", "crying", "blushing"}
     valid_motions = {"none", "jump", "shake", "nod"}
-    expected_keys = {"character", "text", "emotion", "motion", "bgm", "sfx"}
+    required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx"}
+    optional_keys = {"character_position", "subtitle_position", "subtitle_style"}
+    expected_keys = required_keys | optional_keys
+    valid_character_positions = {"left", "center", "right"}
+    valid_subtitle_positions = {"top_center", "center", "bottom_center"}
+    valid_subtitle_styles = {"default", "outlined"}
 
     validated: List[DirectorScriptEntry] = []
     for idx, entry in enumerate(data):
         if not isinstance(entry, dict):
             raise ValueError(f"Entry {idx} must be an object")
 
-        if set(entry.keys()) != expected_keys:
-            raise ValueError(f"Entry {idx} must contain exactly {expected_keys}")
+        if not required_keys.issubset(entry.keys()) or not set(entry.keys()).issubset(expected_keys):
+            raise ValueError(f"Entry {idx} must contain exactly the supported Director fields {expected_keys}")
 
         char = entry["character"]
         text = entry["text"]
@@ -74,6 +85,9 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         motion = entry["motion"]
         bgm = entry["bgm"]
         sfx = entry["sfx"]
+        character_position = entry.get("character_position", "center")
+        subtitle_position = entry.get("subtitle_position", "bottom_center")
+        subtitle_style = entry.get("subtitle_style", "outlined")
 
         if not isinstance(char, str) or not char.strip():
             raise ValueError(f"Entry {idx} 'character' must be a non-empty string")
@@ -93,13 +107,25 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         if sfx is not None and (not isinstance(sfx, str) or not sfx.strip()):
             raise ValueError(f"Entry {idx} 'sfx' must be null or a non-empty string")
 
+        if not isinstance(character_position, str) or character_position not in valid_character_positions:
+            raise ValueError(f"Entry {idx} 'character_position' must be one of {valid_character_positions}")
+
+        if not isinstance(subtitle_position, str) or subtitle_position not in valid_subtitle_positions:
+            raise ValueError(f"Entry {idx} 'subtitle_position' must be one of {valid_subtitle_positions}")
+
+        if not isinstance(subtitle_style, str) or subtitle_style not in valid_subtitle_styles:
+            raise ValueError(f"Entry {idx} 'subtitle_style' must be one of {valid_subtitle_styles}")
+
         validated.append({
             "character": char,
             "text": text,
             "emotion": emotion,  # type: ignore
             "motion": motion,    # type: ignore
             "bgm": bgm,
-            "sfx": sfx
+            "sfx": sfx,
+            "character_position": character_position,  # type: ignore
+            "subtitle_position": subtitle_position,  # type: ignore
+            "subtitle_style": subtitle_style  # type: ignore
         })
 
     return validated
