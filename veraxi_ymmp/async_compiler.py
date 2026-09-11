@@ -5,7 +5,8 @@ Async compilation for parallel TTS synthesis.
 import asyncio
 import copy
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip
 
 from .compiler import YMMPCompiler, ScriptEntry, CompilationResult
 from .logging import logger
@@ -20,180 +21,51 @@ class AsyncYMMPCompiler(YMMPCompiler):
     async def compile_async(
         self,
         script: List[ScriptEntry],
-        output_path: Path,
+        output_path: "Path",
         use_bom: bool = False
     ) -> CompilationResult:
-        """
-        Compile script asynchronously to speed up TTS.
-        """
-        self.warnings = []
-        self.errors = []
+        import copy
+        import asyncio
+        from .template import get_timeline
 
-        logger.info(f"Starting async compilation for {len(script)} items")
-        self.warnings = []
-        self.errors = []
+        self.warnings.clear()
+        self.errors.clear()
         output_data = copy.deepcopy(self.template_data)
-        items: List[Dict[str, Any]] = []
+        items = []
 
-        if self.config.use_tts and self.tts_backend:
-            # We assume tts_backend has async support, e.g. VoicevoxClient.is_available_async
-            # If not, fallback to sync is_available check.
-            is_avail = False
-            if hasattr(self.tts_backend, 'is_available_async'):
-                is_avail = await self.tts_backend.is_available_async()
-            else:
-                is_avail = self.tts_backend.is_available()
-
-            if not is_avail:
-                raise RuntimeError("TTS Backend not available")
-
-        # Basic setup
-        current_frame = 0
-        character_positions: Dict[str, str] = {}
-        output_dir = output_path.parent
-        audio_dir = output_dir / "audio"
-        fps = self._get_fps()
-
-        # Phase 1: Synthesize all required TTS asynchronously
+        from pathlib import Path
+        output_path = Path(output_path)
+        audio_dir = output_path.parent / "audio"
+        
+        # Phase 1: Async TTS synthesis
         tts_tasks = []
-
         for idx, line in enumerate(script):
             char_name = line.get("character")
             text = line.get("text")
-
             if not char_name or not text:
-                raise ValueError(f"Invalid script entry at index {idx}: missing character or text")
-
+                continue
             if self.config.use_tts and self.tts_backend:
                 speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
-                # create async task for TTS if backend supports it, else run in thread
                 if hasattr(self.tts_backend, 'synthesize_async'):
                     task = asyncio.create_task(self.tts_backend.synthesize_async(text, speaker_id))
                     tts_tasks.append((idx, char_name, text, task))
 
         if tts_tasks:
-            logger.info(f"Awaiting {len(tts_tasks)} async TTS tasks...")
             results = await asyncio.gather(*(t for _, _, _, t in tts_tasks), return_exceptions=True)
-
-            # Store successful results in cache so synchronous loop hits cache
             for (idx, char_name, text, _), result in zip(tts_tasks, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Async synthesis failed for {char_name}: {result}")
                     self.errors.append(f"Async synthesis failed for {char_name}: {result}")
                 else:
                     wav_bytes, duration = result
                     speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
                     self.cache.set(text, speaker_id, wav_bytes, duration)
+                    
+        # Phase 2: Build IR
+        timeline_ir, audio_files = self._build_ir(script, audio_dir)
+        
+        # Phase 3: Render to YMMP
+        return self._render_ymmp(timeline_ir, output_path, use_bom, len(script), audio_files)
 
-        # Re-run synthesis loop now that results are likely cached or finished
-        audio_files = []
-        for idx, line in enumerate(script):
-            char_name = line.get("character", "")
-            text = line.get("text", "")
-
-            # Validate director metadata if present and emit warnings
-            if "emotion" in line and line["emotion"] != "neutral":
-                char_faces = self.face_templates.get(char_name, {})
-                if line["emotion"] not in char_faces:
-                    msg = f"Emotion '{line['emotion']}' for character '{char_name}' on entry {idx} is preserved but unsupported in generated YMMP."
-                    logger.warning(msg)
-                    self.warnings.append(msg)
-
-            if "motion" in line and line["motion"] != "none":
-                msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
-                self.warnings.append(msg)
-
-            if line.get("bgm") is not None:
-                msg = f"BGM '{line['bgm']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
-                self.warnings.append(msg)
-
-            if line.get("sfx") is not None:
-                msg = f"SFX '{line['sfx']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
-                self.warnings.append(msg)
-
-            if char_name not in self.character_templates:
-                raise ValueError(f"Missing template for character: {char_name}")
-
-            template_item = self.character_templates[char_name]["voice"]
-            if template_item is None:
-                raise ValueError(f"No voice template found for character: {char_name}")
-
-            new_item = copy.deepcopy(template_item)
-            new_item["Serif"] = text
-            new_item["Hatsuon"] = self._convert_hatsuon(text)
-            new_item["Frame"] = current_frame
-            character_positions.setdefault(char_name, line.get("character_position", "center"))
-
-            audio_path = None
-            if self.config.use_tts and self.tts_backend:
-                # We can call the sync _synthesize_audio, because the cache should be populated
-                # (or backend might be very fast since it's already done in task)
-                # Wait! We need to make sure _synthesize_audio returns properly if it was awaited.
-                # Actually, our cache will handle the fast retrieval.
-                try:
-                    length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
-                    if audio_path:
-                        audio_files.append(audio_path)
-                        new_item["FilePath"] = str(audio_path.resolve())
-                        sec = length / self._get_fps()
-                        hours = int(sec // 3600)
-                        mins = int((sec % 3600) // 60)
-                        secs = sec % 60
-                        new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
-                        new_item["Length"] = length
-                        new_item["VoiceCache"] = ""
-                        self._mute_voice_item(new_item)
-                        text_item = self._make_text_item(text, current_frame, length, line)
-                        new_item["IsHidden"] = True
-                        items.append(new_item)
-                        items.append(self._make_audio_item(new_item, audio_path))
-                        if text_item is not None:
-                            items.append(text_item)
-                        face_item = self._make_face_item(line, current_frame, length)
-                        if face_item is not None:
-                            items.append(face_item)
-                        current_frame += length
-                        continue
-                except Exception as e:
-                    raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
-            else:
-                length = self._calculate_placeholder_length(text)
-
-            new_item["Length"] = length
-            new_item["VoiceCache"] = ""
-            items.append(new_item)
-            text_item = self._make_text_item(text, current_frame, length, line)
-            if text_item is not None:
-                items.append(text_item)
-            face_item = self._make_face_item(line, current_frame, length)
-            if face_item is not None:
-                items.append(face_item)
-            current_frame += length
-
-        total_length = current_frame
-        used_characters = set(line["character"] for line in script if "character" in line)
-        tachie_items = self._add_tachie_items(used_characters, total_length, character_positions)
-        items.extend(tachie_items)
-
-        # Preserve other items (like BGM, Image backgrounds) from the template
-        for template_item in get_timeline(self.template_data).get("Items", []):
-            type_str = template_item.get("$type", "")
-            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str:
-                preserved_item = copy.deepcopy(template_item)
-                if "Length" in preserved_item:
-                    preserved_item["Length"] = total_length
-                items.append(preserved_item)
-
-        timeline = get_timeline(output_data)
-        timeline["Items"] = items
-        timeline["Length"] = total_length
-
-        self._write_output(output_data, output_path, use_bom)
-
-        voice_items = len(script)
         tachie_count = len(tachie_items)
         total_duration = total_length / fps if fps else 0.0
 

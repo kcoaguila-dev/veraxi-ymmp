@@ -1,3 +1,5 @@
+from __future__ import annotations
+from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip
 """
 YMM4 project compiler for generating dialogue timelines.
 
@@ -9,7 +11,6 @@ from scripts and templates. It handles:
 - Managing tachie (character) items
 """
 
-from __future__ import annotations
 
 import copy
 import json
@@ -102,149 +103,196 @@ class YMMPCompiler:
     def compile(
         self,
         script: List[ScriptEntry],
-        output_path: Union[str, "Path"],
+        output_path: "Path",
         use_bom: bool = False
     ) -> CompilationResult:
-        self.warnings = []
-        self.errors = []
+        from pathlib import Path
+        output_path = Path(output_path)
+        self.warnings.clear()
+        self.errors.clear()
+        audio_dir = output_path.parent / "audio"
+        timeline_ir, audio_files = self._build_ir(script, audio_dir)
+        return self._render_ymmp(timeline_ir, output_path, use_bom, len(script), audio_files)
 
-        output_data = copy.deepcopy(self.template_data)
-        items: List[Dict[str, Any]] = []
-
-        if self.config.use_tts and self.tts_backend and not self.tts_backend.is_available():
-            raise RuntimeError("TTS Backend not reachable - is it running?")
-
-        current_frame = 0
-        character_positions: Dict[str, str] = {}
-
-        resolved_output = resolve_path(output_path)
-        # Ensure output is within the current working directory to prevent path traversal
-        resolved_output = validate_output_path(resolved_output)
-
-        output_dir = resolved_output.parent
-        audio_dir = output_dir / "audio"
-
+    def _build_ir(self, script: List[ScriptEntry], audio_dir: "Path") -> Tuple[TimelineIR, List["Path"]]:
+        from .template import get_timeline
         fps = self._get_fps()
-        audio_files: List["Path"] = []
+        current_frame = 0
+        audio_files = []
+        voice_clips = []
+        character_positions = {}
 
         for idx, line in enumerate(script):
             char_name = line.get("character")
-            text = line.get("text")
 
-            if not char_name or not text:
-                raise ValueError(f"Invalid script entry at index {idx}: missing character or text")
-
-            # Validate director metadata if present and emit warnings
             if "emotion" in line and line["emotion"] != "neutral":
                 char_faces = self.face_templates.get(char_name, {})
                 if line["emotion"] not in char_faces:
                     msg = f"Emotion '{line['emotion']}' for character '{char_name}' on entry {idx} is preserved but unsupported in generated YMMP."
-                    logger.warning(msg)
                     self.warnings.append(msg)
 
             if "motion" in line and line["motion"] != "none":
                 msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
                 self.warnings.append(msg)
 
-            if line.get("bgm") is not None:
+            if line.get("bgm") is not None and line["bgm"] != "none" and line["bgm"] != "":
                 msg = f"BGM '{line['bgm']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
                 self.warnings.append(msg)
 
-            if line.get("sfx") is not None:
+            if line.get("sfx") is not None and line["sfx"] != "none" and line["sfx"] != "":
                 msg = f"SFX '{line['sfx']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                logger.warning(msg)
                 self.warnings.append(msg)
 
+            text = line.get("text", "")
+            if not char_name:
+                continue
+                
+            character_positions.setdefault(char_name, line.get("character_position", "center"))
+            
             if char_name not in self.character_templates:
                 raise ValueError(f"Missing template for character: {char_name}")
-
-            template_item = self.character_templates[char_name]["voice"]
-            if template_item is None:
+            if self.character_templates[char_name]["voice"] is None:
                 raise ValueError(f"No voice template found for character: {char_name}")
-
-            new_item = copy.deepcopy(template_item)
-
-            new_item["Serif"] = text
-            new_item["Hatsuon"] = self._convert_hatsuon(text)
-            new_item["Frame"] = current_frame
-            character_positions.setdefault(char_name, line.get("character_position", "center"))
 
             audio_path = None
             if self.config.use_tts and self.tts_backend:
+                if not self.tts_backend.is_available():
+                    raise RuntimeError("TTS Backend not reachable")
                 length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
                 if audio_path:
                     audio_files.append(audio_path)
-                    new_item["FilePath"] = str(audio_path.resolve())
-                    # Convert duration in frames back to TimeSpan string HH:MM:SS.fffffff
-                    sec = length / self._get_fps()
-                    hours = int(sec // 3600)
-                    mins = int((sec % 3600) // 60)
-                    secs = sec % 60
-                    new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
-                    new_item["Length"] = length
-                    new_item["VoiceCache"] = ""
-                    self._mute_voice_item(new_item)
-                    text_item = self._make_text_item(text, current_frame, length, line)
-                    new_item["IsHidden"] = True
-                    items.append(new_item)
-                    items.append(self._make_audio_item(new_item, audio_path))
-                    if text_item is not None:
-                        items.append(text_item)
-                    face_item = self._make_face_item(line, current_frame, length)
-                    if face_item is not None:
-                        items.append(face_item)
-                    current_frame += length
-                    continue
             else:
                 length = self._calculate_placeholder_length(text)
 
-            new_item["Length"] = length
-            new_item["VoiceCache"] = ""
+            hatsuon = self._convert_hatsuon(text)
 
-            items.append(new_item)
-            text_item = self._make_text_item(text, current_frame, length, line)
-            if text_item is not None:
-                items.append(text_item)
-            face_item = self._make_face_item(line, current_frame, length)
-            if face_item is not None:
-                items.append(face_item)
+            voice_clips.append(VoiceClip(
+                start_frame=current_frame,
+                length=length,
+                character=char_name,
+                text=text,
+                emotion=line.get("emotion", "neutral"),
+                motion=line.get("motion", "none"),
+                audio_path=audio_path,
+                hatsuon=hatsuon,
+                subtitle_position=line.get("subtitle_position", "bottom_center"),
+                subtitle_style=line.get("subtitle_style", "outlined")
+            ))
             current_frame += length
 
-        total_length = current_frame
-        used_characters = set(line["character"] for line in script if "character" in line)
-        tachie_items = self._add_tachie_items(used_characters, total_length, character_positions)
-        items.extend(tachie_items)
+        total_frames = current_frame
 
-        # Preserve other items (like BGM, Image backgrounds) from the template
+        used_characters = set(c.character for c in voice_clips)
+        character_clips = []
+        for char_name in used_characters:
+            character_clips.append(CharacterClip(
+                start_frame=0,
+                length=total_frames,
+                character=char_name,
+                position=character_positions.get(char_name, "center")
+            ))
+
+        global_clips = []
         for template_item in get_timeline(self.template_data).get("Items", []):
             type_str = template_item.get("$type", "")
-            # Skip Voice, Tachie, and Text items as they are handled by extract_character_templates
             if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str:
-                preserved_item = copy.deepcopy(template_item)
-                if "Length" in preserved_item:
-                    preserved_item["Length"] = total_length
-                items.append(preserved_item)
+                global_clips.append(GlobalClip(
+                    start_frame=0,
+                    length=total_frames,
+                    template_item=template_item
+                ))
+
+        return TimelineIR(
+            fps=fps,
+            total_frames=total_frames,
+            voice_clips=voice_clips,
+            character_clips=character_clips,
+            global_clips=global_clips,
+            template_data=self.template_data
+        ), audio_files
+
+    def _render_ymmp(
+        self,
+        timeline_ir: TimelineIR,
+        output_path: "Path",
+        use_bom: bool,
+        script_len: int,
+        audio_files: List["Path"]
+    ) -> CompilationResult:
+        import copy
+        from .template import get_timeline
+        
+        output_data = copy.deepcopy(self.template_data)
+        items = []
+
+        for clip in timeline_ir.voice_clips:
+            template_item = self.character_templates[clip.character]["voice"]
+            new_item = copy.deepcopy(template_item)
+            new_item["Serif"] = clip.text
+            new_item["Hatsuon"] = clip.hatsuon
+            new_item["Frame"] = clip.start_frame
+            new_item["Length"] = clip.length
+            new_item["VoiceCache"] = ""
+
+            if clip.audio_path:
+                sec = clip.length / timeline_ir.fps
+                hours = int(sec // 3600)
+                mins = int((sec % 3600) // 60)
+                secs = sec % 60
+                new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+                new_item["FilePath"] = str(clip.audio_path.resolve())
+                self._mute_voice_item(new_item)
+                new_item["IsHidden"] = True
+                items.append(new_item)
+                items.append(self._make_audio_item(new_item, clip.audio_path))
+            else:
+                items.append(new_item)
+
+            pseudo_line = {
+                "subtitle_position": clip.subtitle_position,
+                "subtitle_style": clip.subtitle_style,
+                "emotion": clip.emotion,
+                "character": clip.character
+            }
+
+            text_item = self._make_text_item(clip.text, clip.start_frame, clip.length, pseudo_line)
+            if text_item is not None:
+                items.append(text_item)
+                
+            face_item = self._make_face_item(pseudo_line, clip.start_frame, clip.length)
+            if face_item is not None:
+                items.append(face_item)
+
+        tachie_items = self._add_tachie_items(
+            set(c.character for c in timeline_ir.character_clips),
+            timeline_ir.total_frames,
+            {c.character: c.position for c in timeline_ir.character_clips}
+        )
+        items.extend(tachie_items)
+
+        for gc in timeline_ir.global_clips:
+            preserved_item = copy.deepcopy(gc.template_item)
+            if "Length" in preserved_item:
+                preserved_item["Length"] = timeline_ir.total_frames
+            items.append(preserved_item)
 
         timeline = get_timeline(output_data)
         timeline["Items"] = items
-        timeline["Length"] = total_length
+        timeline["Length"] = timeline_ir.total_frames
 
-        self._write_output(output_data, resolved_output, use_bom)
+        self._write_output(output_data, output_path, use_bom)
 
         return CompilationResult(
-            output_path=resolved_output,
+            output_path=output_path,
             item_count=len(items),
-            voice_item_count=len(script),
+            voice_item_count=script_len,
             tachie_item_count=len(tachie_items),
-            total_frames=total_length,
-            total_duration_seconds=total_length / fps if fps else 0.0,
+            total_frames=timeline_ir.total_frames,
+            total_duration_seconds=timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0,
             audio_files=audio_files,
             warnings=self.warnings,
             errors=self.errors
         )
-
     def _get_fps(self) -> int:
         return get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps)
 
@@ -345,12 +393,6 @@ class YMMPCompiler:
         face_item = copy.deepcopy(template)
         face_item["Frame"] = frame
         face_item["Length"] = length
-        
-        # Enable lip sync for the face item while speaking
-        face_param = face_item.get("TachieFaceParameter", {})
-        if isinstance(face_param, dict) and "MouthAnimation" in face_param:
-            face_param["MouthAnimation"] = "LipSync"
-            
         return face_item
 
     @staticmethod
