@@ -23,6 +23,7 @@ class DirectorScriptEntry(TypedDict):
     motion: Motion
     bgm: Optional[str]
     sfx: Optional[str]
+    image: Optional[str]
     character_position: CharacterPosition
     subtitle_position: SubtitlePosition
     subtitle_style: SubtitleStyle
@@ -64,7 +65,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
 
     valid_emotions = {"neutral", "happy", "angry", "sad", "surprised", "confused", "scared", "excited", "disgusted", "smug", "crying", "blushing"}
     valid_motions = {"none", "jump", "shake", "nod"}
-    required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx"}
+    required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx", "image"}
     optional_keys = {"character_position", "subtitle_position", "subtitle_style"}
     expected_keys = required_keys | optional_keys
     valid_character_positions = {"left", "center", "right"}
@@ -85,6 +86,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         motion = entry["motion"]
         bgm = entry["bgm"]
         sfx = entry["sfx"]
+        image = entry["image"]
         character_position = entry.get("character_position", "center")
         subtitle_position = entry.get("subtitle_position", "bottom_center")
         subtitle_style = entry.get("subtitle_style", "outlined")
@@ -106,6 +108,9 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
 
         if sfx is not None and (not isinstance(sfx, str) or not sfx.strip()):
             raise ValueError(f"Entry {idx} 'sfx' must be null or a non-empty string")
+            
+        if image is not None and (not isinstance(image, str) or not image.strip()):
+            raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
 
         if not isinstance(character_position, str) or character_position not in valid_character_positions:
             raise ValueError(f"Entry {idx} 'character_position' must be one of {valid_character_positions}")
@@ -123,6 +128,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
             "motion": motion,    # type: ignore
             "bgm": bgm,
             "sfx": sfx,
+            "image": image,
             "character_position": character_position,  # type: ignore
             "subtitle_position": subtitle_position,  # type: ignore
             "subtitle_style": subtitle_style  # type: ignore

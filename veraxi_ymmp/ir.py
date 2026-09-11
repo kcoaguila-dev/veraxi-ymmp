@@ -18,6 +18,7 @@ class VoiceClip(IRClip):
     hatsuon: str
     subtitle_position: str
     subtitle_style: str
+    audio_query: Optional[Dict] = None
 
 @dataclass
 class CharacterClip(IRClip):
@@ -31,12 +32,18 @@ class GlobalClip(IRClip):
     template_item: Dict  # For now, we preserve the template item directly for exact YMM4 rendering
 
 @dataclass
+class DynamicImageClip(IRClip):
+    """Represents an image that appears dynamically for a specific duration."""
+    image_path: Path
+
+@dataclass
 class TimelineIR:
     fps: int
     total_frames: int
     voice_clips: List[VoiceClip] = field(default_factory=list)
     character_clips: List[CharacterClip] = field(default_factory=list)
     global_clips: List[GlobalClip] = field(default_factory=list)
+    dynamic_image_clips: List[DynamicImageClip] = field(default_factory=list)
     
     # We still need to pass down the template data so the YMM4 renderer knows how to style things
     template_data: Dict = field(default_factory=dict)

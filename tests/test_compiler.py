@@ -123,9 +123,11 @@ def test_compile_tts(tmp_path):
 
     voice_items = [i for i in output_data["Timeline"]["Items"] if "VoiceItem" in i.get("$type", "")]
     audio_items = [i for i in output_data["Timeline"]["Items"] if "AudioItem" in i.get("$type", "")]
+    text_items = [i for i in output_data["Timeline"]["Items"] if "TextItem" in i.get("$type", "")]
 
     assert len(voice_items) == 2
     assert len(audio_items) == 2
+    assert len(text_items) == 0
     assert voice_items[0]["Length"] == 120
     assert voice_items[1]["Length"] == 120
     assert audio_items[0]["Frame"] == voice_items[0]["Frame"]

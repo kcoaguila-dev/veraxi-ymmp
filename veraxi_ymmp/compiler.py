@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip
+from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip, DynamicImageClip
 """
 YMM4 project compiler for generating dialogue timelines.
 
@@ -121,6 +121,7 @@ class YMMPCompiler:
         audio_files = []
         voice_clips = []
         character_positions = {}
+        dynamic_image_clips = []
 
         for idx, line in enumerate(script):
             char_name = line.get("character")
@@ -155,10 +156,11 @@ class YMMPCompiler:
                 raise ValueError(f"No voice template found for character: {char_name}")
 
             audio_path = None
+            audio_query = None
             if self.config.use_tts and self.tts_backend:
                 if not self.tts_backend.is_available():
                     raise RuntimeError("TTS Backend not reachable")
-                length, audio_path = self._synthesize_audio(idx, char_name, text, audio_dir)
+                length, audio_path, audio_query = self._synthesize_audio(idx, char_name, text, audio_dir)
                 if audio_path:
                     audio_files.append(audio_path)
             else:
@@ -176,8 +178,29 @@ class YMMPCompiler:
                 audio_path=audio_path,
                 hatsuon=hatsuon,
                 subtitle_position=line.get("subtitle_position", "bottom_center"),
-                subtitle_style=line.get("subtitle_style", "outlined")
+                subtitle_style=line.get("subtitle_style", "outlined"),
+                audio_query=audio_query
             ))
+
+            image_name = line.get("image")
+            if image_name:
+                from pathlib import Path
+                image_path = Path("artifacts/.user_uploaded") / image_name
+                if not image_path.exists():
+                    image_path = Path(image_name) # try relative to workspace
+                if not image_path.exists():
+                    image_path = Path("artifacts") / image_name
+                if image_path.exists():
+                    dynamic_image_clips.append(DynamicImageClip(
+                        image_path=image_path,
+                        start_frame=current_frame,
+                        length=length
+                    ))
+                else:
+                    msg = f"Image not found: {image_name}"
+                    logger.warning(msg)
+                    self.warnings.append(msg)
+
             current_frame += length
 
         total_frames = current_frame
@@ -208,6 +231,7 @@ class YMMPCompiler:
             voice_clips=voice_clips,
             character_clips=character_clips,
             global_clips=global_clips,
+            dynamic_image_clips=dynamic_image_clips,
             template_data=self.template_data
         ), audio_files
 
@@ -242,7 +266,25 @@ class YMMPCompiler:
                 new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
                 new_item["FilePath"] = str(clip.audio_path.resolve())
                 self._mute_voice_item(new_item)
-                new_item["IsHidden"] = True
+                new_item["IsHidden"] = False
+                
+            # Add motion effects to VoiceItem (applies to character in YMM4)
+            effects = new_item.get("VideoEffects", [])
+            if clip.motion == "jump":
+                effects.append({
+                    "$type": "YukkuriMovieMaker.Project.Effects.JumpEffect, YukkuriMovieMaker",
+                    "Span": 0.5,
+                    "Height": 50.0
+                })
+            elif clip.motion == "shake":
+                effects.append({
+                    "$type": "YukkuriMovieMaker.Project.Effects.ShakeEffect, YukkuriMovieMaker",
+                    "Amount": 20.0,
+                    "Interval": 1.0
+                })
+            new_item["VideoEffects"] = effects
+
+            if clip.audio_path:
                 items.append(new_item)
                 items.append(self._make_audio_item(new_item, clip.audio_path))
             else:
@@ -255,10 +297,8 @@ class YMMPCompiler:
                 "character": clip.character
             }
 
-            text_item = self._make_text_item(clip.text, clip.start_frame, clip.length, pseudo_line)
-            if text_item is not None:
-                items.append(text_item)
-                
+            # We DO NOT generate a separate TextItem anymore, so the white box JimakuStyle on the VoiceItem shows instead!
+
             face_item = self._make_face_item(pseudo_line, clip.start_frame, clip.length)
             if face_item is not None:
                 items.append(face_item)
@@ -269,6 +309,34 @@ class YMMPCompiler:
             {c.character: c.position for c in timeline_ir.character_clips}
         )
         items.extend(tachie_items)
+
+        for clip in timeline_ir.dynamic_image_clips:
+            is_bg = "bg/" in str(clip.image_path).replace("\\", "/") or "bg\\" in str(clip.image_path)
+            
+            image_item = {
+                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+                "FilePath": str(clip.image_path.resolve()),
+                "X": {"Values": [{"Value": 0.0}]},
+                "Y": {"Values": [{"Value": 0.0}]},
+                "Zoom": {"Values": [{"Value": 100.0}]},
+                "Opacity": {"Values": [{"Value": 100.0}]},
+                "Frame": clip.start_frame,
+                "Length": clip.length,
+                "Layer": 0 if is_bg else 2,
+                "Blend": "Normal",
+                "VideoEffects": []
+            }
+            
+            if not is_bg:
+                # Add pop effect for foreground images (like apple, dog)
+                image_item["VideoEffects"].append({
+                    "$type": "YukkuriMovieMaker.Project.Effects.ZoomAppearanceEffect, YukkuriMovieMaker",
+                    "Time": 0.5,
+                    "Zoom": 0.0,
+                    "ZoomType": "Elastic"
+                })
+                
+            items.append(image_item)
 
         for gc in timeline_ir.global_clips:
             preserved_item = copy.deepcopy(gc.template_item)
@@ -305,15 +373,16 @@ class YMMPCompiler:
             self.warnings.append(msg)
             return text
 
-    def _synthesize_audio(self, idx: int, char_name: str, text: str, audio_dir: "Path") -> Tuple[int, Optional["Path"]]:
+    def _synthesize_audio(self, idx: int, char_name: str, text: str, audio_dir: "Path") -> Tuple[int, Optional["Path"], Optional[Dict[str, Any]]]:
         speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
 
         cached = self.cache.get(text, speaker_id)
         if cached:
             wav_bytes, duration = cached
+            audio_query = None # Cache doesn't store audio_query yet
         else:
             try:
-                wav_bytes, duration = self.tts_backend.synthesize(text, speaker_id)
+                wav_bytes, duration, audio_query = self.tts_backend.synthesize(text, speaker_id)
                 self.cache.set(text, speaker_id, wav_bytes, duration)
             except Exception as e:
                 raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
@@ -323,10 +392,11 @@ class YMMPCompiler:
         audio_filename = f"{idx:03d}_{safe_char_name}.wav"
         audio_path = audio_dir / audio_filename
 
-        with open(audio_path, "wb") as f:
+        with open(audio_path, 'wb') as f:
             f.write(wav_bytes)
 
-        return round(duration * self._get_fps()), audio_path
+        length = int(duration * self._get_fps())
+        return length, audio_path, audio_query
 
     def _calculate_placeholder_length(self, text: str) -> int:
         return max(self.config.min_length_frames, len(text) * self.config.frames_per_char)

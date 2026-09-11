@@ -61,6 +61,7 @@ venv.bak/
 # Output files
 test_output.ymmp
 audio/
+artifacts/
 
 # OS files
 .DS_Store

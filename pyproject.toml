@@ -37,6 +37,7 @@ dependencies = [
 
 [project.scripts]
 veraxi-ymmp = "veraxi_ymmp.cli:main"
+veraxi-ymmp-mcp = "veraxi_ymmp.mcp_server:mcp.run"
 
 [project.optional-dependencies]
 dev = [
@@ -45,6 +46,9 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1",
+]
+mcp = [
+    "mcp>=1.0,<2.0",
 ]
 
 [tool.setuptools.packages.find]
