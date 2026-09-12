@@ -312,17 +312,40 @@ class YMMPCompiler:
         
         output_data = copy.deepcopy(self.template_data)
         
+        # Detect aspect ratio to support both Long-form (16:9) and Short-form (9:16)
+        timeline = get_timeline(output_data)
+        video_info = timeline.get("VideoInfo", {})
+        width = video_info.get("Width", 1920)
+        height = video_info.get("Height", 1080)
+        is_vertical = height > width
+        
+        if is_vertical:
+            # 9:16 layout (TikTok / Shorts)
+            sub_y = 300.0
+            sub_size = 100.0
+            tachie_cfg = {"X": 0.0, "Y": 650.0, "Zoom": 80.0}
+            broll_cfg = {"X": 0.0, "Y": -300.0, "Zoom": 120.0}
+        else:
+            # 16:9 layout (YouTube long-form)
+            sub_y = 450.0
+            sub_size = 80.0
+            tachie_cfg = {"X": -650.0, "Y": 250.0, "Zoom": 65.0}
+            broll_cfg = {"X": 350.0, "Y": -50.0, "Zoom": 80.0}
+
         # Autonomous configuration: Ensure huge readable subtitles at the bottom
         # and allow injecting local PSD path
         psd_path = os.environ.get("ZUNDAMON_PSD_PATH")
         for char in output_data.get("Characters", []):
-            char["FontSize"] = 80.0
-            char["Y"] = 450.0
+            char["FontSize"] = sub_size
+            char["Y"] = sub_y
             if psd_path and "Zundamon" in char.get("Name", ""):
                 if "TachieCharacterParameter" in char:
                     char["TachieCharacterParameter"]["FilePath"] = psd_path
                 else:
                     char["FilePath"] = psd_path
+                
+        # Store for _add_tachie_items and image items
+        self.layout_cfg = {"tachie": tachie_cfg, "broll": broll_cfg}
                 
         items = []
 
@@ -400,9 +423,9 @@ class YMMPCompiler:
             image_item = {
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
                 "FilePath": str(clip.image_path.resolve()),
-                "X": {"Values": [{"Value": 0.0 if is_bg else 350.0}]},
-                "Y": {"Values": [{"Value": 0.0 if is_bg else -50.0}]},
-                "Zoom": {"Values": [{"Value": 200.0 if is_bg else 80.0}]},
+                "X": {"Values": [{"Value": 0.0 if is_bg else self.layout_cfg["broll"]["X"]}]},
+                "Y": {"Values": [{"Value": 0.0 if is_bg else self.layout_cfg["broll"]["Y"]}]},
+                "Zoom": {"Values": [{"Value": 200.0 if is_bg else self.layout_cfg["broll"]["Zoom"]}]},
                 "Opacity": {"Values": [{"Value": 100.0}]},
                 "Frame": clip.start_frame,
                 "Length": clip.length,
@@ -615,11 +638,17 @@ class YMMPCompiler:
                 tachie_item["Layer"] = 1
                 tachie_item["Frame"] = 0
                 tachie_item["Length"] = total_length
-                # Zundamon style default: left side, slightly zoomed down, bottom aligned
+                
+                # Zundamon style default based on Canvas detection
+                default_x = self.layout_cfg["tachie"]["X"]
                 pos = character_positions.get(char_name, "left")
-                self._set_animated_value(tachie_item, "X", {"left": -650.0, "center": 0, "right": 650.0}.get(pos, -650.0))
-                self._set_animated_value(tachie_item, "Y", 250.0)
-                self._set_animated_value(tachie_item, "Zoom", 65.0)
+                # If pos explicitly requested center, use 0. Otherwise use the layout configured X.
+                # E.g. in 9:16 layout, X is already 0.0. In 16:9, it's -650.0.
+                final_x = 0.0 if pos == "center" else default_x
+                
+                self._set_animated_value(tachie_item, "X", final_x)
+                self._set_animated_value(tachie_item, "Y", self.layout_cfg["tachie"]["Y"])
+                self._set_animated_value(tachie_item, "Zoom", self.layout_cfg["tachie"]["Zoom"])
                 result.append(tachie_item)
 
         return result
