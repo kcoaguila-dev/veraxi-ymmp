@@ -343,6 +343,14 @@ class YMMPCompiler:
                     char["TachieCharacterParameter"]["FilePath"] = psd_path
                 else:
                     char["FilePath"] = psd_path
+                    
+        if psd_path and "Zundamon" in self.character_templates:
+            tachie_tmpl = self.character_templates["Zundamon"]["tachie"]
+            if tachie_tmpl:
+                if "TachieCharacterParameter" in tachie_tmpl:
+                    tachie_tmpl["TachieCharacterParameter"]["FilePath"] = psd_path
+                elif "FilePath" in tachie_tmpl:
+                    tachie_tmpl["FilePath"] = psd_path
                 
         # Store for _add_tachie_items and image items
         self.layout_cfg = {"tachie": tachie_cfg, "broll": broll_cfg}
@@ -445,7 +453,7 @@ class YMMPCompiler:
                 
             items.append(image_item)
             if not is_bg:
-                pon_path = str(clip.image_path.resolve().parent.parent.parent / "assets" / "sfx" / "pon.wav")
+                pon_path = str(Path(__file__).parent.parent / "assets" / "sfx" / "pon.wav")
                 items.append({
                     "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
                     "FilePath": pon_path,
