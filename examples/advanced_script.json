@@ -1,0 +1,38 @@
+﻿[
+  {
+    "character": "Zundamon",
+    "text": "みんな、これを見てほしいのだ！",
+    "emotion": "excited",
+    "motion": "jump",
+    "bgm": "bgm1",
+    "sfx": "none",
+    "image": "none"
+  },
+  {
+    "character": "Zundamon",
+    "text": "赤いリンゴなのだ！",
+    "emotion": "happy",
+    "motion": "none",
+    "bgm": "none",
+    "sfx": "none",
+    "image": "assets/apple.jpg"
+  },
+  {
+    "character": "Zundamon",
+    "text": "そしてこっちは可愛い犬なのだ！",
+    "emotion": "happy",
+    "motion": "shake",
+    "bgm": "none",
+    "sfx": "none",
+    "image": "assets/dog.jpg"
+  },
+  {
+    "character": "Zundamon",
+    "text": "B-Roll画像の切り替えテストは大成功なのだ！",
+    "emotion": "smug",
+    "motion": "jump",
+    "bgm": "none",
+    "sfx": "none",
+    "image": "none"
+  }
+]

@@ -37,6 +37,11 @@ class DynamicImageClip(IRClip):
     image_path: Path
 
 @dataclass
+class DynamicAudioClip(IRClip):
+    """Represents a dynamic audio clip (BGM/SFX)."""
+    audio_path: Path
+
+@dataclass
 class TimelineIR:
     fps: int
     total_frames: int
@@ -44,6 +49,7 @@ class TimelineIR:
     character_clips: List[CharacterClip] = field(default_factory=list)
     global_clips: List[GlobalClip] = field(default_factory=list)
     dynamic_image_clips: List[DynamicImageClip] = field(default_factory=list)
+    dynamic_audio_clips: List[DynamicAudioClip] = field(default_factory=list)
     
     # We still need to pass down the template data so the YMM4 renderer knows how to style things
     template_data: Dict = field(default_factory=dict)
