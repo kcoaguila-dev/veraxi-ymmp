@@ -41,7 +41,7 @@ def test_synthesize_success(mock_post):
     mock_post.side_effect = [mock_query_res, mock_synth_res]
 
     client = VoicevoxClient()
-    wav_bytes, duration = client.synthesize("こんにちは", 3)
+    wav_bytes, duration, _ = client.synthesize("こんにちは", 3)
 
     assert duration == 2.0
     assert wav_bytes == mock_wav
@@ -50,7 +50,7 @@ def test_synthesize_success(mock_post):
     mock_post.assert_any_call(
         "http://localhost:50021/audio_query",
         params={"text": "こんにちは", "speaker": 3},
-        timeout=10
+        timeout=30
     )
     mock_post.assert_any_call(
         "http://localhost:50021/synthesis",
