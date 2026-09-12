@@ -2,13 +2,34 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from moviepy import *
+from moviepy import AudioFileClip
+import numpy as np
 import math
 
 from .ir import TimelineIR
 
+import textwrap
+
 def create_speech_bubble(text: str, duration: float) -> ImageClip:
-    """Creates a beautiful white speech bubble with a green border, drop shadow, and text."""
-    width, height = 1200, 200
+    """Creates a beautiful white speech bubble with a green border, drop shadow, and wrapped text."""
+    # Wrap text to ~28 characters per line (approx 1100px at 40px font)
+    wrapped_text = "\n".join(textwrap.wrap(text, width=28))
+    
+    try:
+        font = ImageFont.truetype("meiryo.ttc", 60)
+    except:
+        font = ImageFont.load_default()
+        
+    # Create a dummy image to measure text
+    dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    
+    # Calculate bubble size dynamically
+    width = max(200, (text_w//3) + 33)
+    height = max(50, (text_h//3) + 26)
+    
     # Add padding for shadow
     canvas_w, canvas_h = width + 40, height + 40
     img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
@@ -26,32 +47,23 @@ def create_speech_bubble(text: str, duration: float) -> ImageClip:
     fill_color = (255, 255, 255, 245) # White
     draw.rounded_rectangle([20, 20, width, height], radius=20, fill=fill_color, outline=border_color, width=6)
     
-    try:
-        font = ImageFont.truetype("meiryo.ttc", 50)
-    except:
-        font = ImageFont.load_default()
-        
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    
     x = (width - text_w) / 2 + 20
-    y = (height - text_h) / 2 - 5 
+    y = (height - text_h) / 2 + 20 - bbox[1] 
     
     # Draw text shadow/outline
     outline_color = (200, 255, 200, 255)
     for adj in [-2, 2]:
-        draw.text((x+adj, y), text, font=font, fill=outline_color)
-        draw.text((x, y+adj), text, font=font, fill=outline_color)
+        draw.multiline_text((x+adj, y), wrapped_text, font=font, fill=outline_color, spacing=10)
+        draw.multiline_text((x, y+adj), wrapped_text, font=font, fill=outline_color, spacing=10)
         
-    draw.text((x, y), text, font=font, fill=(0, 0, 0, 255))
+    draw.multiline_text((x, y), wrapped_text, font=font, fill=(0, 0, 0, 255), spacing=10)
     
     clip = ImageClip(np.array(img)).with_duration(duration)
     
     from moviepy.video.fx import Resize
     def pop_in(t):
-        if t < 0.2:
-            return 0.5 + (t / 0.2) * 0.5
+        if t < 0.15:
+            return 0.8 + (t / 0.15) * 0.2
         return 1.0
         
     return clip.with_effects([Resize(pop_in)])
@@ -94,21 +106,26 @@ class MoviePyRenderer:
             return 1.0
             
         from moviepy.video.fx import Resize
+        bgs = []
+        brolls = []
         for d_clip in self.ir.dynamic_image_clips:
-            is_bg = "bg/" in str(d_clip.image_path).replace("\\", "/") or "bg\\" in str(d_clip.image_path)
+            is_bg = "bg" in str(d_clip.image_path).lower() or "room" in str(d_clip.image_path).lower() or "classroom" in str(d_clip.image_path).lower()
             
             start_t = d_clip.start_frame / fps
             dur = d_clip.length / fps
             img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
             
             if is_bg:
-                img = img.resized(height=1080).with_position("center")
-                # Append background so it covers the global background but is behind characters
-                video_clips.append(img)
+                img = img.resized((640, 360)).with_position("center")
+                bgs.append(img)
             else:
-                img = img.resized(height=400).with_position(("center", 200))
+                img = img.resized(height=133)
                 img = img.with_effects([Resize(broll_pop)])
-                video_clips.append(img)
+                img = img.with_position((366, 66))
+                brolls.append(img)
+                
+        video_clips.extend(bgs)
+        video_clips.extend(brolls)
 
         # 3. Zundamon Base Character
         pos = ('left', 'bottom')
@@ -116,132 +133,99 @@ class MoviePyRenderer:
             if cc.position == 'right':
                 pos = ('right', 'bottom')
         
-        x_pos = 100 if pos[0] == 'left' else (1920 - 700)
-        y_pos = 1080 - 700 - 50 
+        x_pos = 16 if pos[0] == 'left' else (640 - 233)
+        y_pos = 360 - 233 - 16 
         
-        # PRO ASSETS
-        base_path = Path("assets/pro_base.png")
-        if base_path.exists():
-            # Build talk times for bounce
+        # CHIBI ASSETS
+        base_path_closed = Path("assets/mouth_closed.png")
+        base_path_open = Path("assets/mouth_open.png")
+        
+        if base_path_closed.exists() and base_path_open.exists():
+            clip_closed = ImageClip(str(base_path_closed)).resized(height=233)
+            clip_open = ImageClip(str(base_path_open)).resized(height=233)
+            
+            base_img_closed = np.array(clip_closed.get_frame(0))
+            base_img_open = np.array(clip_open.get_frame(0))
+            
+            mask_img_closed = np.array(clip_closed.mask.get_frame(0))
+            mask_img_open = np.array(clip_open.mask.get_frame(0))
+            
             talk_times = []
+            audio_readers = []
             for vc in self.ir.voice_clips:
                 st = vc.start_frame / fps
                 dur = vc.length / fps
                 talk_times.append((st, st + dur))
+                audio_readers.append((st, st + dur, AudioFileClip(str(vc.audio_path))))
                 
             def get_bounce_offset(t):
-                is_talking = False
-                for st, et in talk_times:
-                    if st <= t <= et:
-                        is_talking = True
-                        break
-                if is_talking:
-                    bounce = abs(math.sin(t * 15)) * 15
-                    return (x_pos, y_pos - bounce)
+                # Static position, matching the natural YMM4 style used by rivals.
                 return (x_pos, y_pos)
 
-            # Base Body
-            base_z = ImageClip(str(base_path)).with_duration(total_duration).resized(height=700).with_position(get_bounce_offset)
-            video_clips.append(base_z)
-            
-            # Eyes (Blinking)
-            eye_open = Path("assets/pro_eye_open.png")
-            eye_closed = Path("assets/pro_eye_closed.png")
-            
-            # Blinking logic: Open for 3.5s, closed for 0.15s
-            if eye_open.exists() and eye_closed.exists():
-                eye_o_clip = ImageClip(str(eye_open)).resized(height=700).with_position(get_bounce_offset)
-                eye_c_clip = ImageClip(str(eye_closed)).resized(height=700).with_position(get_bounce_offset)
+            def get_mouth_state(t):
+                for st, et, ac in audio_readers:
+                    if st <= t <= et:
+                        try:
+                            vol = np.abs(ac.get_frame(t - st)).mean()
+                            if vol > 0.015:
+                                return True
+                        except:
+                            pass
+                return False
                 
-                t = 0
-                while t < total_duration:
-                    dur_open = 3.5
-                    if t + dur_open > total_duration: dur_open = total_duration - t
-                    video_clips.append(eye_o_clip.with_start(t).with_duration(dur_open))
-                    t += dur_open
-                    
-                    if t >= total_duration: break
-                    dur_closed = 0.15
-                    if t + dur_closed > total_duration: dur_closed = total_duration - t
-                    video_clips.append(eye_c_clip.with_start(t).with_duration(dur_closed))
-                    t += dur_closed
+            def get_mouth_image(t):
+                return base_img_open if get_mouth_state(t) else base_img_closed
+                
+            def get_mouth_mask(t):
+                return mask_img_open if get_mouth_state(t) else mask_img_closed
+                
+            z_clip = VideoClip(frame_function=get_mouth_image).with_duration(total_duration)
+            z_mask = VideoClip(frame_function=get_mouth_mask, is_mask=True).with_duration(total_duration)
+            z_clip = z_clip.with_mask(z_mask).with_position(lambda t: get_bounce_offset(t))
+            video_clips.append(z_clip)
 
-            # Mouths (Lip Sync)
-            mouth_map = {
-                'a': Path("assets/pro_mouth_a.png"),
-                'i': Path("assets/pro_mouth_i.png"),
-                'u': Path("assets/pro_mouth_u.png"),
-                'e': Path("assets/pro_mouth_e.png"),
-                'o': Path("assets/pro_mouth_o.png"),
-                'n': Path("assets/pro_mouth_n.png")
-            }
-            mouth_clips = {k: ImageClip(str(v)).resized(height=700).with_position(get_bounce_offset) for k, v in mouth_map.items() if v.exists()}
+        # 4. Voices and Bubbles
+        for vc in self.ir.voice_clips:
+            start_time = vc.start_frame / fps
+            duration = vc.length / fps
             
-            # Default mouth (closed) for non-talking
-            if 'n' in mouth_clips:
-                t = 0
-                for st, et in talk_times:
-                    if st > t:
-                        video_clips.append(mouth_clips['n'].with_start(t).with_duration(st - t))
-                    t = et
-                if t < total_duration:
-                    video_clips.append(mouth_clips['n'].with_start(t).with_duration(total_duration - t))
-
-            # 4. Voices, Lip Sync, and Bubbles
-            for vc in self.ir.voice_clips:
-                start_time = vc.start_frame / fps
-                duration = vc.length / fps
-                
-                # Audio
-                if vc.audio_path:
-                    audio_clip = AudioFileClip(str(vc.audio_path)).with_start(start_time)
-                    audio_clips.append(audio_clip)
-                
-                # Speech Bubble
-                bubble = create_speech_bubble(vc.text, duration).with_start(start_time).with_position(("center", "bottom"))
-                video_clips.append(bubble)
-                
-                # Vowel Lip Sync
-                if vc.audio_query and 'accent_phrases' in vc.audio_query:
-                    current_t = start_time
-                    for phrase in vc.audio_query.get('accent_phrases', []):
-                        # 1. Process standard moras
-                        for mora in phrase.get('moras', []):
-                            vowel = mora.get('vowel')
-                            v_len = mora.get('vowel_length') or 0
-                            c_len = mora.get('consonant_length') or 0
-                            
-                            if c_len > 0:
-                                if 'n' in mouth_clips:
-                                    video_clips.append(mouth_clips['n'].with_start(current_t).with_duration(c_len))
-                                current_t += c_len
-                                
-                            if vowel and v_len > 0:
-                                m_key = vowel.lower() # Maps 'N' to 'n'
-                                if m_key not in mouth_clips: m_key = 'n' if vowel == 'pau' else 'a'
-                                if m_key in mouth_clips:
-                                    video_clips.append(mouth_clips[m_key].with_start(current_t).with_duration(v_len))
-                                current_t += v_len
-                        
-                        # 2. Process pause_mora to prevent audio desync!
-                        pause_mora = phrase.get('pause_mora')
-                        if pause_mora:
-                            p_v_len = pause_mora.get('vowel_length') or 0
-                            if p_v_len > 0:
-                                if 'n' in mouth_clips:
-                                    video_clips.append(mouth_clips['n'].with_start(current_t).with_duration(p_v_len))
-                                current_t += p_v_len
+            if vc.audio_path:
+                audio_clip = AudioFileClip(str(vc.audio_path)).with_start(start_time)
+                audio_clips.append(audio_clip)
+            
+            bubble = create_speech_bubble(vc.text, duration).with_start(start_time).with_position(("center", 266))
+            video_clips.append(bubble)
 
         print("Compositing video...")
-        final_video = CompositeVideoClip(video_clips)
+        final_video = CompositeVideoClip(video_clips, size=(640, 360))
+        # 6. Global Audio (BGM/SFX)
+        for clip in self.ir.dynamic_audio_clips:
+            if not clip.audio_path: continue
+            
+            try:
+                ac = AudioFileClip(str(clip.audio_path))
+                if clip.length == -1: # Looped BGM
+                    dur = total_duration - (clip.start_frame/fps)
+                    ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(0.1)
+                else:
+                    dur = clip.length / fps
+                    ac = ac.subclipped(0, min(dur, ac.duration))
+                audio_clips.append(ac.set_start(clip.start_frame / fps))
+            except Exception as e:
+                print(f"Failed to load audio {clip.audio_path}: {e}")
+
         if audio_clips:
             final_audio = CompositeAudioClip(audio_clips)
             final_video = final_video.with_audio(final_audio)
             
         print(f"Writing to {output_path}...")
+        # Fast QA override if requested
+        if getattr(self, 'fast_qa_duration', None):
+            final_video = final_video.subclipped(0, 2.0)
+            
         final_video.write_videofile(
-            output_path, 
-            fps=fps,
+            str(output_path), 
+            fps=10,
             codec="libx264",
             audio_codec="aac"
         )

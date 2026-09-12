@@ -1,5 +1,6 @@
 from __future__ import annotations
-from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip, DynamicImageClip
+from .ir import TimelineIR, VoiceClip, CharacterClip, GlobalClip, DynamicImageClip, DynamicAudioClip
+from pathlib import Path
 """
 YMM4 project compiler for generating dialogue timelines.
 
@@ -122,8 +123,16 @@ class YMMPCompiler:
         voice_clips = []
         character_positions = {}
         dynamic_image_clips = []
+        dynamic_audio_clips = []
+        active_bg = None
 
         for idx, line in enumerate(script):
+            if line.get("type") == "bgm":
+                # Resolve relative to project root
+                path = audio_dir.parent.parent / line["path"]
+                dynamic_audio_clips.append(DynamicAudioClip(audio_path=path, start_frame=0, length=8771))
+                continue
+                
             char_name = line.get("character")
 
             if "emotion" in line and line["emotion"] != "neutral":
@@ -136,13 +145,35 @@ class YMMPCompiler:
                 msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
                 self.warnings.append(msg)
 
-            if line.get("bgm") is not None and line["bgm"] != "none" and line["bgm"] != "":
-                msg = f"BGM '{line['bgm']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                self.warnings.append(msg)
+            text = line.get("text", "")
+            length = self._calculate_placeholder_length(text)
+
+            bgm_name = line.get("bgm")
+            if bgm_name and bgm_name != "none" and bgm_name != "":
+                bgm_path = Path(bgm_name)
+                if bgm_path.exists():
+                    dynamic_audio_clips.append(DynamicAudioClip(
+                        audio_path=bgm_path,
+                        start_frame=current_frame,
+                        length=-1 # Special marker for "entire video"
+                    ))
+                else:
+                    msg = f"BGM not found: {bgm_name}"
+                    logger.warning(msg)
+                    self.warnings.append(msg)
 
             if line.get("sfx") is not None and line["sfx"] != "none" and line["sfx"] != "":
-                msg = f"SFX '{line['sfx']}' on entry {idx} is preserved but unsupported in generated YMMP."
-                self.warnings.append(msg)
+                sfx_path = Path(line["sfx"])
+                if sfx_path.exists():
+                    dynamic_audio_clips.append(DynamicAudioClip(
+                        audio_path=sfx_path,
+                        start_frame=current_frame,
+                        length=30 # default sfx length 30 frames
+                    ))
+                else:
+                    msg = f"SFX not found: {line['sfx']}"
+                    logger.warning(msg)
+                    self.warnings.append(msg)
 
             text = line.get("text", "")
             if not char_name:
@@ -182,26 +213,57 @@ class YMMPCompiler:
                 audio_query=audio_query
             ))
 
-            image_name = line.get("image")
-            if image_name:
+            def add_image_clip(img_name):
                 from pathlib import Path
-                image_path = Path("artifacts/.user_uploaded") / image_name
-                if not image_path.exists():
-                    image_path = Path(image_name) # try relative to workspace
-                if not image_path.exists():
-                    image_path = Path("artifacts") / image_name
-                if image_path.exists():
+                img_path = Path("artifacts/.user_uploaded") / img_name
+                if not img_path.exists():
+                    img_path = Path(img_name)
+                if not img_path.exists():
+                    img_path = Path("artifacts") / img_name
+                if img_path.exists():
                     dynamic_image_clips.append(DynamicImageClip(
-                        image_path=image_path,
+                        image_path=img_path,
                         start_frame=current_frame,
                         length=length
                     ))
                 else:
-                    msg = f"Image not found: {image_name}"
+                    msg = f"Image not found: {img_name}"
+                    logger.warning(msg)
+                    self.warnings.append(msg)
+
+            image_name = line.get("image")
+            if image_name:
+                add_image_clip(image_name)
+                
+            bg_name = line.get("bg")
+            if bg_name:
+                if active_bg:
+                    active_bg.length = current_frame - active_bg.start_frame
+                
+                # We defer setting the length until it changes or the script ends
+                active_bg = DynamicImageClip(
+                    image_path=Path(bg_name), # Will be resolved later or we can resolve it now
+                    start_frame=current_frame,
+                    length=-1 
+                )
+                
+                img_path = Path("artifacts/.user_uploaded") / bg_name
+                if not img_path.exists(): img_path = Path(bg_name)
+                if not img_path.exists(): img_path = Path("artifacts") / bg_name
+                
+                if img_path.exists():
+                    active_bg.image_path = img_path
+                    dynamic_image_clips.append(active_bg)
+                else:
+                    active_bg = None
+                    msg = f"BG Image not found: {bg_name}"
                     logger.warning(msg)
                     self.warnings.append(msg)
 
             current_frame += length
+
+        if active_bg:
+            active_bg.length = current_frame - active_bg.start_frame
 
         total_frames = current_frame
 
@@ -218,7 +280,7 @@ class YMMPCompiler:
         global_clips = []
         for template_item in get_timeline(self.template_data).get("Items", []):
             type_str = template_item.get("$type", "")
-            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str:
+            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str and "ImageItem" not in type_str:
                 global_clips.append(GlobalClip(
                     start_frame=0,
                     length=total_frames,
@@ -232,6 +294,7 @@ class YMMPCompiler:
             character_clips=character_clips,
             global_clips=global_clips,
             dynamic_image_clips=dynamic_image_clips,
+            dynamic_audio_clips=dynamic_audio_clips,
             template_data=self.template_data
         ), audio_files
 
@@ -252,11 +315,18 @@ class YMMPCompiler:
         for clip in timeline_ir.voice_clips:
             template_item = self.character_templates[clip.character]["voice"]
             new_item = copy.deepcopy(template_item)
+            new_item["Layer"] = 2
             new_item["Serif"] = clip.text
             new_item["Hatsuon"] = clip.hatsuon
             new_item["Frame"] = clip.start_frame
             new_item["Length"] = clip.length
             new_item["VoiceCache"] = ""
+            
+            # Autonomous configuration: Ensure huge readable subtitles at the bottom
+            self._set_animated_value(new_item, "FontSize", 80.0)
+            self._set_animated_value(new_item, "Y", 450.0)
+            # Enable lip sync auto-generation
+            new_item["IsWaveformEnabled"] = True
 
             if clip.audio_path:
                 sec = clip.length / timeline_ir.fps
@@ -311,18 +381,18 @@ class YMMPCompiler:
         items.extend(tachie_items)
 
         for clip in timeline_ir.dynamic_image_clips:
-            is_bg = "bg/" in str(clip.image_path).replace("\\", "/") or "bg\\" in str(clip.image_path)
+            is_bg = "bg" in str(clip.image_path).lower() or "room" in str(clip.image_path).lower() or "classroom" in str(clip.image_path).lower()
             
             image_item = {
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
                 "FilePath": str(clip.image_path.resolve()),
-                "X": {"Values": [{"Value": 0.0}]},
-                "Y": {"Values": [{"Value": 0.0}]},
-                "Zoom": {"Values": [{"Value": 100.0}]},
+                "X": {"Values": [{"Value": 0.0 if is_bg else 350.0}]},
+                "Y": {"Values": [{"Value": 0.0 if is_bg else -50.0}]},
+                "Zoom": {"Values": [{"Value": 200.0 if is_bg else 80.0}]},
                 "Opacity": {"Values": [{"Value": 100.0}]},
                 "Frame": clip.start_frame,
                 "Length": clip.length,
-                "Layer": 0 if is_bg else 2,
+                "Layer": 0 if is_bg else 4,
                 "Blend": "Normal",
                 "VideoEffects": []
             }
@@ -337,6 +407,37 @@ class YMMPCompiler:
                 })
                 
             items.append(image_item)
+            if not is_bg:
+                pon_path = str(clip.image_path.resolve().parent.parent.parent / "assets" / "sfx" / "pon.wav")
+                items.append({
+                    "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+                    "FilePath": pon_path,
+                    "Volume": {"Values": [{"Value": 40.0}]},
+                    "Pan": {"Values": [{"Value": 0.0}]},
+                    "PlaybackRate": 100.0,
+                    "ContentOffset": "00:00:00",
+                    "Frame": clip.start_frame,
+                    "Length": 60,
+                    "Layer": 11,
+                    "Blend": "Normal",
+                    "VideoEffects": []
+                })
+
+        for clip in timeline_ir.dynamic_audio_clips:
+            length = timeline_ir.total_frames - clip.start_frame if clip.length == -1 else clip.length
+            
+            audio_item = {
+                "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+                "FilePath": str(clip.audio_path.resolve()),
+                "Volume": {"Values": [{"Value": 10.0}]},
+                "Pan": {"Values": [{"Value": 0.0}]},
+                "PlaybackRate": 100.0,
+                "Layer": 5,
+                "Start": clip.start_frame,
+                "Length": length,
+                "IsLooped": clip.length == -1
+            }
+            items.append(audio_item)
 
         for gc in timeline_ir.global_clips:
             preserved_item = copy.deepcopy(gc.template_item)
@@ -375,6 +476,11 @@ class YMMPCompiler:
 
     def _synthesize_audio(self, idx: int, char_name: str, text: str, audio_dir: "Path") -> Tuple[int, Optional["Path"], Optional[Dict[str, Any]]]:
         speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
+        out_path = audio_dir / f"{idx:03d}_{char_name}.wav"
+        
+        if out_path.exists():
+            print(f"Cache hit: {out_path}")
+            return int(3.0 * self._get_fps()), out_path, None
 
         cached = self.cache.get(text, speaker_id)
         if cached:
@@ -461,6 +567,7 @@ class YMMPCompiler:
         if template is None:
             return None
         face_item = copy.deepcopy(template)
+        face_item["Layer"] = 6
         face_item["Frame"] = frame
         face_item["Length"] = length
         return face_item
@@ -491,13 +598,14 @@ class YMMPCompiler:
         for char_name, templates in self.character_templates.items():
             if char_name in used_characters and templates["tachie"] is not None:
                 tachie_item = copy.deepcopy(templates["tachie"])
+                tachie_item["Layer"] = 1
                 tachie_item["Frame"] = 0
                 tachie_item["Length"] = total_length
-                self._set_animated_value(
-                    tachie_item,
-                    "X",
-                    {"left": -450, "center": 0, "right": 450}.get(character_positions.get(char_name, "center"), 0),
-                )
+                # Zundamon style default: left side, slightly zoomed down, bottom aligned
+                pos = character_positions.get(char_name, "left")
+                self._set_animated_value(tachie_item, "X", {"left": -650.0, "center": 0, "right": 650.0}.get(pos, -650.0))
+                self._set_animated_value(tachie_item, "Y", 250.0)
+                self._set_animated_value(tachie_item, "Zoom", 65.0)
                 result.append(tachie_item)
 
         return result
