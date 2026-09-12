@@ -37,7 +37,8 @@ def test_cli_invalid_emotion(tmp_path, base_args):
         "emotion": "superhappy",
         "motion": "none",
         "bgm": None,
-        "sfx": None
+        "sfx": None,
+            "image": None
     }])
     base_args.script = script_path
 
@@ -70,6 +71,7 @@ def test_cli_unknown_metadata(tmp_path, base_args):
         "motion": "none",
         "bgm": None,
         "sfx": None,
+            "image": None,
         "extra_field": "unwanted"
     }])
     base_args.script = script_path
@@ -117,7 +119,8 @@ def test_cli_non_utf8_writer_script(tmp_path, base_args):
         "emotion": "happy",
         "motion": "none",
         "bgm": None,
-        "sfx": None
+        "sfx": None,
+            "image": None
     }])
 
     # Create non-UTF-8 writer script (e.g. Shift-JIS)

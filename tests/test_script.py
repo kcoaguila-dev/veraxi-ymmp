@@ -38,7 +38,8 @@ def test_validate_director_script_valid():
             "emotion": "happy",
             "motion": "jump",
             "bgm": "theme.mp3",
-            "sfx": None
+            "sfx": None,
+            "image": None
         }
     ]
     result = validate_director_script(data)
@@ -55,6 +56,7 @@ def test_validate_director_script_valid():
         "motion": "none",
         "bgm": None,
         "sfx": None,
+            "image": None,
         "character_position": "right",
         "subtitle_position": "bottom_center",
         "subtitle_style": "outlined",
@@ -81,7 +83,8 @@ def test_validate_director_script_invalid():
     for bad_emotion in ["weird", 123, [], {}, None]:
         invalid_emotion = [{
             "character": "A", "text": "Hello", "emotion": bad_emotion,
-            "motion": "none", "bgm": None, "sfx": None
+            "motion": "none", "bgm": None, "sfx": None,
+            "image": None
         }]
         with pytest.raises(ValueError, match="'emotion' must be one of"):
             validate_director_script(invalid_emotion)
@@ -90,7 +93,8 @@ def test_validate_director_script_invalid():
     for bad_motion in ["dance", 123, [], {}, None]:
         invalid_motion = [{
             "character": "A", "text": "Hello", "emotion": "neutral",
-            "motion": bad_motion, "bgm": None, "sfx": None
+            "motion": bad_motion, "bgm": None, "sfx": None,
+            "image": None
         }]
         with pytest.raises(ValueError, match="'motion' must be one of"):
             validate_director_script(invalid_motion)
@@ -98,7 +102,8 @@ def test_validate_director_script_invalid():
     # Invalid bgm (empty string)
     empty_bgm = [{
         "character": "A", "text": "Hello", "emotion": "neutral",
-        "motion": "none", "bgm": "", "sfx": None
+        "motion": "none", "bgm": "", "sfx": None,
+            "image": None
     }]
     with pytest.raises(ValueError, match="'bgm' must be null or a non-empty string"):
         validate_director_script(empty_bgm)
@@ -106,6 +111,7 @@ def test_validate_director_script_invalid():
     base = {
         "character": "A", "text": "Hello", "emotion": "neutral",
         "motion": "none", "bgm": None, "sfx": None,
+            "image": None,
     }
     for field, value in {
         "character_position": "diagonal",
@@ -125,11 +131,13 @@ def test_validate_director_against_writer():
     director = [
         {
             "character": "A", "text": "Hello", "emotion": "neutral",
-            "motion": "none", "bgm": None, "sfx": None
+            "motion": "none", "bgm": None, "sfx": None,
+            "image": None
         },
         {
             "character": "B", "text": "World", "emotion": "happy",
-            "motion": "jump", "bgm": None, "sfx": None
+            "motion": "jump", "bgm": None, "sfx": None,
+            "image": None
         }
     ]
 
