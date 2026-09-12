@@ -280,7 +280,7 @@ class YMMPCompiler:
         global_clips = []
         for template_item in get_timeline(self.template_data).get("Items", []):
             type_str = template_item.get("$type", "")
-            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str and "ImageItem" not in type_str:
+            if "VoiceItem" not in type_str and "Tachie" not in type_str and "TextItem" not in type_str and "ImageItem" not in type_str and "AudioItem" not in type_str:
                 global_clips.append(GlobalClip(
                     start_frame=0,
                     length=total_frames,
@@ -306,10 +306,24 @@ class YMMPCompiler:
         script_len: int,
         audio_files: List["Path"]
     ) -> CompilationResult:
+        import os
         import copy
         from .template import get_timeline
         
         output_data = copy.deepcopy(self.template_data)
+        
+        # Autonomous configuration: Ensure huge readable subtitles at the bottom
+        # and allow injecting local PSD path
+        psd_path = os.environ.get("ZUNDAMON_PSD_PATH")
+        for char in output_data.get("Characters", []):
+            char["FontSize"] = 80.0
+            char["Y"] = 450.0
+            if psd_path and "Zundamon" in char.get("Name", ""):
+                if "TachieCharacterParameter" in char:
+                    char["TachieCharacterParameter"]["FilePath"] = psd_path
+                else:
+                    char["FilePath"] = psd_path
+                
         items = []
 
         for clip in timeline_ir.voice_clips:
