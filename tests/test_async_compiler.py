@@ -65,7 +65,8 @@ async def test_compile_async_director_script(tmp_path):
             "emotion": "happy",
             "motion": "jump",
             "bgm": "theme.mp3",
-            "sfx": "bang.wav"
+            "sfx": "bang.wav",
+            "image": None
         }
     ]
 
@@ -81,11 +82,11 @@ async def test_compile_async_director_script(tmp_path):
     result = await compiler.compile_async(script, output_path)
 
     assert result.output_path == output_path
-    assert len(result.warnings) == 4
+    assert len(result.warnings) == 4 # it should match
     assert any("Emotion 'happy'" in w for w in result.warnings)
     assert any("Motion 'jump'" in w for w in result.warnings)
-    assert any("BGM 'theme.mp3'" in w for w in result.warnings)
-    assert any("SFX 'bang.wav'" in w for w in result.warnings)
+    assert any("BGM not found: theme.mp3" in w for w in result.warnings)
+    assert any("SFX not found: bang.wav" in w for w in result.warnings)
 
 @pytest.mark.asyncio
 async def test_compile_async_diagnostics_reset(tmp_path):
@@ -100,7 +101,8 @@ async def test_compile_async_diagnostics_reset(tmp_path):
             "emotion": "happy",
             "motion": "jump",
             "bgm": "theme.mp3",
-            "sfx": "bang.wav"
+            "sfx": "bang.wav",
+            "image": None
         }
     ]
 
