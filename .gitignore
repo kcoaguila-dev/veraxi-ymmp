@@ -66,3 +66,6 @@ artifacts/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Ruff cache
+.ruff_cache/
