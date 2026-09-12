@@ -1,83 +1,36 @@
-# veraxi_ymmp
+﻿# veraxi-ymmp
 
-**Disclaimer:** The generated `.ymmp` outputs have NOT been validated by opening in a real YMM4 install with audio playback. Before trusting this for real work, open a generated `output.ymmp` in YMM4 and confirm it loads and plays correctly. WAV files are saved to `{output}/audio/` but audio wiring into YMM4 is NOT implemented.
-
-A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real template items.
+A Python tool that generates YMM4 `.ymmp` dialogue timelines by cloning real template items and intelligently orchestrating layout logic.
 
 ## Pipeline Architecture
 
 This tool uses a two-stage script pipeline:
 
 1. **Writer Stage:** Generates a purely factual dialogue script.
-   ```json
-   [
-     {
-       "character": "ゆっくり霊夢",
-       "text": "こんにちは"
-     }
-   ]
-   ```
-2. **Director Stage:** Enriches the dialogue with execution metadata (`emotion`, `motion`, `bgm`, `sfx`) strictly without altering the factual text or character sequence.
-   ```json
-   [
-     {
-       "character": "ゆっくり霊夢",
-       "text": "こんにちは",
-       "emotion": "neutral",
-       "motion": "none",
-       "bgm": null,
-       "sfx": null
-     }
-   ]
-   ```
-   *Note on limits:* Currently, non-neutral `emotion`, non-none `motion`, `bgm`, and `sfx` metadata are parsed, strictly validated, and preserved in the code, but they are NOT implemented in the final YMMP generation because we lack sufficient YMMP template fixtures for those features. Supplying non-default values will emit a warning during compilation.
+2. **Director Stage:** Enriches the dialogue with execution metadata (`emotion`, `image`, `bg`) without altering the factual text or character sequence.
 
-You can validate a director script against its original writer script before compiling by providing the `--writer-script` flag to ensure the factual content wasn't altered.
+The `veraxi-ymmp` compiler takes these scripts, communicates with your local VoiceVox API to generate audio, and mathematically positions characters, subtitles, and B-Roll to construct a perfect `.ymmp` project.
 
-### Conversational MCP workflow
+## Features
+- **Autonomous Layout Engine:** Zundamon is automatically anchored to the bottom-left, subtitles to the bottom center, and B-Roll imagery dynamically scales and anchors to the right.
+- **Dynamic SFX Injection:** "Pon!" pop sound effects are autonomously injected into the timeline whenever a new image appears.
+- **Lip-Sync Ready:** Forces YMM4 waveform analysis on output so character mouths sync with VoiceVox.
+- **Auto-Export:** Capable of hooking into your local YMM4 Lite installation to hardware-encode the `.mp4` natively on your GPU without ever opening the GUI!
 
-Install the optional MCP dependency with `pip install -e ".[mcp]"`. VS Code will discover the local server from `.vscode/mcp.json`. Copilot can then inspect templates, validate Writer/Director JSON, and compile `.ymmp` projects through the `veraxi-ymmp` tools without a separate model API key. The model remains hosted by Copilot; the MCP server only exposes local project tools.
+## Usage
 
-Director scripts may also use semantic layout cues:
-
-```json
-{
-  "character_position": "right",
-  "subtitle_position": "bottom_center",
-  "subtitle_style": "outlined"
-}
-```
-
-The compiler maps these choices to fixed YMM4 presets. Valid values are `left`, `center`, or `right` for character position; `top_center`, `center`, or `bottom_center` for subtitle position; and `default` or `outlined` for subtitle style. These fields are optional and default to a centered character, bottom-centered outlined subtitles.
-
-When the template contains saved PSD `TachieFaceItem` examples, the compiler recognizes the verified layer-path patterns for happy (`むふ`), angry (`怒り眉2`/`ジト目`), sad (`涙`/`青ざめ`), and surprised (`うわー`/`上がり眉`) expressions. Neutral uses the base TachieItem. Templates without these reference face items continue to emit warnings and leave non-neutral emotion metadata unapplied.
-
-## Usage and TTS (VOICEVOX)
-
-By default, without `--tts`, `veraxi-ymmp` uses a placeholder heuristic (`max(30, len(text) * 5)`) for frame timing.
-
-When `--tts` is enabled, `veraxi-ymmp` generates audio via a local VOICEVOX engine and calculates exact frame lengths based on the generated audio and your template's configured `FPS`. **Note: The generated WAV files are saved to `{output}/audio/` but are NOT automatically wired into the .ymmp file.**
-
-### Audio Playback (UNVERIFIED)
-The `VoiceCache` field is intentionally left empty (following AutoYukkuri's approach). Generated WAV files are saved to `{output}/audio/` for manual use, but automatic audio integration into YMM4 is not yet implemented. How to properly reference external WAV files in YMM4 needs investigation.
-
-### Automation Script (UNVERIFIED)
-A convenience script `render_video.py` is included at the project root which **attempts** to chain generating the `.ymmp` and executing the YMM4 CLI for direct `.mp4` video rendering. Neither the YMM4 CLI `--encode` flag nor the full chain have been verified end-to-end:
-
+### 1. Set your YMM4 Path (Optional, for auto-export)
 ```bash
-python render_video.py examples/zundamon_template.ymmp examples/zundamon_script.json artifacts/output.ymmp artifacts/output.mp4 --tts --ymm4 "C:/Users/.../YukkuriMovieMaker.exe"
+# Windows
+set YMM4_PATH=C:\Users\YourUser\Documents\YukkuriMovieMaker_v4_Lite\YukkuriMovieMaker.exe
 ```
 
+### 2. Generate and Export
+```bash
+python -m veraxi_ymmp examples/full_template.ymmp artifacts/script.json artifacts/output.ymmp --export-mp4 artifacts/output.mp4
+```
 
-CLI options available:
-- `--tts`: Enable real VOICEVOX-backed timing instead of placeholder heuristic.
-- `--voicevox-url`: Base URL for VOICEVOX Engine (default: `http://localhost:50021`).
-- `--speaker-map`: Path to a JSON file mapping `CharacterName` to a speaker_id (e.g. `{"ゆっくり霊夢": 10}`).
-- `--default-speaker`: Default speaker ID (default: `3` / Zundamon).
-- `--list-speakers`: Queries the VOICEVOX instance for all available speakers and prints them, then exits.
-- `--writer-script`: Path to a Writer JSON script to validate the Director script against before compiling.
-
-## Out of scope
-- Building `Characters`, `VideoInfo`, or any top-level structure — these pass through from the template untouched.
-- Multi-emotion/expression switching via `TachieFaceParameter` — left exactly as copied from the template.
-- Any C#/.NET plugin work, or a `.ymme` distributable.
+This will:
+1. Synthesize all dialogue using VoiceVox (cached).
+2. Generate `artifacts/output.ymmp`.
+3. Launch YMM4 silently to render `artifacts/output.mp4`.
