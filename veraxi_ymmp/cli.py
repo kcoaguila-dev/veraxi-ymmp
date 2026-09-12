@@ -69,6 +69,9 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress info logging, only show warnings/errors")
     parser.add_argument("--log-file", type=str, help="Write logs to file")
+    
+    # YMM4 Export Feature
+    parser.add_argument("--export-mp4", type=str, help="Automatically render to MP4 using YMM4 CLI (requires YMM4_PATH env var)")
 
     args = parser.parse_args()
 
@@ -225,6 +228,36 @@ def _compile(args: argparse.Namespace) -> None:
             print(f"Compilation complete: saved to {result.output_path}")
             if result.warnings:
                 print(f"Encountered {len(result.warnings)} warnings")
+
+        # Auto-Export using YMM4 CLI
+        if getattr(args, 'export_mp4', None):
+            import os
+            import subprocess
+            mp4_path = Path(args.export_mp4).resolve()
+            
+            ymm4_exe_path = os.environ.get("YMM4_PATH")
+            if not ymm4_exe_path:
+                print("Error: YMM4_PATH environment variable is not set.", file=sys.stderr)
+                print("Please set it to the path of your YukkuriMovieMaker.exe to use --export-mp4", file=sys.stderr)
+                sys.exit(1)
+                
+            ymm4_exe = Path(ymm4_exe_path)
+            if not ymm4_exe.exists():
+                print(f"Error: YMM4 not found at {ymm4_exe}", file=sys.stderr)
+                sys.exit(1)
+                
+            if mp4_path.exists():
+                mp4_path.unlink()
+                
+            print(f"Exporting {output_path} to {mp4_path} using YMM4 CLI...")
+            subprocess.run([
+                str(ymm4_exe),
+                "--project", str(output_path.resolve()),
+                "--output", str(mp4_path),
+                "--export"
+            ], check=True)
+            print("Export finished successfully!")
+
     except (CompilerError, ValueError) as e:
         logger.error(f"Compilation error: {e}")
         sys.exit(1)
