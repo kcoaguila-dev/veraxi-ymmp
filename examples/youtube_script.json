@@ -1,0 +1,34 @@
+[
+  {
+    "character": "Zundamon",
+    "text": "みんな、こんにちはなのだ！今日は特別な動画をお届けするのだ！",
+    "emotion": "happy",
+    "motion": "jump",
+    "bgm": "bgm1",
+    "sfx": "none"
+  },
+  {
+    "character": "Zundamon",
+    "text": "背景もBGMもちゃんとついているのだ。",
+    "emotion": "smug",
+    "motion": "none",
+    "bgm": "none",
+    "sfx": "none"
+  },
+  {
+    "character": "Zundamon",
+    "text": "AIがここまで自動で作ってくれるなんて、本当にすごい時代なのだ！",
+    "emotion": "excited",
+    "motion": "shake",
+    "bgm": "none",
+    "sfx": "none"
+  },
+  {
+    "character": "Zundamon",
+    "text": "それじゃあ、チャンネル登録と高評価よろしくなのだ！",
+    "emotion": "happy",
+    "motion": "jump",
+    "bgm": "none",
+    "sfx": "none"
+  }
+]
