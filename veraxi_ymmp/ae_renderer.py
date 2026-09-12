@@ -19,7 +19,7 @@ class AfterEffectsRenderer:
         script.append("mainComp.openInViewer();")
         
         # 2. Import PSD
-        psd_path = r"C:\Users\hippo\Pictures\ずんだもん立ち絵素材V3.2\坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd".replace('\\', '/')
+        psd_path = r"C:\Users\YourUser\Pictures\ずんだもん立ち絵素材V3.2\坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd".replace('\\', '/')
         script.append(f"var psdFile = new File('{psd_path}');")
         script.append("var importOptions = new ImportOptions(psdFile);")
         script.append("importOptions.importAs = ImportAsType.COMP;")
