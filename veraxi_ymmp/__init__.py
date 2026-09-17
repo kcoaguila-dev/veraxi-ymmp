@@ -24,6 +24,16 @@ from .voicevox import VoicevoxClient, VoicevoxError
 from .hatsuon import Hatsuon, HatsuonError
 from .template import load_template, extract_character_templates, CharacterTemplates
 
+try:
+    from .premiere_exporter import PremiereExporter, export_to_premiere, generate_fcp_xml
+except ImportError:
+    pass
+
+try:
+    from .srt_generator import generate_srt
+except ImportError:
+    pass
+
 __all__ = [
     "YMMPCompiler",
     "CompilerError",
@@ -34,6 +44,10 @@ __all__ = [
     "load_template",
     "extract_character_templates",
     "CharacterTemplates",
+    "PremiereExporter",
+    "export_to_premiere",
+    "generate_fcp_xml",
+    "generate_srt",
 ]
 
 __version__ = "0.1.0"
