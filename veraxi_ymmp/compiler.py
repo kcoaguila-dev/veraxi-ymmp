@@ -130,7 +130,8 @@ class YMMPCompiler:
             if line.get("type") == "bgm":
                 # Resolve relative to project root
                 path = audio_dir.parent.parent / line["path"]
-                dynamic_audio_clips.append(DynamicAudioClip(audio_path=path, start_frame=0, length=8771))
+                vol = line.get("volume", 15) / 100.0
+                dynamic_audio_clips.append(DynamicAudioClip(audio_path=path, start_frame=0, length=-1, volume=vol))
                 continue
                 
             char_name = line.get("character")
@@ -182,20 +183,50 @@ class YMMPCompiler:
             character_positions.setdefault(char_name, line.get("character_position", "center"))
             
             if char_name not in self.character_templates:
-                raise ValueError(f"Missing template for character: {char_name}")
+                # Dynamic fallback: clone the first available character template
+                if not self.character_templates:
+                    raise ValueError(f"No character templates available to clone for: {char_name}")
+                base_char = list(self.character_templates.keys())[0]
+                self.character_templates[char_name] = copy.deepcopy(self.character_templates[base_char])
+                # Update the character name in the cloned templates
+                for k, v in self.character_templates[char_name].items():
+                    if v and isinstance(v, dict) and "CharacterName" in v:
+                        v["CharacterName"] = char_name
+                logger.info(f"Dynamically cloned template for {char_name} from {base_char}")
+
             if self.character_templates[char_name]["voice"] is None:
                 raise ValueError(f"No voice template found for character: {char_name}")
 
             audio_path = None
             audio_query = None
+            
+            # Check for actual audio file to get accurate length
+            if self.config.use_tts:
+                audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
+                audio_path = audio_dir / audio_filename
+                
+                # If the audio file already exists (e.g. from a previous run or cache)
+                if audio_path.exists():
+                    try:
+                        import wave
+                        with wave.open(str(audio_path), 'rb') as wav:
+                            frames = wav.getnframes()
+                            rate = wav.getframerate()
+                            actual_duration = frames / float(rate)
+                            length = int((actual_duration + 0.3) * fps) # Add 0.3s padding
+                    except Exception as e:
+                        logger.warning(f"Could not read wav length for {audio_filename}: {e}")
+
             if self.config.use_tts and self.tts_backend:
                 if not self.tts_backend.is_available():
                     raise RuntimeError("TTS Backend not reachable")
-                length, audio_path, audio_query = self._synthesize_audio(idx, char_name, text, audio_dir)
-                if audio_path:
+                if not audio_path or not audio_path.exists():
+                    length, audio_path, audio_query = self._synthesize_audio(idx, char_name, text, audio_dir)
+                if audio_path and audio_path not in audio_files:
                     audio_files.append(audio_path)
             else:
-                length = self._calculate_placeholder_length(text)
+                if not audio_path or not audio_path.exists():
+                    length = self._calculate_placeholder_length(text)
 
             hatsuon = self._convert_hatsuon(text)
 
@@ -262,8 +293,7 @@ class YMMPCompiler:
 
             current_frame += length
 
-        if active_bg:
-            active_bg.length = current_frame - active_bg.start_frame
+        # active_bg remains with length=-1 so renderer knows to stretch it to total_duration
 
         total_frames = current_frame
 
@@ -333,24 +363,9 @@ class YMMPCompiler:
             broll_cfg = {"X": 350.0, "Y": -50.0, "Zoom": 80.0}
 
         # Autonomous configuration: Ensure huge readable subtitles at the bottom
-        # and allow injecting local PSD path
-        psd_path = os.environ.get("ZUNDAMON_PSD_PATH")
         for char in output_data.get("Characters", []):
             char["FontSize"] = sub_size
             char["Y"] = sub_y
-            if psd_path and "Zundamon" in char.get("Name", ""):
-                if "TachieCharacterParameter" in char:
-                    char["TachieCharacterParameter"]["FilePath"] = psd_path
-                else:
-                    char["FilePath"] = psd_path
-                    
-        if psd_path and "Zundamon" in self.character_templates:
-            tachie_tmpl = self.character_templates["Zundamon"]["tachie"]
-            if tachie_tmpl:
-                if "TachieCharacterParameter" in tachie_tmpl:
-                    tachie_tmpl["TachieCharacterParameter"]["FilePath"] = psd_path
-                elif "FilePath" in tachie_tmpl:
-                    tachie_tmpl["FilePath"] = psd_path
                 
         # Store for _add_tachie_items and image items
         self.layout_cfg = {"tachie": tachie_cfg, "broll": broll_cfg}
@@ -361,7 +376,11 @@ class YMMPCompiler:
             template_item = self.character_templates[clip.character]["voice"]
             new_item = copy.deepcopy(template_item)
             new_item["Layer"] = 2
-            new_item["Serif"] = clip.text
+            
+            # Apply Japanese word wrapping to avoid text cutoff in YMM4
+            from veraxi_ymmp.moviepy_renderer import wrap_japanese
+            new_item["Serif"] = wrap_japanese(clip.text, width=24)
+            
             new_item["Hatsuon"] = clip.hatsuon
             new_item["Frame"] = clip.start_frame
             new_item["Length"] = clip.length
@@ -428,28 +447,43 @@ class YMMPCompiler:
         for clip in timeline_ir.dynamic_image_clips:
             is_bg = "bg" in str(clip.image_path).lower() or "room" in str(clip.image_path).lower() or "classroom" in str(clip.image_path).lower()
             
+            # Dynamic zoom animation for non-bg images (B-roll)
+            if not is_bg:
+                zoom_val = broll_cfg["Zoom"]
+                zoom_prop = {
+                    "Values": [{"Value": 0.0}, {"Value": zoom_val}],
+                    "Span": 0.2, # Pop in over 20% of duration (or 0.2s depending on YMM4 version, usually ratio or seconds)
+                    "AnimationType": "Deceleration" # Smooth pop
+                }
+            else:
+                zoom_prop = {
+                    "Values": [{"Value": 100.0}],
+                    "Span": 0.0,
+                    "AnimationType": "None"
+                }
+
             image_item = {
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
                 "FilePath": str(clip.image_path.resolve()),
-                "X": {"Values": [{"Value": 0.0 if is_bg else self.layout_cfg["broll"]["X"]}]},
-                "Y": {"Values": [{"Value": 0.0 if is_bg else self.layout_cfg["broll"]["Y"]}]},
-                "Zoom": {"Values": [{"Value": 200.0 if is_bg else self.layout_cfg["broll"]["Zoom"]}]},
+                "X": {
+                    "Values": [{"Value": 0.0 if is_bg else broll_cfg["X"]}],
+                    "Span": 0.0,
+                    "AnimationType": "None"
+                },
+                "Y": {
+                    "Values": [{"Value": 0.0 if is_bg else broll_cfg["Y"]}],
+                    "Span": 0.0,
+                    "AnimationType": "None"
+                },
                 "Opacity": {"Values": [{"Value": 100.0}]},
+                "Zoom": zoom_prop,
+                "Rotation": {"Values": [{"Value": 0.0}]},
+                "Blend": "Normal",
+                "Layer": 0 if is_bg else 1,
                 "Frame": clip.start_frame,
                 "Length": clip.length,
-                "Layer": 0 if is_bg else 4,
-                "Blend": "Normal",
                 "VideoEffects": []
             }
-            
-            if not is_bg:
-                # Add pop effect for foreground images (like apple, dog)
-                image_item["VideoEffects"].append({
-                    "$type": "YukkuriMovieMaker.Project.Effects.ZoomAppearanceEffect, YukkuriMovieMaker",
-                    "Time": 0.5,
-                    "Zoom": 0.0,
-                    "ZoomType": "Elastic"
-                })
                 
             items.append(image_item)
             if not is_bg:
@@ -469,16 +503,25 @@ class YMMPCompiler:
                 })
 
         for clip in timeline_ir.dynamic_audio_clips:
+            if clip.length == -1: # BGM
+                volume = 3.0 # Audio ducking!
+            else:
+                volume = 50.0
+
             length = timeline_ir.total_frames - clip.start_frame if clip.length == -1 else clip.length
             
             audio_item = {
                 "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
                 "FilePath": str(clip.audio_path.resolve()),
-                "Volume": {"Values": [{"Value": 10.0}]},
+                "Volume": {
+                    "Values": [{"Value": volume}],
+                    "Span": 0.0,
+                    "AnimationType": "None"
+                },
                 "Pan": {"Values": [{"Value": 0.0}]},
                 "PlaybackRate": 100.0,
                 "Layer": 5,
-                "Start": clip.start_frame,
+                "Frame": clip.start_frame,
                 "Length": length,
                 "IsLooped": clip.length == -1
             }
@@ -493,6 +536,24 @@ class YMMPCompiler:
         timeline = get_timeline(output_data)
         timeline["Items"] = items
         timeline["Length"] = timeline_ir.total_frames
+
+        # Deep replace the anonymized PSD path with the real one everywhere!
+        psd_path = os.environ.get("ZUNDAMON_PSD_PATH")
+        if psd_path:
+            def _replace_psd(obj):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if isinstance(v, str) and "YourUser" in v and ".psd" in v:
+                            obj[k] = psd_path
+                        else:
+                            _replace_psd(v)
+                elif isinstance(obj, list):
+                    for i, v in enumerate(obj):
+                        if isinstance(v, str) and "YourUser" in v and ".psd" in v:
+                            obj[i] = psd_path
+                        else:
+                            _replace_psd(v)
+            _replace_psd(output_data)
 
         self._write_output(output_data, output_path, use_bom)
 
@@ -524,8 +585,13 @@ class YMMPCompiler:
         out_path = audio_dir / f"{idx:03d}_{char_name}.wav"
         
         if out_path.exists():
-            print(f"Cache hit: {out_path}")
-            return int(3.0 * self._get_fps()), out_path, None
+            import wave
+            try:
+                with wave.open(str(out_path), 'rb') as wav:
+                    actual_duration = wav.getnframes() / float(wav.getframerate())
+                    return int((actual_duration + 0.3) * self._get_fps()), out_path, None
+            except Exception:
+                return int(3.0 * self._get_fps()), out_path, None
 
         cached = self.cache.get(text, speaker_id)
         if cached:
@@ -612,9 +678,10 @@ class YMMPCompiler:
         if template is None:
             return None
         face_item = copy.deepcopy(template)
-        face_item["Layer"] = 6
+        face_item["Layer"] = 1
         face_item["Frame"] = frame
         face_item["Length"] = length
+        
         return face_item
 
     @staticmethod
