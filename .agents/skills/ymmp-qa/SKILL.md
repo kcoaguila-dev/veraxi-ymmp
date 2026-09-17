@@ -31,11 +31,15 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   renderer.render('artifacts/qa_test.mp4')
   ```
 
-### 3. Visual QA (AI Multimodal Inspection)
+### 3. Audio & Visual QA (AI Multimodal Inspection)
 - Use your `view_file` tool to watch `artifacts/qa_test.mp4`.
+- **CRITICAL**: Ensure the MP4 render is long enough to cover *every single character's* first spoken line. (Do not rely on a 2-second truncation if a character speaks later).
 - **Review Criteria**:
+  - **Audio Check**: Verify that Voicevox actually ran and generated `.wav` files in `artifacts/audio/`. Do not assume the audio exists just because the video rendered! Check the directory contents or the MP4 metadata.
+  - Do ALL characters appear on screen in the correct layout? (e.g., Zundamon on left, Metan on right).
+  - Are the speech bubble colors correctly themed for the speaker? (e.g., Green for Zundamon, Pink for Metan).
   - Does the B-roll image pop up at the correct time?
-  - Are the subtitles readable?
+  - Are the subtitles readable and correctly positioned?
   - Is the pacing (TTS duration) correct?
 
 ### 4. Revision Loop
