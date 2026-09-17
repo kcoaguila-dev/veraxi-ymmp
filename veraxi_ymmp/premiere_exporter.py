@@ -71,7 +71,7 @@ def get_audio_reactive_intervals(
             n_frames = wf.getnframes()
             data = np.frombuffer(wf.readframes(n_frames), dtype=np.int16)
 
-        samples_per_video_frame = sr // fps
+        samples_per_video_frame = int(sr // fps)
         total_video_frames = min(total_expected_frames, n_frames // samples_per_video_frame)
 
         frame_states = []
@@ -82,14 +82,29 @@ def get_audio_reactive_intervals(
 
         max_v = max(frame_states) if frame_states else 1.0
         if max_v == 0: max_v = 1.0
-        is_open = [rms / max_v > threshold for rms in frame_states]
+        
+        # Increase threshold to 20% so the mouth actually closes between syllables
+        raw_is_open = [rms / max_v > 0.2 for rms in frame_states]
 
-        # Smooth 1-frame flickers
-        smoothed = list(is_open)
-        for i in range(1, len(smoothed) - 1):
-            if smoothed[i-1] == smoothed[i+1] and smoothed[i] != smoothed[i-1]:
-                smoothed[i] = smoothed[i-1]
-
+        # Enforce minimum durations (e.g. mouth must stay open for at least 3 frames, and closed for at least 2 frames)
+        smoothed = []
+        if raw_is_open:
+            current_state = raw_is_open[0]
+            current_len = 0
+            for state in raw_is_open:
+                if state == current_state:
+                    current_len += 1
+                else:
+                    # Only flip state if we've held the current state long enough
+                    if (current_state and current_len >= 3) or (not current_state and current_len >= 2):
+                        smoothed.extend([current_state] * current_len)
+                        current_state = state
+                        current_len = 1
+                    else:
+                        # Otherwise, ignore the flip and keep accumulating
+                        current_len += 1
+            smoothed.extend([current_state] * current_len)
+        
         intervals = []
         if smoothed:
             curr_state = smoothed[0]
@@ -115,40 +130,58 @@ def get_audio_reactive_intervals(
         return [(False, total_expected_frames)]
 
 
-def create_speech_bubble_png(text: str, out_path: Path) -> None:
+def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int, int, int] = (46, 139, 87)) -> None:
     """Pre-render a Zundamon-style speech bubble to a PNG file.
 
-    Creates a white rounded-rectangle with green (46,139,87) border,
+    Creates a white rounded-rectangle with a dynamic border,
     drop shadow, and Meiryo Japanese typography.
     """
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
-    wrapped_text = _wrap_japanese(text, width=25)
+    
+    wrapped_text = _wrap_japanese(text, width=35)
     try:
-        font = ImageFont.truetype("meiryo.ttc", 48)
+        try:
+            font = ImageFont.truetype("meiryob.ttc", 64)
+        except Exception:
+            font = ImageFont.truetype("meiryo.ttc", 64)
     except Exception:
         font = ImageFont.load_default()
 
+    # Calculate text size first
     dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=15)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
-
-    width = max(200, text_w + 60)
-    height = max(50, text_h + 50)
-
-    canvas_w, canvas_h = width + 40, height + 40
+    
+    # Dynamic box size (YMM4 style zabuton)
+    box_w = max(text_w + 160, 600) # Minimum 600px wide, generous 80px padding on each side
+    box_h = 120 # Tighten the vertical height to match rival!
+    
+    # Make canvas full HD to avoid Premiere XML anchor/scale bugs
+    canvas_w = 1920
+    canvas_h = 1080
+    
+    # Center the dynamic box horizontally, and place it at the bottom vertically
+    box_x = (canvas_w - box_w) / 2
+    box_y = 1080 - box_h - 40 # 40px padding from the bottom of the screen
+    
     img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
 
+    # Drop shadow
     shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([25, 25, width + 25, height + 25], radius=25, fill=(0, 0, 0, 100))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=6))
+    s_draw.rounded_rectangle([box_x + 10, box_y + 10, box_x + box_w + 10, box_y + box_h + 10], radius=40, fill=(0, 0, 0, 150))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
     img.paste(shadow, (0, 0), shadow)
 
     draw = ImageDraw.Draw(img)
-    rect_coords = [20, 20, width + 20, height + 20]
-    draw.rounded_rectangle(rect_coords, radius=25, fill=(255, 255, 255, 235), outline=(46, 139, 87), width=5)
-    draw.multiline_text((50, 45), wrapped_text, font=font, fill=(0, 0, 0), spacing=10)
+    draw.rounded_rectangle([box_x, box_y, box_x + box_w, box_y + box_h], radius=40, fill=(255, 255, 255, 240), outline=border_color, width=20)
+    
+    # Center text in the dynamic box
+    text_x = box_x + (box_w - text_w) / 2
+    text_y = box_y + (box_h - text_h) / 2 - (bbox[1] if hasattr(bbox, '__getitem__') else 0)
+    
+    draw.multiline_text((text_x, text_y), wrapped_text, font=font, fill=(30, 30, 30), spacing=15, align="center")
     img.save(out_path)
 
 
@@ -186,8 +219,9 @@ class PremiereExporter:
         SubElement(project, 'name').text = 'Zundamon Project'
         children = SubElement(project, 'children')
 
+        import time
         seq = SubElement(children, 'sequence')
-        SubElement(seq, 'name').text = 'Main Timeline'
+        SubElement(seq, 'name').text = f"Main Timeline {int(time.time())}"
         SubElement(seq, 'duration').text = str(total_frames)
 
         rate = SubElement(seq, 'rate')
@@ -247,6 +281,8 @@ class PremiereExporter:
         fit_to_screen: bool = False,
     ) -> None:
         """Create a clipitem element on a video track."""
+        import time
+        unique_id = f"{item_id}_{int(time.time() * 1000)}"
         from PIL import Image
         if not file_path or duration <= 0:
             return
@@ -267,7 +303,7 @@ class PremiereExporter:
             scale = max(scale_x, scale_y) * 100.0
 
         fps = self.fps
-        clip = SubElement(track, 'clipitem', id=item_id)
+        clip = SubElement(track, 'clipitem', id=unique_id)
         SubElement(clip, 'name').text = name
         SubElement(clip, 'duration').text = str(duration)
         SubElement(clip, 'start').text = str(start_frame)
@@ -275,7 +311,7 @@ class PremiereExporter:
         SubElement(clip, 'in').text = "0"
         SubElement(clip, 'out').text = str(duration)
 
-        file = SubElement(clip, 'file', id=f"file_{item_id}")
+        file = SubElement(clip, 'file', id=f"file_{unique_id}")
         SubElement(file, 'name').text = Path(file_path).name
         SubElement(file, 'pathurl').text = f"file://localhost/{str(Path(file_path).absolute()).replace(os.sep, '/')}"
 
@@ -323,49 +359,87 @@ class PremiereExporter:
         import math
         import os
         fps = self.fps
-        faces_dir = proj_dir / "04_GRAPHICS" / "IMAGES" / "faces"
+        faces_dir = Path("assets/faces").absolute()
         
         # Pre-calculate x_offsets based on the number of characters
         num_chars = len(unique_chars)
         x_offsets = {}
+        
+        # YMM4 Convention: Zundamon is usually the reactor (Right), Metan is explainer (Left)
+        # We sort characters so that Zundamon is always pushed to the right side
+        def char_sort_key(c):
+            # Lower score = Left, Higher score = Right
+            convention = {
+                "四国めたん": 0,
+                "春日部つむぎ": 1,
+                "ずんだもん": 10
+            }
+            return convention.get(c, 5)
+            
+        sorted_chars = sorted(unique_chars, key=char_sort_key)
+        
         if num_chars == 1:
-            x_offsets[unique_chars[0]] = 0.0
+            x_offsets[sorted_chars[0]] = 0.0
         elif num_chars == 2:
-            x_offsets[unique_chars[0]] = -0.25 # Left
-            x_offsets[unique_chars[1]] = 0.25  # Right
+            x_offsets[sorted_chars[0]] = -0.42 # Far Left
+            x_offsets[sorted_chars[1]] = 0.42  # Far Right
         else:
             spacing = 0.8 / (num_chars - 1)
-            for i, c in enumerate(unique_chars):
+            for i, c in enumerate(sorted_chars):
                 x_offsets[c] = -0.4 + (i * spacing)
 
         # We need to track the current frame for EACH character independently
         current_frames = {c: 0 for c in unique_chars}
         
+        # Precalculate scales for characters
+        from PIL import Image
+        import time
+        run_id = int(time.time())
+        char_metrics = {}
+        for char in unique_chars:
+            src_dir = faces_dir / char
+            if not src_dir.exists():
+                src_dir = faces_dir
+            dst_dir = proj_dir / f"faces_{run_id}" / char
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            import shutil
+            for img_file in src_dir.glob("*.png"):
+                new_name = f"{img_file.stem}_{run_id}{img_file.suffix}"
+                shutil.copy(img_file, dst_dir / new_name)
+            
+            char_faces_dir = dst_dir
+            z_body = str(char_faces_dir / f"neutral_closed_{run_id}.png")
+            if not os.path.exists(z_body):
+                z_body = str(dst_dir.parent / f"neutral_closed_{run_id}.png")
+            img_h = Image.open(z_body).size[1]
+            target_scale = round((1250 / img_h) * 100, 2)
+            base_y = 0.13
+            char_metrics[char] = {"scale": target_scale, "y": base_y, "dir": char_faces_dir}
+
         for i, vc in enumerate(self.ir.voice_clips):
             char_idx = unique_chars.index(vc.character)
             v_track = char_tracks[char_idx]
+            c_frame = current_frames[vc.character]
             x_pos = x_offsets[vc.character]
             
-            c_frame = current_frames[vc.character]
+            char_faces_dir = char_metrics[vc.character]["dir"]
             
-            char_faces_dir = faces_dir / vc.character
-            if not char_faces_dir.exists():
-                char_faces_dir = faces_dir
-            
-            # Silence gaps
+            emo = vc.emotion if vc.emotion else "neutral"
+            z_body = str(char_faces_dir / f"{emo}_closed_{run_id}.png")
+            z_mouth = str(char_faces_dir / f"{emo}_open_{run_id}.png")
+            if not os.path.exists(z_body):
+                z_body = str(char_faces_dir / f"neutral_closed_{run_id}.png")
+                z_mouth = str(char_faces_dir / f"neutral_open_{run_id}.png")
+                if not os.path.exists(z_body):
+                    z_body = str(dst_dir.parent / f"neutral_closed_{run_id}.png")
+                    z_mouth = str(dst_dir.parent / f"neutral_open_{run_id}.png")
+
+            target_scale = char_metrics[vc.character]["scale"]
+            base_y = char_metrics[vc.character]["y"]
+
             if vc.start_frame > c_frame:
                 gap_dur = vc.start_frame - c_frame
-                self._create_clipitem(v_track, str(char_faces_dir / "neutral_closed.png"), c_frame, gap_dur, f"{char_idx}_gap_{i}", f"{vc.character} Neutral", scale=60, x_offset=x_pos, y_offset=0.1)
-                
-            emo = vc.emotion if vc.emotion else "neutral"
-            z_body = str(char_faces_dir / f"{emo}_closed.png")
-            z_mouth = str(char_faces_dir / f"{emo}_open.png")
-            if not os.path.exists(z_body):
-                z_body = str(char_faces_dir / "neutral_closed.png")
-                z_mouth = str(char_faces_dir / "neutral_open.png")
-                if not os.path.exists(z_body):
-                    z_body = str(faces_dir / "neutral_closed.png")
-                    z_mouth = str(faces_dir / "neutral_open.png")
+                self._create_clipitem(v_track, str(char_faces_dir / f"neutral_closed_{run_id}.png"), c_frame, gap_dur, f"{char_idx}_gap_{i}", f"{vc.character} Neutral", scale=target_scale, x_offset=x_pos, y_offset=base_y)
 
             # Audio-reactive intervals
             intervals = get_audio_reactive_intervals(vc.audio_path, vc.length, fps=fps)
@@ -376,38 +450,45 @@ class PremiereExporter:
 
                 # Physics motion
                 t_rel = f_curr - vc.start_frame
-                y_pos = 0.1
+                y_pos = base_y
                 actual_x = x_pos
                 if vc.motion == 'jump':
-                    y_pos += -0.05 * abs(math.sin(t_rel / 25.0 * math.pi))
+                    y_pos += -0.05 * abs(math.sin(t_rel / 15.0 * math.pi))
 
                 state_label = f"{vc.character} {emo} {'Open' if is_open else 'Closed'}"
-                self._create_clipitem(v_track, sprite, f_curr, dur, f"{char_idx}_{i}_{k}", state_label, scale=60, x_offset=round(actual_x, 4), y_offset=round(y_pos, 4))
+                self._create_clipitem(v_track, sprite, f_curr, dur, f"{char_idx}_{i}_{k}", state_label, scale=target_scale, x_offset=round(actual_x, 4), y_offset=round(y_pos, 4))
                 f_curr += dur
 
             current_frames[vc.character] = vc.start_frame + vc.length
 
         for char_idx, char in enumerate(unique_chars):
             c_frame = current_frames[char]
-            char_faces_dir = faces_dir / char
-            if not char_faces_dir.exists():
-                char_faces_dir = faces_dir
-                
-            tail_body = str(char_faces_dir / "neutral_closed.png")
+            char_faces_dir = char_metrics[char]["dir"]
+            
+            tail_body = str(char_faces_dir / f"neutral_closed_{run_id}.png")
             if not os.path.exists(tail_body):
-                tail_body = str(faces_dir / "neutral_closed.png")
+                tail_body = str(char_faces_dir.parent / f"neutral_closed_{run_id}.png")
                 
             if c_frame < total_frames:
-                self._create_clipitem(char_tracks[char_idx], tail_body, c_frame, total_frames - c_frame, f"{char_idx}_gap_end", f"{char} Neutral", scale=60, x_offset=x_offsets[char], y_offset=0.1)
+                self._create_clipitem(char_tracks[char_idx], tail_body, c_frame, total_frames - c_frame, f"{char_idx}_gap_end", f"{char} Neutral", scale=char_metrics[char]["scale"], x_offset=x_offsets[char], y_offset=char_metrics[char]["y"])
 
     def _populate_speech_bubbles(self, v4_track: Element, bubble_dir: Path) -> None:
         """Populate V4 track with pre-rendered PNG speech bubbles."""
         bubble_dir.mkdir(parents=True, exist_ok=True)
+        
+        char_colors = {
+            "ずんだもん": (46, 139, 87),    # Green
+            "四国めたん": (255, 105, 180),  # Pink
+            "春日部つむぎ": (255, 165, 0), # Orange
+        }
 
+        import time
+        run_id = int(time.time())
         for i, vc in enumerate(self.ir.voice_clips):
-            bubble_path = bubble_dir / f"bubble_{i}_pro.png"
-            create_speech_bubble_png(vc.text, bubble_path)
-            self._create_clipitem(v4_track, bubble_path, vc.start_frame, vc.length, f"bubble_{i}", "Speech Bubble", scale=100, x_offset=0.0, y_offset=0.85)
+            bubble_path = bubble_dir / f"bubble_{i}_{run_id}_pro.png"
+            border_color = char_colors.get(vc.character, (128, 128, 128))
+            create_speech_bubble_png(vc.text, bubble_path, border_color)
+            self._create_clipitem(v4_track, bubble_path, vc.start_frame, vc.length, f"bubble_{i}", "Subtitle Bar", scale=100.0, x_offset=0.0, y_offset=0.0)
 
     def _populate_audio(self, audio_tracks: list, unique_chars: list, total_frames: int) -> None:
         import os
