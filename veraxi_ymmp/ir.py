@@ -40,6 +40,7 @@ class DynamicImageClip(IRClip):
 class DynamicAudioClip(IRClip):
     """Represents a dynamic audio clip (BGM/SFX)."""
     audio_path: Path
+    volume: float = 1.0
 
 @dataclass
 class TimelineIR:
