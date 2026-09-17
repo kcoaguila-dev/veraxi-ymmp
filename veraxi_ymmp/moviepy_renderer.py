@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from moviepy import *
@@ -17,56 +18,56 @@ def wrap_japanese(text: str, width: int = 28) -> str:
         res.append(text)
     return "\n".join(res)
 
-def create_speech_bubble(text: str, duration: float) -> ImageClip:
-    """Creates a beautiful white speech bubble with a green border, drop shadow, and wrapped text."""
+def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
+    """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped text."""
     # Wrap text properly for Japanese (no spaces)
-    wrapped_text = wrap_japanese(text, width=24)
+    wrapped_text = wrap_japanese(text, width=35)
     
     try:
-        font = ImageFont.truetype("meiryo.ttc", 60)
+        try:
+            font = ImageFont.truetype("meiryob.ttc", 64)
+        except:
+            font = ImageFont.truetype("meiryo.ttc", 64)
     except:
         font = ImageFont.load_default()
         
-    # Create a dummy image to measure text
+    # Fixed canvas size so resizing effects remain perfectly centered and consistent
+    canvas_w, canvas_h = 1460, 260
+    
+    # Calculate text size
     dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=15)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
     
-    # Calculate bubble size dynamically based on full text width
-    width = max(200, text_w + 60)
-    height = max(50, text_h + 50)
+    # Dynamic box size (YMM4 style zabuton)
+    box_w = max(text_w + 160, 600) # Minimum 600px wide, generous 80px padding on each side
+    box_h = 200
     
-    # Add padding for shadow
-    canvas_w, canvas_h = width + 40, height + 40
+    # Center the dynamic box in the fixed canvas
+    box_x = (canvas_w - box_w) / 2
+    box_y = 20
+    
     img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     
     # Draw drop shadow
     shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([25, 25, width+15, height+15], radius=20, fill=(0, 0, 0, 100))
+    s_draw.rounded_rectangle([box_x+10, box_y+10, box_x+box_w+10, box_y+box_h+10], radius=40, fill=(0, 0, 0, 150))
     shadow = shadow.filter(ImageFilter.GaussianBlur(10))
     img.alpha_composite(shadow)
     
     draw = ImageDraw.Draw(img)
     
-    border_color = (0, 128, 0, 255) # Green
-    fill_color = (255, 255, 255, 245) # White
-    draw.rounded_rectangle([20, 20, width, height], radius=20, fill=fill_color, outline=border_color, width=6)
+    fill_color = (255, 255, 255, 240) # White
+    draw.rounded_rectangle([box_x, box_y, box_x+box_w, box_y+box_h], radius=40, fill=fill_color, outline=border_color, width=20)
     
-    x = (width - text_w) / 2 + 20
-    y = (height - text_h) / 2 + 20 - bbox[1] 
+    # Calculate text center
+    x = box_x + (box_w - text_w) / 2
+    y = box_y + (box_h - text_h) / 2 - (bbox[1] if hasattr(bbox, '__getitem__') else 0)
     
-    # Draw text shadow/outline
-    outline_color = (200, 255, 200, 255)
-    for adj in [-2, 2]:
-        draw.multiline_text((x+adj, y), wrapped_text, font=font, fill=outline_color, spacing=10)
-        draw.multiline_text((x, y+adj), wrapped_text, font=font, fill=outline_color, spacing=10)
-        
-    draw.multiline_text((x, y), wrapped_text, font=font, fill=(0, 0, 0, 255), spacing=10)
+    draw.multiline_text((x, y), wrapped_text, font=font, fill=(30, 30, 30, 255), spacing=15, align="center")
     
-    # Scale down the final image for 640x360 layout, so it looks crisp but fits
-    img = img.resize((canvas_w // 3, canvas_h // 3), Image.Resampling.LANCZOS)
     img_array = np.array(img)
     clip = ImageClip(img_array).with_duration(duration)
     
@@ -106,12 +107,19 @@ class MoviePyRenderer:
             else:
                 dur = vc.length / fps
                 
-            talk_times.append((start_time, start_time + dur, vc.emotion, getattr(vc, "motion", "none")))
+            talk_times.append((start_time, start_time + dur, vc.emotion, getattr(vc, "motion", "none"), vc.character))
             if vc.audio_path:
-                audio_readers.append((start_time, start_time + dur, ac))
+                audio_readers.append((start_time, start_time + dur, ac, vc.character))
                 audio_clips.append(ac.with_start(start_time))
             
-            bubble = create_speech_bubble(vc.text, dur).with_start(start_time).with_position(("center", 850))
+            char_colors = {
+                "ずんだもん": (0, 128, 0, 255),    # Green
+                "四国めたん": (255, 105, 180, 255),  # Pink
+                "春日部つむぎ": (255, 165, 0, 255), # Orange
+            }
+            border_color = char_colors.get(vc.character, (128, 128, 128, 255))
+            
+            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 800))
             bubbles_list.append(bubble)
             
             current_time += dur
@@ -160,12 +168,15 @@ class MoviePyRenderer:
             else:
                 dur = frame_to_time[end_frame] - start_t
                 
-            img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-            
             if is_bg:
+                from PIL import Image, ImageFilter
+                pil_img = Image.open(str(d_clip.image_path)).convert('RGB')
+                pil_img = pil_img.filter(ImageFilter.GaussianBlur(radius=15))
+                img = ImageClip(np.array(pil_img)).with_start(start_t).with_duration(dur)
                 img = img.resized((1920, 1080)).with_position("center")
                 bgs.append(img)
             else:
+                img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
                 img = img.resized(height=400)
                 img = img.with_effects([Resize(broll_pop)])
                 img = img.with_position((1400, 100))
@@ -174,92 +185,122 @@ class MoviePyRenderer:
         video_clips.extend(bgs)
         video_clips.extend(brolls)
 
-        # 3. Zundamon Base Character
-        pos = ('left', 'bottom')
-        for cc in self.ir.character_clips:
-            if cc.position == 'right':
-                pos = ('right', 'bottom')
-        
-        x_pos = 48 if pos[0] == 'left' else (1920 - 700)
-        y_pos = 1080 - 700 - 48 
-        
-        emotion_clips = {}
-        for emotion in ["neutral", "happy", "angry", "sad", "surprised"]:
-            path_open = Path(f"assets/faces/{emotion}_open.png")
-            path_closed = Path(f"assets/faces/{emotion}_closed.png")
-            if path_open.exists() and path_closed.exists():
-                c_open = ImageClip(str(path_open)).resized(height=700)
-                c_closed = ImageClip(str(path_closed)).resized(height=700)
-                emotion_clips[emotion] = {
-                    "open_img": np.array(c_open.get_frame(0)),
-                    "closed_img": np.array(c_closed.get_frame(0)),
-                    "open_mask": np.array(c_open.mask.get_frame(0)),
-                    "closed_mask": np.array(c_closed.mask.get_frame(0))
-                }
+        # 3. Dynamic Characters
+        unique_chars = []
+        for vc in self.ir.voice_clips:
+            if vc.character not in unique_chars:
+                unique_chars.append(vc.character)
                 
-        # If PSD faces aren't ready, fallback
-        if not emotion_clips:
-            # Fallback to old base paths if needed
-            print("Warning: No emotion faces found in assets/faces/. Using static character.")
-            pass
+        # Calculate X offsets based on number of characters
+        num_chars = len(unique_chars)
+        x_offsets = {}
+        
+        # YMM4 Convention: Zundamon is usually the reactor (Right), Metan is explainer (Left)
+        def char_sort_key(c):
+            convention = {
+                "四国めたん": 0,
+                "春日部つむぎ": 1,
+                "ずんだもん": 10
+            }
+            return convention.get(c, 5)
             
-        # Voice clips already processed above.
-            
-        def get_bounce_offset(t):
-            base_x, base_y = x_pos, y_pos
-            for st, et, emo, motion in talk_times:
-                if st <= t <= et:
-                    is_speaking = get_mouth_state(t)
-                    
-                    if motion == "jump":
-                        time_in = t - st
-                        if time_in < 0.5:
-                            base_y -= math.sin(time_in / 0.5 * math.pi) * 100
-                    elif motion == "shake":
-                        if t - st < 1.0:
-                            base_x += 10.0 if int((t - st) * 30) % 2 == 0 else -2.0
-                            base_y += 10.0 if int((t - st) * 30 + 1) % 2 == 0 else -2.0
+        sorted_chars = sorted(unique_chars, key=char_sort_key)
+        
+        if num_chars == 1:
+            x_offsets[sorted_chars[0]] = 'center'
+        elif num_chars == 2:
+            x_offsets[sorted_chars[0]] = 50   # Far Left
+            x_offsets[sorted_chars[1]] = 1450 # Far Right
+        else:
+            spacing = (1920 - 700) / (num_chars - 1)
+            for i, c in enumerate(sorted_chars):
+                x_offsets[c] = int(i * spacing)
+                
+        # Medium Character Scale (Viral YouTube Style)
+        # Make characters very large to match Premiere XML output (YMM4 rival style)
+        char_height = 1250
+        y_pos = 1080 - char_height + 250 # Anchor to bottom, shift down slightly so they don't float
+        
+        for char in unique_chars:
+            char_faces_dir = Path("assets/faces") / char
+            if not char_faces_dir.exists():
+                char_faces_dir = Path("assets/faces")
+                
+            emotion_clips = {}
+            for emotion in ["neutral", "happy", "angry", "sad", "surprised"]:
+                path_open = char_faces_dir / f"{emotion}_open.png"
+                path_closed = char_faces_dir / f"{emotion}_closed.png"
+                if not path_open.exists():
+                    path_open = char_faces_dir / "neutral_open.png"
+                    path_closed = char_faces_dir / "neutral_closed.png"
+                    if not path_open.exists():
+                        path_open = Path("assets/faces/neutral_open.png")
+                        path_closed = Path("assets/faces/neutral_closed.png")
                         
-                    return (base_x, base_y)
-            return (base_x, base_y)
-
-        def get_mouth_state(t):
-            for st, et, ac in audio_readers:
-                if st <= t <= et:
-                    try:
-                        vol = np.abs(ac.get_frame(t - st)).mean()
-                        if vol > 0.015:
-                            return True
-                    except:
-                        pass
-            return False
-            
-        def get_current_emotion(t):
-            for st, et, emo, motion in talk_times:
-                if st <= t <= et:
-                    return emo
-            return "neutral"
-            
-        def get_mouth_image(t):
-            emo = get_current_emotion(t)
-            if emo not in emotion_clips: emo = "neutral"
-            if emo not in emotion_clips: 
-                # Total fallback if nothing exists
-                return np.zeros((700, 700, 3), dtype=np.uint8)
-            is_open = get_mouth_state(t)
-            return emotion_clips[emo]["open_img"] if is_open else emotion_clips[emo]["closed_img"]
-            
-        def get_mouth_mask(t):
-            emo = get_current_emotion(t)
-            if emo not in emotion_clips: emo = "neutral"
-            if emo not in emotion_clips: return np.zeros((700, 700), dtype=np.uint8)
-            is_open = get_mouth_state(t)
-            return emotion_clips[emo]["open_mask"] if is_open else emotion_clips[emo]["closed_mask"]
-            
-        z_clip = VideoClip(frame_function=get_mouth_image).with_duration(total_duration)
-        z_mask = VideoClip(frame_function=get_mouth_mask, is_mask=True).with_duration(total_duration)
-        z_clip = z_clip.with_mask(z_mask).with_position(lambda t: get_bounce_offset(t))
-        video_clips.append(z_clip)
+                if path_open.exists() and path_closed.exists():
+                    c_open = ImageClip(str(path_open)).resized(height=char_height)
+                    c_closed = ImageClip(str(path_closed)).resized(height=char_height)
+                    emotion_clips[emotion] = {
+                        "open_img": np.array(c_open.get_frame(0)),
+                        "closed_img": np.array(c_closed.get_frame(0)),
+                        "open_mask": np.array(c_open.mask.get_frame(0)),
+                        "closed_mask": np.array(c_closed.mask.get_frame(0))
+                    }
+                    
+            def make_bounce_offset(c_name, base_x):
+                def get_bounce_offset(t):
+                    bx, by = base_x, y_pos
+                    for st, et, emo, motion, char_speaker in talk_times:
+                        if st <= t <= et and char_speaker == c_name:
+                            if motion == "jump":
+                                by += max(-20.0, -40.0 * abs(math.sin(math.pi * (t - st) / 0.5)))
+                            elif motion == "shake":
+                                if t - st < 1.0:
+                                    bx += 10.0 if int((t - st) * 30) % 2 == 0 else -2.0
+                                    by += 10.0 if int((t - st) * 30 + 1) % 2 == 0 else -2.0
+                            return (bx, by)
+                    return (bx, by)
+                return get_bounce_offset
+                
+            def get_mouth_state(t, c_name):
+                for st, et, ac, char_speaker in audio_readers:
+                    if st <= t <= et and char_speaker == c_name:
+                        try:
+                            vol = np.abs(ac.get_frame(t - st)).mean()
+                            if vol > 0.015:
+                                return True
+                        except:
+                            pass
+                return False
+                
+            def get_current_emotion(t, c_name):
+                for st, et, emo, motion, char_speaker in talk_times:
+                    if st <= t <= et and char_speaker == c_name:
+                        return emo
+                return "neutral"
+                
+            def make_mouth_image(c_name, e_clips):
+                def get_mouth_image(t):
+                    emo = get_current_emotion(t, c_name)
+                    if emo not in e_clips: emo = "neutral"
+                    if emo not in e_clips: return np.zeros((700, 700, 3), dtype=np.uint8)
+                    is_open = get_mouth_state(t, c_name)
+                    return e_clips[emo]["open_img"] if is_open else e_clips[emo]["closed_img"]
+                return get_mouth_image
+                
+            def make_mouth_mask(c_name, e_clips):
+                def get_mouth_mask(t):
+                    emo = get_current_emotion(t, c_name)
+                    if emo not in e_clips: emo = "neutral"
+                    if emo not in e_clips: return np.zeros((700, 700), dtype=np.uint8)
+                    is_open = get_mouth_state(t, c_name)
+                    return e_clips[emo]["open_mask"] if is_open else e_clips[emo]["closed_mask"]
+                return get_mouth_mask
+                
+            c_clip = VideoClip(frame_function=make_mouth_image(char, emotion_clips)).with_duration(total_duration)
+            c_mask = VideoClip(frame_function=make_mouth_mask(char, emotion_clips), is_mask=True).with_duration(total_duration)
+            c_clip = c_clip.with_mask(c_mask).with_position(make_bounce_offset(char, x_offsets[char]))
+            video_clips.append(c_clip)
         video_clips.extend(bubbles_list)
 
         print("Compositing video...")
@@ -293,7 +334,7 @@ class MoviePyRenderer:
         print(f"Writing to {output_path}...")
         # Fast QA override if requested
         if getattr(self, 'fast_qa_duration', None):
-            final_video = final_video.subclipped(0, 2.0)
+            final_video = final_video.subclipped(0, min(self.fast_qa_duration, total_duration))
             
         final_video.write_videofile(
             str(output_path), 

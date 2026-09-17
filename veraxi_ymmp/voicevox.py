@@ -84,6 +84,56 @@ class VoicevoxClient:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.synthesize, text, speaker_id)
 
+    def ensure_started(self) -> bool:
+        """Attempts to start VOICEVOX if it's not currently available."""
+        if self.is_available():
+            return True
+            
+        import os
+        import subprocess
+        import time
+        from pathlib import Path
+        
+        print("VOICEVOX is not running. Attempting to start it automatically...")
+        
+        # Common installation paths on Windows
+        local_app_data = os.environ.get('LOCALAPPDATA', '')
+        possible_paths = [
+            Path(local_app_data) / "Programs" / "VOICEVOX" / "run.exe",
+            Path(local_app_data) / "Programs" / "VOICEVOX" / "VOICEVOX.exe",
+            Path("C:/Program Files/VOICEVOX/run.exe"),
+            Path("C:/Program Files/VOICEVOX/VOICEVOX.exe"),
+        ]
+        
+        exe_path = None
+        for p in possible_paths:
+            if p.exists():
+                exe_path = p
+                break
+                
+        if not exe_path:
+            print("Could not find VOICEVOX executable automatically.")
+            return False
+            
+        print(f"Found VOICEVOX at {exe_path}, launching...")
+        try:
+            # Launch in background without blocking
+            subprocess.Popen([str(exe_path)], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            
+            # Wait for it to become available
+            for _ in range(30):
+                time.sleep(1)
+                if self.is_available():
+                    print("VOICEVOX started successfully!")
+                    return True
+                    
+            print("VOICEVOX process launched, but API didn't become available in time.")
+            return False
+            
+        except Exception as e:
+            print(f"Failed to launch VOICEVOX: {e}")
+            return False
+
     def is_available(self) -> bool:
         """
         Check if VOICEVOX Engine is available and responding.
