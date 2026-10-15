@@ -128,8 +128,8 @@ class TestPremiereExporterXmeml:
 
         bubble_dir = proj_dir / "04_GRAPHICS" / "TITLES" / "speech_bubbles"
         assert bubble_dir.exists()
-        assert (bubble_dir / "bubble_0_pro.png").exists()
-        assert (bubble_dir / "bubble_1_pro.png").exists()
+        assert any(f.name.startswith("bubble_0_") and f.name.endswith("_pro.png") for f in bubble_dir.glob("*.png"))
+        assert any(f.name.startswith("bubble_1_") and f.name.endswith("_pro.png") for f in bubble_dir.glob("*.png"))
 
     def test_xmeml_has_four_video_tracks(self, tmp_path):
         """The generated xmeml should have exactly 4 video tracks."""

@@ -1,72 +1,109 @@
+import os
+import shutil
 from pathlib import Path
 from typing import Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+    _ffmpeg_bin = shutil.which("ffmpeg")
+    if _ffmpeg_bin:
+        os.environ["IMAGEIO_FFMPEG_EXE"] = _ffmpeg_bin
+
 from moviepy import *
 from moviepy import AudioFileClip
-import numpy as np
 import math
 
 from .ir import TimelineIR
 
-def wrap_japanese(text: str, width: int = 28) -> str:
-    res = []
-    while len(text) > width:
-        res.append(text[:width])
-        text = text[width:]
-    if text:
-        res.append(text)
-    return "\n".join(res)
+def wrap_japanese(text: str, width: int = 15) -> str:
+    """Wraps Japanese text cleanly so no line exceeds `width` characters, preferring natural punctuation breaks."""
+    if not text:
+        return ""
+    if len(text) <= width:
+        return text
+
+    puncts = ['！', '？', '。', '、', '…', ' ', '」', '』', '!']
+    best_split = -1
+    for i in range(min(width, len(text) - 1), max(width // 2, 4), -1):
+        if text[i] in puncts:
+            best_split = i + 1
+            break
+
+    if best_split == -1:
+        best_split = width
+
+    head = text[:best_split].strip()
+    tail = text[best_split:].strip()
+
+    # Kinsoku shori: don't start a line with punctuation
+    forbidden_starts = set('！!？?。、…・ー)」』')
+    while tail and tail[0] in forbidden_starts:
+        head += tail[0]
+        tail = tail[1:].strip()
+
+    if not tail:
+        return head
+    return head + "\n" + wrap_japanese(tail, width)
 
 def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
-    """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped text."""
-    # Wrap text properly for Japanese (no spaces)
-    wrapped_text = wrap_japanese(text, width=35)
+    """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped black text."""
+    wrapped_text = wrap_japanese(text, width=24)
     
+    font_size = 52
     try:
         try:
-            font = ImageFont.truetype("meiryob.ttc", 64)
-        except:
-            font = ImageFont.truetype("meiryo.ttc", 64)
-    except:
+            font = ImageFont.truetype("meiryob.ttc", font_size)
+        except Exception:
+            font = ImageFont.truetype("meiryo.ttc", font_size)
+    except Exception:
         font = ImageFont.load_default()
         
-    # Fixed canvas size so resizing effects remain perfectly centered and consistent
-    canvas_w, canvas_h = 1460, 260
+    canvas_w, canvas_h = 1920, 360
     
     # Calculate text size
     dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=15)
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=12)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
     
+    # If text is still slightly wide, scale down font
+    if text_w > 1550:
+        font_size = 46
+        try:
+            font = ImageFont.truetype("meiryob.ttc", font_size)
+        except Exception:
+            pass
+        bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    
     # Dynamic box size (YMM4 style zabuton)
-    box_w = max(text_w + 160, 600) # Minimum 600px wide, generous 80px padding on each side
-    box_h = 200
+    box_w = min(max(text_w + 140, 750), 1680)
+    box_h = text_h + 60
     
     # Center the dynamic box in the fixed canvas
     box_x = (canvas_w - box_w) / 2
-    box_y = 20
+    box_y = (canvas_h - box_h) / 2
     
     img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     
     # Draw drop shadow
     shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([box_x+10, box_y+10, box_x+box_w+10, box_y+box_h+10], radius=40, fill=(0, 0, 0, 150))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(10))
+    s_draw.rounded_rectangle([box_x+3, box_y+4, box_x+box_w+3, box_y+box_h+4], radius=22, fill=(0, 0, 0, 85))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(8))
     img.alpha_composite(shadow)
     
     draw = ImageDraw.Draw(img)
-    
-    fill_color = (255, 255, 255, 240) # White
-    draw.rounded_rectangle([box_x, box_y, box_x+box_w, box_y+box_h], radius=40, fill=fill_color, outline=border_color, width=20)
+    fill_color = (255, 255, 255, 248)
+    draw.rounded_rectangle([box_x, box_y, box_x+box_w, box_y+box_h], radius=22, fill=fill_color, outline=border_color, width=7)
     
     # Calculate text center
-    x = box_x + (box_w - text_w) / 2
-    y = box_y + (box_h - text_h) / 2 - (bbox[1] if hasattr(bbox, '__getitem__') else 0)
+    x = box_x + (box_w - text_w) / 2 - bbox[0]
+    y = box_y + (box_h - text_h) / 2 - bbox[1]
     
-    draw.multiline_text((x, y), wrapped_text, font=font, fill=(30, 30, 30, 255), spacing=15, align="center")
+    draw.multiline_text((x, y), wrapped_text, font=font, fill=(24, 24, 27, 255), spacing=12, align="center")
     
     img_array = np.array(img)
     clip = ImageClip(img_array).with_duration(duration)
@@ -113,13 +150,13 @@ class MoviePyRenderer:
                 audio_clips.append(ac.with_start(start_time))
             
             char_colors = {
-                "ずんだもん": (0, 128, 0, 255),    # Green
-                "四国めたん": (255, 105, 180, 255),  # Pink
-                "春日部つむぎ": (255, 165, 0, 255), # Orange
+                "ずんだもん": (34, 197, 94, 255),    # Vibrant Green
+                "四国めたん": (236, 72, 153, 255),   # Vibrant Pink
+                "春日部つむぎ": (249, 115, 22, 255), # Vibrant Orange
             }
-            border_color = char_colors.get(vc.character, (128, 128, 128, 255))
+            border_color = char_colors.get(vc.character, (120, 130, 150, 255))
             
-            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 800))
+            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 700))
             bubbles_list.append(bubble)
             
             current_time += dur
@@ -147,13 +184,7 @@ class MoviePyRenderer:
                 img_clip = ImageClip(str(path)).with_duration(total_duration).with_position("center")
                 video_clips.append(img_clip)
                 
-        # 2. Dynamic B-Roll
-        def broll_pop(t):
-            if t < 0.3: return 0.5 + (t / 0.3) * 0.5
-            elif t > 0.3 and t < 0.4: return 1.0 + math.sin((t-0.3)*10)*0.05
-            return 1.0
-            
-        from moviepy.video.fx import Resize
+        # 2. Dynamic B-Roll (Shown directly, clean and normal)
         bgs = []
         brolls = []
         for d_clip in self.ir.dynamic_image_clips:
@@ -169,18 +200,15 @@ class MoviePyRenderer:
                 dur = frame_to_time[end_frame] - start_t
                 
             if is_bg:
-                from PIL import Image, ImageFilter
-                pil_img = Image.open(str(d_clip.image_path)).convert('RGB')
-                pil_img = pil_img.filter(ImageFilter.GaussianBlur(radius=15))
-                img = ImageClip(np.array(pil_img)).with_start(start_t).with_duration(dur)
+                img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
                 img = img.resized((1920, 1080)).with_position("center")
                 bgs.append(img)
             else:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                img = img.resized(height=400)
-                img = img.with_effects([Resize(broll_pop)])
-                img = img.with_position((1400, 100))
+                img = img.resized(width=1650)
+                img = img.with_position((35, 25))
                 brolls.append(img)
+
                 
         video_clips.extend(bgs)
         video_clips.extend(brolls)
@@ -209,8 +237,8 @@ class MoviePyRenderer:
         if num_chars == 1:
             x_offsets[sorted_chars[0]] = 'center'
         elif num_chars == 2:
-            x_offsets[sorted_chars[0]] = 50   # Far Left
-            x_offsets[sorted_chars[1]] = 1450 # Far Right
+            x_offsets[sorted_chars[0]] = 80   # Left (Metan)
+            x_offsets[sorted_chars[1]] = 1180 # Right (Zundamon, moved inward from 1450)
         else:
             spacing = (1920 - 700) / (num_chars - 1)
             for i, c in enumerate(sorted_chars):
@@ -221,6 +249,27 @@ class MoviePyRenderer:
         char_height = 1250
         y_pos = 1080 - char_height + 250 # Anchor to bottom, shift down slightly so they don't float
         
+        broll_ranges = []
+        for d_clip in self.ir.dynamic_image_clips:
+            is_bg = "bg" in str(d_clip.image_path).lower() or "room" in str(d_clip.image_path).lower() or "classroom" in str(d_clip.image_path).lower()
+            if not is_bg:
+                s_t = frame_to_time.get(d_clip.start_frame, d_clip.start_frame / fps)
+                e_fr = d_clip.start_frame + d_clip.length
+                d_t = total_duration - s_t if d_clip.length == -1 or e_fr not in frame_to_time else (frame_to_time[e_fr] - s_t)
+                broll_ranges.append((s_t, s_t + d_t))
+
+        def is_in_broll(t):
+            for bs, be in broll_ranges:
+                if bs <= t <= be:
+                    return True
+            return False
+
+        def get_active_speaker(t):
+            for st, et, _, _, spk in talk_times:
+                if st <= t <= et:
+                    return spk
+            return None
+
         for char in unique_chars:
             char_faces_dir = Path("assets/faces") / char
             if not char_faces_dir.exists():
@@ -249,7 +298,15 @@ class MoviePyRenderer:
                     
             def make_bounce_offset(c_name, base_x):
                 def get_bounce_offset(t):
-                    bx, by = base_x, y_pos
+                    if is_in_broll(t):
+                        spk = get_active_speaker(t)
+                        if spk == c_name:
+                            bx, by = 1280, 220
+                        else:
+                            return (-9999, -9999)
+                    else:
+                        bx, by = base_x, y_pos
+
                     for st, et, emo, motion, char_speaker in talk_times:
                         if st <= t <= et and char_speaker == c_name:
                             if motion == "jump":
@@ -290,6 +347,11 @@ class MoviePyRenderer:
                 
             def make_mouth_mask(c_name, e_clips):
                 def get_mouth_mask(t):
+                    if is_in_broll(t):
+                        spk = get_active_speaker(t)
+                        if spk != c_name:
+                            h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
+                            return np.zeros((h, w), dtype=np.uint8)
                     emo = get_current_emotion(t, c_name)
                     if emo not in e_clips: emo = "neutral"
                     if emo not in e_clips: return np.zeros((700, 700), dtype=np.uint8)
@@ -331,6 +393,7 @@ class MoviePyRenderer:
         from moviepy.video.fx import FadeOut
         final_video = final_video.with_effects([FadeOut(2.0)])
             
+        self.final_video = final_video
         print(f"Writing to {output_path}...")
         # Fast QA override if requested
         if getattr(self, 'fast_qa_duration', None):
@@ -343,3 +406,9 @@ class MoviePyRenderer:
             audio_codec="aac",
             preset="ultrafast"
         )
+
+    def save_frame_at(self, t: float, output_path: str):
+        if not hasattr(self, 'final_video'):
+            self.render("temp_dummy.mp4")
+        self.final_video.save_frame(str(output_path), t=t)
+

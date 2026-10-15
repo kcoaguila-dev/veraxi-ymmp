@@ -61,7 +61,7 @@ class VoicevoxClient:
         timeout: Default timeout for API requests in seconds (default: 30)
     """
 
-    DEFAULT_TIMEOUT = 30
+    DEFAULT_TIMEOUT = 120
 
     def __init__(self, base_url: str = "http://localhost:50021", timeout: int = DEFAULT_TIMEOUT):
         """
