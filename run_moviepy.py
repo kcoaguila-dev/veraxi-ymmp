@@ -30,7 +30,7 @@ for vc in script:
         # Give them 2 seconds to finish their line
         smart_duration = max(smart_duration, timeline_ir.total_frames / timeline_ir.fps) # Approximation since we don't map time easily here, let's just use 10s default
         
-renderer.fast_qa_duration = 10.0 # Render 10 seconds to ensure we see Metan speak
+renderer.fast_qa_duration = 25.0 # Render 10 seconds to ensure we see Metan speak
 print("Rendering MP4...", flush=True)
 renderer.render('artifacts/qa_test.mp4')
 print('MoviePy MP4 Rendered.', flush=True)

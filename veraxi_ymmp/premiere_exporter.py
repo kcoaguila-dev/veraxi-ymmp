@@ -130,6 +130,23 @@ def get_audio_reactive_intervals(
         return [(False, total_expected_frames)]
 
 
+def _wrap_japanese(text: str, width: int = 22) -> str:
+    if len(text) <= width:
+        return text
+    puncts = ['！', '？', '。', '、']
+    for p in puncts:
+        idx = text.find(p)
+        if 8 <= idx <= width:
+            return text[:idx+1] + "\n" + text[idx+1:]
+    res = []
+    while len(text) > width:
+        res.append(text[:width])
+        text = text[width:]
+    if text:
+        res.append(text)
+    return "\n".join(res)
+
+
 def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int, int, int] = (46, 139, 87)) -> None:
     """Pre-render a Zundamon-style speech bubble to a PNG file.
 
@@ -138,24 +155,35 @@ def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int,
     """
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
     
-    wrapped_text = _wrap_japanese(text, width=35)
+    wrapped_text = _wrap_japanese(text, width=22)
+    font_size = 52
     try:
         try:
-            font = ImageFont.truetype("meiryob.ttc", 64)
+            font = ImageFont.truetype("meiryob.ttc", font_size)
         except Exception:
-            font = ImageFont.truetype("meiryo.ttc", 64)
+            font = ImageFont.truetype("meiryo.ttc", font_size)
     except Exception:
         font = ImageFont.load_default()
 
     # Calculate text size first
     dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=15)
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=12)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
     
+    if text_w > 1550:
+        font_size = 46
+        try:
+            font = ImageFont.truetype("meiryob.ttc", font_size)
+        except Exception:
+            pass
+        bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    
     # Dynamic box size (YMM4 style zabuton)
-    box_w = max(text_w + 160, 600) # Minimum 600px wide, generous 80px padding on each side
-    box_h = 120 # Tighten the vertical height to match rival!
+    box_w = min(max(text_w + 140, 600), 1700)
+    box_h = max(text_h + 50, 130)
     
     # Make canvas full HD to avoid Premiere XML anchor/scale bugs
     canvas_w = 1920
@@ -170,18 +198,18 @@ def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int,
     # Drop shadow
     shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([box_x + 10, box_y + 10, box_x + box_w + 10, box_y + box_h + 10], radius=40, fill=(0, 0, 0, 150))
+    s_draw.rounded_rectangle([box_x + 6, box_y + 6, box_x + box_w + 6, box_y + box_h + 6], radius=25, fill=(0, 0, 0, 130))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
     img.paste(shadow, (0, 0), shadow)
 
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([box_x, box_y, box_x + box_w, box_y + box_h], radius=40, fill=(255, 255, 255, 240), outline=border_color, width=20)
+    draw.rounded_rectangle([box_x, box_y, box_x + box_w, box_y + box_h], radius=25, fill=(255, 255, 255, 245), outline=border_color, width=12)
     
     # Center text in the dynamic box
-    text_x = box_x + (box_w - text_w) / 2
-    text_y = box_y + (box_h - text_h) / 2 - (bbox[1] if hasattr(bbox, '__getitem__') else 0)
+    text_x = box_x + (box_w - text_w) / 2 - bbox[0]
+    text_y = box_y + (box_h - text_h) / 2 - bbox[1]
     
-    draw.multiline_text((text_x, text_y), wrapped_text, font=font, fill=(30, 30, 30), spacing=15, align="center")
+    draw.multiline_text((text_x, text_y), wrapped_text, font=font, fill=(30, 30, 30), spacing=12, align="center")
     img.save(out_path)
 
 
@@ -381,8 +409,8 @@ class PremiereExporter:
         if num_chars == 1:
             x_offsets[sorted_chars[0]] = 0.0
         elif num_chars == 2:
-            x_offsets[sorted_chars[0]] = -0.42 # Far Left
-            x_offsets[sorted_chars[1]] = 0.42  # Far Right
+            x_offsets[sorted_chars[0]] = -0.32 # Left (Metan)
+            x_offsets[sorted_chars[1]] = 0.28  # Right (Zundamon, moved inward from 0.42)
         else:
             spacing = 0.8 / (num_chars - 1)
             for i, c in enumerate(sorted_chars):
@@ -568,7 +596,7 @@ class PremiereExporter:
     # Public export methods
     # ------------------------------------------------------------------
 
-    def export_xmeml(self, xml_output_dir: Path, proj_dir: Path) -> Path:
+    def export_xmeml(self, xml_output_dir: Path, proj_dir: Path, xml_filename: Optional[str] = None) -> Path:
         """Full xmeml export with pre-rendered PNG speech bubbles on V4.
 
         This is the original export path — self-contained, works with any
@@ -577,6 +605,7 @@ class PremiereExporter:
         Args:
             xml_output_dir: Directory to write the .xml file to.
             proj_dir: Project directory (for faces and bubble output).
+            xml_filename: Optional custom XML filename (e.g. '02_market_analysis_2026.xml').
 
         Returns:
             Path to the generated XML file.
@@ -597,8 +626,15 @@ class PremiereExporter:
         # Populate audio
         self._populate_audio(audio_tracks, unique_chars, total_frames)
 
-        output_path = xml_output_dir / "Zundamon_Episode_1_PRO.xml"
+        fname = xml_filename if xml_filename else "Zundamon_Episode_1_PRO.xml"
+        output_path = xml_output_dir / fname
         self._write_xml(root, output_path)
+        
+        # Also ensure Zundamon_Episode_1_PRO.xml exists for backward compatibility
+        if fname != "Zundamon_Episode_1_PRO.xml":
+            import shutil
+            shutil.copy2(output_path, xml_output_dir / "Zundamon_Episode_1_PRO.xml")
+
         logger.info(f"Successfully generated xmeml at {output_path}")
         print(f"Successfully generated FCPXML at {output_path}")
         return output_path
@@ -763,6 +799,7 @@ def export_to_premiere(
     proj_dir: Path,
     mogrt_path: Optional[Union[str, Path]] = None,
     mcp_call: Optional[Callable[..., Any]] = None,
+    xml_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Hybrid export: xmeml + optional native MOGRT bubbles via MCP.
 
@@ -776,6 +813,7 @@ def export_to_premiere(
         proj_dir: Project directory for assets.
         mogrt_path: Optional path to a .mogrt speech bubble template.
         mcp_call: Optional callable for MCP bridge invocations.
+        xml_filename: Optional custom XML filename (e.g. '02_market_analysis_2026.xml').
 
     Returns:
         Dict with 'xml_path' and optionally 'bubble_results'.
@@ -791,7 +829,7 @@ def export_to_premiere(
             "bubble_results": bubble_results,
         }
     else:
-        xml_path = exporter.export_xmeml(xml_output_dir, proj_dir)
+        xml_path = exporter.export_xmeml(xml_output_dir, proj_dir, xml_filename=xml_filename)
         return {
             "mode": "xmeml_png",
             "xml_path": str(xml_path),
