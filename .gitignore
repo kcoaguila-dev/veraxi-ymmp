@@ -60,6 +60,7 @@ venv.bak/
 
 # Output files
 test_output.ymmp
+tests/scratch_audio.wav
 audio/
 artifacts/
 projects/*/audio/

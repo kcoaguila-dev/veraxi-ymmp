@@ -41,12 +41,14 @@ def verify_project(ymmp_path_str: str):
     assert len(voices) > 0, "No VoiceItems found on Layer 9!"
     for i, v in enumerate(voices):
         char = v.get('CharacterName')
-        # A. CustomVoice path in Hatsuon
+        # A. FilePath and Hatsuon
         hatsuon = v.get('Hatsuon', '')
         assert hatsuon, f"VoiceItem[{i}] ({char}) has empty Hatsuon!"
-        h_path = Path(hatsuon)
-        assert h_path.exists(), f"VoiceItem[{i}] ({char}) audio file missing: {h_path}"
-        assert h_path.stat().st_size > 0, f"VoiceItem[{i}] ({char}) audio file is 0 bytes: {h_path}"
+        fp = v.get('FilePath', '')
+        assert fp, f"VoiceItem[{i}] ({char}) has empty FilePath!"
+        f_path = Path(fp)
+        assert f_path.exists(), f"VoiceItem[{i}] ({char}) audio file missing: {f_path}"
+        assert f_path.stat().st_size > 0, f"VoiceItem[{i}] ({char}) audio file is 0 bytes: {f_path}"
         
         # B. Brotli-compressed VoiceCache
         vc = v.get('VoiceCache', '')
@@ -103,7 +105,7 @@ def verify_project(ymmp_path_str: str):
         tfp = f_it.get('TachieFaceParameter', {})
         el = tfp.get('EnableLayers', [])
         assert len(el) > 0, "Face item has empty EnableLayers!"
-        assert tfp.get('MouthAnimation') == "Default", "MouthAnimation not Default"
+        assert tfp.get('MouthAnimation') in ("VolumeLipSyncPriority", "VowelLipSyncPriority"), f"MouthAnimation is {tfp.get('MouthAnimation')}, expected VolumeLipSyncPriority"
         # Strict lip-sync check: YMM4's GetActiveMouthAnimations requires at least one registered mouth layer
         expected_mouth = 'n109' if 'ずんだ' in char else 'n47'
         assert expected_mouth in el, f"TachieFaceItem ({char}) at frame {f_it.get('Frame')} missing registered mouth layer {expected_mouth} in EnableLayers! YMM4 mouth will not move. Found: {el}"
