@@ -1,0 +1,128 @@
+[
+  {
+    "type": "bgm",
+    "path": "assets/bgm/2_23_AM.m4a",
+    "volume": 15
+  },
+  {
+    "bg": "assets/bg/clean_classroom.jpg",
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "みんな、こんにちはなのだ！ずんだもんなのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "こんにちは、四国めたんですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "めたん！コストコって大容量ピザやホットドッグが激安で最高なのだ！"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "でもあんなに安くて、本当に潰れないのか不思議なのだ…"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "実はコストコは、商品を売って儲ける気は最初から『ほぼゼロ』なんですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "な、何だってー！？スーパーなのに商品で儲けてないのだ！？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_profit.png",
+    "text": "こちらのデータをご覧くださいまし。一般的なスーパーの粗利率は２０％以上ですが…"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_profit.png",
+    "text": "コストコは商品の値入率の上限を、約１４％前後に厳しく制限しているのです。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_profit.png",
+    "text": "この１４％は人件費や店舗費用で消えるため、商品の純利益はほぼ残りません。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "じゃあ、一体どこで莫大な利益を出しているのだ！？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "image": "assets/costco_profit.png",
+    "text": "答えは『年会費』ですわ。営業利益のなんと８割以上が会員費から生まれています！"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "なるほど！コストコは商品を売る店じゃなくて、会員制クラブだったのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_flywheel.png",
+    "text": "さらに恐ろしいのが、創業者ジム・シネガルが貫いた『規模の経済の還元』ですわ。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_flywheel.png",
+    "text": "普通の企業は規模が大きくなると利益率を上げますが、コストコは全額を値下げとして客に返します。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_flywheel.png",
+    "text": "これにより顧客満足度が跳ね上がり、会員継続率は驚異の９０％を超えます。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_flywheel.png",
+    "text": "ライバル企業は、真似しようとすると赤字で自滅する構造なのですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "真似しようとした競合他社は、利益率を削ったら自滅するのだ…！恐ろしいのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "image": "assets/costco_points.png",
+    "text": "まさに『最強の堀（モート）』ですわね。良い企業を見抜くための鉄則がここにあります。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "assets/costco_points.png",
+    "text": "①規模の拡大を客に還元しているか。②圧倒的な高継続率があるか。③前金で現金が入る構造か。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "表面の売上だけじゃなく、利益の仕組みと『モート』を見抜くことが大事なのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "text": "次回も世界を支配する大企業の強さの秘密を暴いていきますわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "ためになった人はぜひ高評価とチャンネル登録をお願いするのだ！"
+  }
+]

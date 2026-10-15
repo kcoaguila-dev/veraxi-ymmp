@@ -1,0 +1,230 @@
+[
+  {
+    "type": "bgm",
+    "path": "assets/bgm/2_23_AM.mp3",
+    "volume": 12
+  },
+  {
+    "bg": "assets/bg/clean_classroom.jpg",
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "みんな、こんにちはなのだ！ずんだもんなのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "こんにちは、四国めたんですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "めたん！最近、株価指数は最高値圏なのに、周りの投資家がすごく警戒しているのだ！"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "株価が上がっているなら、手放しで喜べばいいんじゃないのだ？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "ふふ、まさにそこが素人とプロの決定的な分かれ道ですわ。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "今、株式市場の深部では、過去２０年で最も劇的な地殻変動が起きているのです。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "地殻変動！？一体、市場の裏で何が起きているのだ！？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/market_regime_2026.png",
+    "text": "まずはこちらの、現在のマクロ経済のデータをご覧くださいまし。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/market_regime_2026.png",
+    "text": "第一に、米国の政策金利は４％前後の高水準に留まり、長期化しています。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/market_regime_2026.png",
+    "text": "第二に、地政学リスクにより原油価格が１バレル１００ドルを突破しました。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/market_regime_2026.png",
+    "text": "そして日本でも、日銀の追加利上げによって『金利のある世界』が定着しています。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "金利が高いままで、原油まで高い…これって企業の負担がすごく重いのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "その通りですわ。過去１０年間続いた『タダ同然でお金を借りて急成長する時代』は完全に終了しました。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "借金でレバレッジをかけていた企業は、利払いの急増で一気に体力を削られています。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "でもめたん、ＡＩブームがあるからハイテク株は安泰なんじゃないのだ？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
+    "text": "甘いですわね。ＡＩ市場は今、最も過酷な『選別の第２期』に突入しています。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
+    "text": "２０２４年から２０２５年は『半導体や設備を買い漁るフェーズ』でした。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
+    "text": "ＡＩと言えばどんな会社でも株価が跳ね上がる、いわばお祭り騒ぎでしたわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "確かに！あの頃は半導体銘柄を買っておけば誰でも儲かったのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
+    "text": "ですが２０２６年の現在は、年間５０００億ドルに及ぶ巨額投資の『回収』を問われる段階です。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
+    "text": "投資家たちは今、『で、そのＡＩで実際にいくら純利益が増えたの？』と冷徹に迫っています。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "うぐっ…！莫大なお金を使ってサーバーを買ったのに、利益が出てない企業はヤバいのだ…！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "ええ。だからこそハイテク巨頭の間でも株価の相関が崩れ、明暗が完全に分かれ始めています。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "じゃあ、こんな過酷な高金利・選別相場で、プロは一体どんな企業を選んでいるのだ？"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "お待たせしましたわ。プロが今、血眼で探している『勝ち組企業の３条件』を伝授します！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "条件の１つ目は、『豊富なフリーキャッシュフローと無借金経営』です。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "高金利下では借金の利払いが重荷になりますが、手元現金が潤沢なら自前の資金で成長投資ができます。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "銀行に頭を下げずに、自分の稼ぎだけで新しい勝負ができる会社なのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "条件の２つ目は、『圧倒的な価格転嫁力』です。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "原油や人件費が上がっても、値上げをして顧客が逃げないブランドや独占力を持つ企業ですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "surprised",
+    "text": "値上げしてもみんなが買い続ける会社なら、インフレの波をそのまま乗り越えられるのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "そして条件の３つ目は、『ＡＩを使って業務効率化・コスト削減に成功している実業企業』です。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
+    "text": "ＡＩを作る側ではなく、ＡＩを社内業務に組み込んで人件費や販管費を削り、利益率を伸ばす側ですわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "派手なＡＩスタートアップより、地味にＡＩを使いこなして利益を爆増させている既存企業なのだ！",
+    "tts_text": "派手なＡＩスタートアップより、地味にＡＩを使いこなして利益をばくぞうさせている既存企業なのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "text": "その通りですわ。今の相場は『夢やストーリー』で買う相場ではなくなりました。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "本物のキャッシュフロー、独占的な価格決定力、そして地に足のついた効率化。"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "normal",
+    "text": "この３つを兼ね備えた企業こそが、次の数年で市場平均を圧倒する真の勝ち組になりますわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "表面的な株価の上下に惑わされず、企業の稼ぐ力の構造を見抜くことが大事なのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "text": "当チャンネルでは、今後も世界を制する強いビジネスモデルの企業を１社ずつ徹底解剖していきますわ。"
+  },
+  {
+    "character": "ずんだもん",
+    "emotion": "happy",
+    "text": "今回の分析が役に立った人は、ぜひ高評価とチャンネル登録をお願いするのだ！"
+  },
+  {
+    "character": "四国めたん",
+    "emotion": "happy",
+    "text": "それでは皆様、また次回の動画でお会いいたしましょう。"
+  }
+]

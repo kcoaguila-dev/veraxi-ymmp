@@ -15,7 +15,12 @@ from scripts and templates. It handles:
 
 import copy
 import json
+import base64
+import brotli
+import wave
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from .subtitle_plate import create_speech_plate
+from .moviepy_renderer import wrap_japanese
 
 from .template import (
     extract_character_templates,
@@ -128,8 +133,18 @@ class YMMPCompiler:
 
         for idx, line in enumerate(script):
             if line.get("type") == "bgm":
-                # Resolve relative to project root
-                path = audio_dir.parent.parent / line["path"]
+                # Resolve relative to cwd, audio_dir, or project root
+                raw_p = Path(line.get("path") or line.get("bgm", ""))
+                if raw_p.exists():
+                    path = raw_p.resolve()
+                elif (Path.cwd() / raw_p).exists():
+                    path = (Path.cwd() / raw_p).resolve()
+                elif (audio_dir.parent / raw_p).exists():
+                    path = (audio_dir.parent / raw_p).resolve()
+                elif (audio_dir.parent.parent.parent / raw_p).exists():
+                    path = (audio_dir.parent.parent.parent / raw_p).resolve()
+                else:
+                    path = raw_p.resolve()
                 vol = line.get("volume", 15) / 100.0
                 dynamic_audio_clips.append(DynamicAudioClip(audio_path=path, start_frame=0, length=-1, volume=vol))
                 continue
@@ -183,16 +198,19 @@ class YMMPCompiler:
             character_positions.setdefault(char_name, line.get("character_position", "center"))
             
             if char_name not in self.character_templates:
-                # Dynamic fallback: clone the first available character template
-                if not self.character_templates:
-                    raise ValueError(f"No character templates available to clone for: {char_name}")
-                base_char = list(self.character_templates.keys())[0]
-                self.character_templates[char_name] = copy.deepcopy(self.character_templates[base_char])
-                # Update the character name in the cloned templates
-                for k, v in self.character_templates[char_name].items():
-                    if v and isinstance(v, dict) and "CharacterName" in v:
-                        v["CharacterName"] = char_name
-                logger.info(f"Dynamically cloned template for {char_name} from {base_char}")
+                # Dynamic fallback: clone the first available character template for known characters
+                known_chars = ["ずんだもん", "四国めたん", "春日部つむぎ", "Zundamon"]
+                if char_name in self.config.speaker_map or char_name in known_chars:
+                    if not self.character_templates:
+                        raise ValueError(f"No character templates available to clone for: {char_name}")
+                    base_char = list(self.character_templates.keys())[0]
+                    self.character_templates[char_name] = copy.deepcopy(self.character_templates[base_char])
+                    for k, v in self.character_templates[char_name].items():
+                        if v and isinstance(v, dict) and "CharacterName" in v:
+                            v["CharacterName"] = char_name
+                    logger.info(f"Dynamically cloned template for {char_name} from {base_char}")
+                else:
+                    raise ValueError(f"No character template found for character: {char_name}")
 
             if self.character_templates[char_name]["voice"] is None:
                 raise ValueError(f"No voice template found for character: {char_name}")
@@ -328,6 +346,438 @@ class YMMPCompiler:
             template_data=self.template_data
         ), audio_files
 
+    def _render_psd_ymmp(
+        self,
+        timeline_ir: TimelineIR,
+        output_path: "Path",
+        use_bom: bool,
+        script_len: int,
+        audio_files: List["Path"],
+        output_data: Dict[str, Any]
+    ) -> CompilationResult:
+        zunda_psd = Path(r"C:\Users\hippo\Pictures\ずんだもん立ち絵素材V3.2\坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd")
+        if not zunda_psd.exists():
+            zunda_psd = Path.home() / "Pictures" / "ずんだもん立ち絵素材V3.2" / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
+        metan_psd = Path(r"C:\Users\hippo\Pictures\四国めたん立ち絵素材2.1\四国めたん立ち絵素材2.1.psd")
+        if not metan_psd.exists():
+            metan_psd = Path.home() / "Pictures" / "四国めたん立ち絵素材2.1" / "四国めたん立ち絵素材2.1.psd"
+
+        # Base layers & paths for Zundamon
+        zunda_base_layers = ["n153", "n89", "n88", "n83", "n97", "n95", "n148", "n140", "n115", "n21", "n15", "n12", "n4", "n1", "n0", "n147", "n139", "n109"]
+        zunda_base_paths = [
+            "\x1c*頭_正面向き\x1d0", "\x1c*頭_正面向き\x1d0\x1c!枝豆\x1d0", "\x1c*頭_正面向き\x1d0\x1c!枝豆\x1d0\x1c*枝豆通常\x1d0",
+            "\x1c*頭_正面向き\x1d0\x1c!頭\x1d0", "\x1c*頭_正面向き\x1d0\x1c!顔色\x1d0", "\x1c*頭_正面向き\x1d0\x1c!顔色\x1d0\x1c*ほっぺ基本\x1d0",
+            "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0",
+            "\x1c!左腕\x1d0", "\x1c!左腕\x1d0\x1c*腰\x1d0", "\x1c!右腕\x1d0", "\x1c!右腕\x1d0\x1c*腰\x1d0",
+            "\x1c!体\x1d0", "\x1c尻尾のような何か\x1d0",
+            "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
+            "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"
+        ]
+
+        # Base layers & paths for Metan
+        metan_base_layers = ["n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33", "n79", "n70", "n49", "n86", "n85", "n82", "n84", "n78", "n69", "n60", "n68", "n67", "n47"]
+        metan_base_paths = [
+            "\x1cツインドリル右\x1d0", "\x1cツインドリル左\x1d0", "\x1c*白ロリ服\x1d0", "\x1c*白ロリ服\x1d0\x1c!体\x1d0",
+            "\x1c*白ロリ服\x1d0\x1c!右腕\x1d0", "\x1c*白ロリ服\x1d0\x1c!右腕\x1d0\x1c*普通\x1d0",
+            "\x1c*白ロリ服\x1d0\x1c!左腕\x1d0", "\x1c*白ロリ服\x1d0\x1c!左腕\x1d0\x1c*普通\x1d0",
+            "\x1c!顔色\x1d0", "\x1c!顔色\x1d0\x1c*普通\x1d0", "\x1c!眉\x1d0", "\x1c!目\x1d0", "\x1c!口\x1d0",
+            "\x1c!前髪もみあげ\x1d0", "\x1c頭部アクセサリ\x1d0", "\x1c頭部アクセサリ\x1d0\x1c髪留めハート\x1d0",
+            "\x1c頭部アクセサリ\x1d0\x1cヘッドドレス\x1d0", "\x1c!眉\x1d0\x1c*ごきげん\x1d0",
+            "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
+            "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
+            "\x1c!口\x1d0\x1c*ほほえみ\x1d0"
+        ]
+
+        def get_face_layers_and_paths(char: str, emo: str) -> Tuple[List[str], List[str]]:
+            if "ずんだ" in char:
+                layers = ["n153", "n89", "n88", "n83", "n97", "n95", "n148", "n140", "n115", "n21", "n15", "n12", "n4", "n1", "n0"]
+                paths = [
+                    "\x1c*頭_正面向き\x1d0", "\x1c*頭_正面向き\x1d0\x1c!枝豆\x1d0", "\x1c*頭_正面向き\x1d0\x1c!枝豆\x1d0\x1c*枝豆通常\x1d0",
+                    "\x1c*頭_正面向き\x1d0\x1c!頭\x1d0", "\x1c*頭_正面向き\x1d0\x1c!顔色\x1d0", "\x1c*頭_正面向き\x1d0\x1c!顔色\x1d0\x1c*ほっぺ基本\x1d0",
+                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0",
+                    "\x1c!左腕\x1d0", "\x1c!左腕\x1d0\x1c*腰\x1d0", "\x1c!右腕\x1d0", "\x1c!右腕\x1d0\x1c*腰\x1d0",
+                    "\x1c!体\x1d0", "\x1c尻尾のような何か\x1d0"
+                ]
+                if emo == "surprised":
+                    layers.extend(["n145", "n132", "n109"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*上がり眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目2\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                elif emo == "angry":
+                    layers.extend(["n149", "n135", "n109"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*怒り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*怒り目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                elif emo == "sad":
+                    layers.extend(["n144", "n130", "n109"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*困り目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                elif emo == "happy":
+                    layers.extend(["n147", "n121", "n109"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*にっこり\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                else: # normal
+                    layers.extend(["n147", "n139", "n109"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                return layers, paths
+            else: # 四国めたん
+                layers = ["n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33", "n79", "n70", "n49", "n86", "n85", "n82", "n84"]
+                paths = [
+                    "\x1cツインドリル右\x1d0", "\x1cツインドリル左\x1d0", "\x1c*白ロリ服\x1d0", "\x1c*白ロリ服\x1d0\x1c!体\x1d0",
+                    "\x1c*白ロリ服\x1d0\x1c!右腕\x1d0", "\x1c*白ロリ服\x1d0\x1c!右腕\x1d0\x1c*普通\x1d0",
+                    "\x1c*白ロリ服\x1d0\x1c!左腕\x1d0", "\x1c*白ロリ服\x1d0\x1c!左腕\x1d0\x1c*普通\x1d0",
+                    "\x1c!顔色\x1d0", "\x1c!顔色\x1d0\x1c*普通\x1d0", "\x1c!眉\x1d0", "\x1c!目\x1d0", "\x1c!口\x1d0",
+                    "\x1c!前髪もみあげ\x1d0", "\x1c頭部アクセサリ\x1d0", "\x1c頭部アクセサリ\x1d0\x1c髪留めハート\x1d0",
+                    "\x1c頭部アクセサリ\x1d0\x1cヘッドドレス\x1d0"
+                ]
+                if emo == "surprised":
+                    layers.extend(["n78", "n69", "n62", "n68", "n67", "n47"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*見開き白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                elif emo == "angry":
+                    layers.extend(["n74", "n69", "n64", "n68", "n67", "n47"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*怒り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*ジト白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                elif emo == "sad":
+                    layers.extend(["n77", "n69", "n65", "n68", "n67", "n47"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*困り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*困り白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                else: # happy or normal
+                    layers.extend(["n78", "n69", "n60", "n68", "n67", "n47"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                return layers, paths
+
+        # Load prototype character to preserve all 86 YMM4 properties
+        template_chars_path = Path("examples/full_template.ymmp")
+        full_char_proto = None
+        if template_chars_path.exists():
+            try:
+                with open(template_chars_path, "r", encoding="utf-8-sig") as tf:
+                    t_data = json.load(tf)
+                    if t_data.get("Characters"):
+                        full_char_proto = t_data["Characters"][0]
+            except Exception:
+                pass
+
+        def create_char_def(name: str, psd_p: Path, b_layers: list, b_paths: list, f_color: str, s_color: str) -> Dict[str, Any]:
+            c = copy.deepcopy(full_char_proto) if full_char_proto else {}
+            c["$type"] = "YukkuriMovieMaker.Project.Character, YukkuriMovieMaker"
+            c["Name"] = name
+            c["TachieType"] = "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachiePlugin, YukkuriMovieMaker.Plugin.Tachie.Psd, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+            c["TachieCharacterParameter"] = {
+                "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieCharacterParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                "FilePath": str(psd_p),
+                "MouthSensitivity": 200.0,
+                "EyeSensitivity": 100.0
+            }
+            c["TachieDefaultItemParameter"] = {
+                "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                "FilePath": None,
+                "EnableLayers": [],
+                "EnableLayerPaths": [],
+                "IsHiddenWhenNoSpeech": False
+            }
+            c["TachieDefaultFaceParameter"] = {
+                "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                "IsEnabled": True,
+                "FilePath": str(psd_p),
+                "EnableLayers": b_layers,
+                "EnableLayerPaths": b_paths,
+                "EyeAnimation": "Default",
+                "MouthAnimation": "Default"
+            }
+            c["Font"] = "メイリオ"
+            c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
+            c["FontColor"] = f_color
+            c["StyleColor"] = s_color
+            c["BasePoint"] = "CenterCenter"
+            c["X"] = {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"}
+            c["Y"] = {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"}
+            c["Bold"] = True
+            c["IsJimakuVisible"] = True
+            c["WordWrap"] = "NoWrap"
+            c["MaxWidth"] = {"Values": [{"Value": 1600.0}], "Span": 0.0, "AnimationType": "なし"}
+            return c
+
+        output_data["Characters"] = [
+            create_char_def("ずんだもん", zunda_psd, zunda_base_layers, zunda_base_paths, "#FF18181B", "#FF006400"),
+            create_char_def("四国めたん", metan_psd, metan_base_layers, metan_base_paths, "#FF18181B", "#FF8B008B")
+        ]
+
+        plates_dir = output_path.parent / "plates"
+        plates_dir.mkdir(parents=True, exist_ok=True)
+
+        items: List[Dict[str, Any]] = []
+
+        # 1. Spoken Lines: Face, Plate, Voice
+        for clip in timeline_ir.voice_clips:
+            char = clip.character
+            frm = clip.start_frame
+            lng = clip.length
+            txt = clip.text
+            emo = clip.emotion
+            a_path = clip.audio_path
+            is_zunda = "ずんだ" in char
+            face_layer = 7 if is_zunda else 5
+            psd_p = zunda_psd if is_zunda else metan_psd
+
+            face_layers, face_paths = get_face_layers_and_paths(char, emo)
+
+            # Face item (L5/L7)
+            items.append({
+                "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
+                "CharacterName": char,
+                "TachieFaceParameter": {
+                    "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                    "IsEnabled": True,
+                    "FilePath": str(psd_p),
+                    "EnableLayers": face_layers,
+                    "EnableLayerPaths": face_paths,
+                    "EyeAnimation": "Default",
+                    "MouthAnimation": "Default"
+                },
+                "Layer": face_layer,
+                "Frame": frm,
+                "Length": lng,
+                "Remark": f"emotion:{emo}"
+            })
+
+            # Plate item (L8)
+            plate_file = plates_dir / f"plate_{frm}_{char}.png"
+            create_speech_plate(txt, char, plate_file)
+            items.append({
+                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+                "FilePath": str(plate_file.resolve()),
+                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Y": {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Zoom": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Blend": "Normal",
+                "Layer": 8,
+                "Frame": frm,
+                "Length": lng,
+                "VideoEffects": []
+            })
+
+            # VoiceItem (L9) with fast brotli VoiceCache (quality=4)
+            voice_cache_b64 = ""
+            voice_len_str = "00:00:01.0000000"
+            if a_path and a_path.exists():
+                raw_bytes = a_path.read_bytes()
+                voice_cache_b64 = base64.b64encode(brotli.compress(raw_bytes, quality=4)).decode('ascii')
+                sec = lng / timeline_ir.fps
+                hours = int(sec // 3600)
+                mins = int((sec % 3600) // 60)
+                secs = sec % 60
+                voice_len_str = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+
+            items.append({
+                "$type": "YukkuriMovieMaker.Project.Items.VoiceItem, YukkuriMovieMaker",
+                "IsWaveformEnabled": True,
+                "CharacterName": char,
+                "Serif": wrap_japanese(txt, width=24),
+                "Decorations": [],
+                "Hatsuon": str(a_path.resolve()) if a_path else clip.hatsuon,
+                "Pronounce": None,
+                "LipSyncFrames": None,
+                "FilePath": str(a_path.resolve()) if a_path else "",
+                "VoiceLength": voice_len_str,
+                "VoiceCache": voice_cache_b64,
+                "Volume": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Pan": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "PlaybackRate": 100.0,
+                "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "ContentOffset": "00:00:00",
+                "Layer": 9,
+                "Frame": frm,
+                "Length": lng,
+                "JimakuVisibility": "UseCharacterSetting",
+                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Y": {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"},
+                "BasePoint": "CenterCenter",
+                "Font": "メイリオ",
+                "FontSize": {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"},
+                "FontColor": "#FF18181B",
+                "Style": "Normal",
+                "StyleColor": "#FF006400" if is_zunda else "#FF8B008B",
+                "Bold": True,
+                "LineHeight2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "LetterSpacing2": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "WordWrap": "NoWrap",
+                "MaxWidth": {"Values": [{"Value": 1600.0}], "Span": 0.0, "AnimationType": "なし"},
+                "VideoEffects": []
+            })
+
+        # 2. Tachie Characters (L4 & L6)
+        broll_intervals = [(img.start_frame, img.start_frame + img.length) for img in timeline_ir.dynamic_image_clips]
+        for clip in timeline_ir.voice_clips:
+            char = clip.character
+            frm = clip.start_frame
+            lng = clip.length
+            is_zunda = "ずんだ" in char
+            has_broll = any(s <= frm < e or s < frm + lng <= e for s, e in broll_intervals)
+            if has_broll:
+                t_layer = 6 if is_zunda else 4
+                t_psd = zunda_psd if is_zunda else metan_psd
+                t_layers = zunda_base_layers if is_zunda else metan_base_layers
+                t_paths = zunda_base_paths if is_zunda else metan_base_paths
+                items.append({
+                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
+                    "CharacterName": char,
+                    "TachieItemParameter": {
+                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                        "FilePath": str(t_psd),
+                        "EnableLayers": t_layers,
+                        "EnableLayerPaths": t_paths,
+                        "IsHiddenWhenNoSpeech": False
+                    },
+                    "X": {"Values": [{"Value": 650.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Y": {"Values": [{"Value": 280.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Zoom": {"Values": [{"Value": 55.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Blend": "Normal",
+                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "FadeIn": 0.0,
+                    "FadeOut": 0.0,
+                    "Group": 0,
+                    "KeyFrames": {"Frames": [], "Count": 0},
+                    "IsLocked": False,
+                    "IsHidden": False,
+                    "Layer": t_layer,
+                    "Frame": frm,
+                    "Length": lng,
+                    "VideoEffects": []
+                })
+            else:
+                items.append({
+                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
+                    "CharacterName": "四国めたん",
+                    "TachieItemParameter": {
+                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                        "FilePath": str(metan_psd),
+                        "EnableLayers": metan_base_layers,
+                        "EnableLayerPaths": metan_base_paths,
+                        "IsHiddenWhenNoSpeech": False
+                    },
+                    "X": {"Values": [{"Value": -550.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Y": {"Values": [{"Value": 250.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Zoom": {"Values": [{"Value": 70.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Blend": "Normal",
+                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "FadeIn": 0.0,
+                    "FadeOut": 0.0,
+                    "Group": 0,
+                    "KeyFrames": {"Frames": [], "Count": 0},
+                    "IsLocked": False,
+                    "IsHidden": False,
+                    "Layer": 4,
+                    "Frame": frm,
+                    "Length": lng,
+                    "VideoEffects": []
+                })
+                items.append({
+                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
+                    "CharacterName": "ずんだもん",
+                    "TachieItemParameter": {
+                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                        "FilePath": str(zunda_psd),
+                        "EnableLayers": zunda_base_layers,
+                        "EnableLayerPaths": zunda_base_paths,
+                        "IsHiddenWhenNoSpeech": False
+                    },
+                    "X": {"Values": [{"Value": 550.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Y": {"Values": [{"Value": 250.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Zoom": {"Values": [{"Value": 70.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "Blend": "Normal",
+                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                    "FadeIn": 0.0,
+                    "FadeOut": 0.0,
+                    "Group": 0,
+                    "KeyFrames": {"Frames": [], "Count": 0},
+                    "IsLocked": False,
+                    "IsHidden": False,
+                    "Layer": 6,
+                    "Frame": frm,
+                    "Length": lng,
+                    "VideoEffects": []
+                })
+
+        # 3. Layer 0: Background ImageItem (Zoom: 187.5 to fully fill 1920x1080)
+        bg_candidate = Path("assets/bg/clean_classroom.jpg").resolve()
+        for gc in timeline_ir.global_clips:
+            ti = gc.template_item
+            if "FilePath" in ti and ("bg" in ti["FilePath"].lower() or "room" in ti["FilePath"].lower() or "classroom" in ti["FilePath"].lower()):
+                bg_candidate = Path(ti["FilePath"]).resolve()
+        items.append({
+            "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+            "FilePath": str(bg_candidate),
+            "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+            "Y": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+            "Opacity": {"Values": [{"Value": 100.0}]},
+            "Zoom": {"Values": [{"Value": 187.5}], "Span": 0.0, "AnimationType": "なし"},
+            "Rotation": {"Values": [{"Value": 0.0}]},
+            "Blend": "Normal",
+            "Layer": 0,
+            "Frame": 0,
+            "Length": timeline_ir.total_frames,
+            "VideoEffects": []
+        })
+
+        # 4. Layer 1: B-Roll Images
+        for clip in timeline_ir.dynamic_image_clips:
+            items.append({
+                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+                "FilePath": str(clip.image_path.resolve()),
+                "X": {"Values": [{"Value": -60.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Y": {"Values": [{"Value": -40.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Opacity": {"Values": [{"Value": 100.0}]},
+                "Zoom": {"Values": [{"Value": 125.0}], "Span": 0.0, "AnimationType": "加減速移動"},
+                "Rotation": {"Values": [{"Value": 0.0}]},
+                "Blend": "Normal",
+                "Layer": 1,
+                "Frame": clip.start_frame,
+                "Length": clip.length,
+                "VideoEffects": []
+            })
+
+        # 5. Layer 3: BGM AudioItem
+        bgm_path = Path("assets/bgm/2_23_AM.mp3").resolve()
+        if not bgm_path.exists():
+            bgm_path = Path("assets/bgm/2_23_AM.m4a").resolve()
+        for clip in timeline_ir.dynamic_audio_clips:
+            if clip.length == -1 or "bgm" in str(clip.audio_path).lower():
+                bgm_path = clip.audio_path.resolve()
+        items.append({
+            "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+            "FilePath": str(bgm_path),
+            "Volume": {"Values": [{"Value": 3.0}], "Span": 0.0, "AnimationType": "なし"},
+            "Pan": {"Values": [{"Value": 0.0}]},
+            "PlaybackRate": 100.0,
+            "Layer": 3,
+            "Frame": 0,
+            "Length": timeline_ir.total_frames,
+            "IsLooped": True
+        })
+
+        # Assemble and write
+        from .template import get_timeline
+        tl = get_timeline(output_data)
+        tl["Items"] = items
+        tl["Length"] = timeline_ir.total_frames
+        tl["MaxLayer"] = 10
+
+        self._write_output(output_data, output_path, use_bom)
+
+        tachie_count = len([i for i in items if "TachieItem" in i.get("$type", "")])
+        return CompilationResult(
+            output_path=output_path,
+            item_count=len(items),
+            voice_item_count=len(timeline_ir.voice_clips),
+            tachie_item_count=tachie_count,
+            total_frames=timeline_ir.total_frames,
+            total_duration_seconds=timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0,
+            audio_files=audio_files,
+            warnings=self.warnings,
+            errors=self.errors
+        )
+
     def _render_ymmp(
         self,
         timeline_ir: TimelineIR,
@@ -341,6 +791,14 @@ class YMMPCompiler:
         from .template import get_timeline
         
         output_data = copy.deepcopy(self.template_data)
+        
+        is_psd_project = (
+            any("ずんだ" in c.character or "めたん" in c.character for c in timeline_ir.voice_clips)
+            or any("Psd" in str(c) for c in output_data.get("Characters", []))
+        )
+        if is_psd_project:
+            return self._render_psd_ymmp(timeline_ir, output_path, use_bom, script_len, audio_files, output_data)
+
         
         # Detect aspect ratio to support both Long-form (16:9) and Short-form (9:16)
         timeline = get_timeline(output_data)
@@ -453,13 +911,13 @@ class YMMPCompiler:
                 zoom_prop = {
                     "Values": [{"Value": 0.0}, {"Value": zoom_val}],
                     "Span": 0.2, # Pop in over 20% of duration (or 0.2s depending on YMM4 version, usually ratio or seconds)
-                    "AnimationType": "Deceleration" # Smooth pop
+                    "AnimationType": "加減速移動" # Smooth pop
                 }
             else:
                 zoom_prop = {
                     "Values": [{"Value": 100.0}],
                     "Span": 0.0,
-                    "AnimationType": "None"
+                    "AnimationType": "なし"
                 }
 
             image_item = {
@@ -468,12 +926,12 @@ class YMMPCompiler:
                 "X": {
                     "Values": [{"Value": 0.0 if is_bg else broll_cfg["X"]}],
                     "Span": 0.0,
-                    "AnimationType": "None"
+                    "AnimationType": "なし"
                 },
                 "Y": {
                     "Values": [{"Value": 0.0 if is_bg else broll_cfg["Y"]}],
                     "Span": 0.0,
-                    "AnimationType": "None"
+                    "AnimationType": "なし"
                 },
                 "Opacity": {"Values": [{"Value": 100.0}]},
                 "Zoom": zoom_prop,
@@ -516,7 +974,7 @@ class YMMPCompiler:
                 "Volume": {
                     "Values": [{"Value": volume}],
                     "Span": 0.0,
-                    "AnimationType": "None"
+                    "AnimationType": "なし"
                 },
                 "Pan": {"Values": [{"Value": 0.0}]},
                 "PlaybackRate": 100.0,
