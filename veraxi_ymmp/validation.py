@@ -189,12 +189,18 @@ def validate_ymmp_timeline(
         if val is None or val <= 0:
             raise ValidationError(f"VoiceItem[{i}] has invalid volume: {val}")
 
+        hatsuon = v.get("Hatsuon", "")
+        if not hatsuon or not isinstance(hatsuon, str):
+            raise ValidationError(
+                f"VoiceItem[{i}] Hatsuon must be a non-empty pronunciation string. Found: {hatsuon}"
+            )
+
         if require_audio:
-            # Check Hatsuon points to audio file (drives CustomVoice in YMM4)
-            hatsuon = v.get("Hatsuon", "")
-            if not hatsuon or not Path(hatsuon).exists():
+            # Check FilePath points to audio file
+            fp = v.get("FilePath", "")
+            if not fp or not Path(fp).exists():
                 raise ValidationError(
-                    f"VoiceItem[{i}] Hatsuon must point to an existing audio file on disk for CustomVoice lip-sync. Found: {hatsuon}"
+                    f"VoiceItem[{i}] FilePath must point to an existing audio file on disk. Found: {fp}"
                 )
             # Check VoiceCache contains valid Brotli-compressed WAV audio
             vc = v.get("VoiceCache", "")
@@ -310,6 +316,12 @@ def validate_ymmp_timeline(
                 raise ValidationError(
                     f"Character '{c_name}' TachieDefaultFaceParameter does not contain any registered mouth animation layers {mouth_layers} in EnableLayers! Found: {el}"
                 )
+            ma = tdfp.get("MouthAnimation")
+            if ma == "Default":
+                raise ValidationError(
+                    f"Character '{c_name}' TachieDefaultFaceParameter MouthAnimation is 'Default'. "
+                    "Must be 'VolumeLipSyncPriority' (or 'VowelLipSyncPriority') so YMM4 activates lip sync animation during speech!"
+                )
 
     # Check 5: TachieFaceItems (facial expressions)
     face_items = [it for it in items if "TachieFaceItem" in it.get("$type", "")]
@@ -324,6 +336,12 @@ def validate_ymmp_timeline(
             raise ValidationError(
                 f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} does not contain any registered mouth animation layers {mouth_layers} in EnableLayers! "
                 f"YMM4's GetActiveMouthAnimations will return empty and the mouth will not move during speech. Found: {el}"
+            )
+        ma = tfp.get("MouthAnimation")
+        if ma == "Default":
+            raise ValidationError(
+                f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} MouthAnimation is 'Default'. "
+                "Must be 'VolumeLipSyncPriority' (or 'VowelLipSyncPriority') so YMM4 animates mouth movements during speech!"
             )
 
     # Check 6: MaxLayer
