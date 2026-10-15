@@ -57,7 +57,7 @@ def test_synthesize_success(mock_post):
         params={"speaker": 3},
         json={"fake": "query"},
         headers={"Content-Type": "application/json"},
-        timeout=30
+        timeout=client.timeout
     )
 
 @patch('requests.post')
