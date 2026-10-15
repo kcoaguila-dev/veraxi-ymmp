@@ -67,7 +67,7 @@ def base_valid_ymmp():
                 {
                     "$type": "YukkuriMovieMaker.Project.Items.VoiceItem, YukkuriMovieMaker",
                     "CharacterName": "ずんだもん",
-                    "Hatsuon": str(test_wav),
+                    "Hatsuon": "テスト",
                     "FilePath": str(test_wav),
                     "VoiceCache": vc_b64,
                     "Layer": 9,
@@ -111,7 +111,7 @@ def test_validation_fails_on_empty_enable_layers(base_valid_ymmp):
 def test_validation_fails_on_missing_audio_file(base_valid_ymmp):
     for it in base_valid_ymmp["Timeline"]["Items"]:
         if "VoiceItem" in it.get("$type", ""):
-            it["Hatsuon"] = "C:/non/existent/audio_file.wav"
+            it["FilePath"] = "C:/non/existent/audio_file.wav"
     with pytest.raises(ValidationError, match="must point to an existing audio file"):
         validate_ymmp_timeline(base_valid_ymmp)
 
@@ -175,10 +175,30 @@ def test_validation_fails_when_face_item_missing_mouth_layer(base_valid_ymmp):
             "FilePath": psd_path,
             "EnableLayers": ["n153", "n89", "n88", "n147", "n121"],  # Missing n109!
             "EyeAnimation": "Default",
-            "MouthAnimation": "Default"
+            "MouthAnimation": "VolumeLipSyncPriority"
         }
     })
     with pytest.raises(ValidationError, match="GetActiveMouthAnimations will return empty"):
+        validate_ymmp_timeline(base_valid_ymmp)
+
+
+def test_validation_fails_when_mouth_animation_is_default(base_valid_ymmp):
+    psd_path = base_valid_ymmp["Characters"][0]["TachieCharacterParameter"]["FilePath"]
+    base_valid_ymmp["Timeline"]["Items"].append({
+        "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
+        "CharacterName": "ずんだもん",
+        "Layer": 7,
+        "Frame": 0,
+        "Length": 90,
+        "TachieFaceParameter": {
+            "IsEnabled": True,
+            "FilePath": psd_path,
+            "EnableLayers": ["n153", "n89", "n88", "n147", "n109"],
+            "EyeAnimation": "Default",
+            "MouthAnimation": "Default"
+        }
+    })
+    with pytest.raises(ValidationError, match="MouthAnimation is 'Default'"):
         validate_ymmp_timeline(base_valid_ymmp)
 
 
