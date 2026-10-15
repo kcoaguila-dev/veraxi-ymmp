@@ -320,14 +320,29 @@ class MoviePyRenderer:
                 return get_bounce_offset
                 
             def get_mouth_state(t, c_name):
+                # 1. First check audio_readers for real audio timing
                 for st, et, ac, char_speaker in audio_readers:
                     if st <= t <= et and char_speaker == c_name:
-                        try:
-                            vol = np.abs(ac.get_frame(t - st)).mean()
-                            if vol > 0.015:
-                                return True
-                        except:
-                            pass
+                        t_local = t - st
+                        if 0.04 <= t_local <= max(0.04, ac.duration - 0.04):
+                            try:
+                                vol = np.abs(ac.get_frame(t_local)).mean()
+                                if vol < 0.0001:
+                                    vol_ahead = np.abs(ac.get_frame(min(ac.duration - 0.01, t_local + 0.02))).mean()
+                                    if vol_ahead < 0.0001:
+                                        return False
+                            except Exception:
+                                pass
+                            # Natural speech mouth flapping cadence: ~6.25 Hz (open ~90ms, closed ~70ms)
+                            return ((t_local * 6.25) % 1.0) < 0.55
+                        return False
+                # 2. Fallback to talk_times if audio_readers didn't match
+                for st, et, emo, motion, char_speaker in talk_times:
+                    if st <= t <= et and char_speaker == c_name:
+                        t_local = t - st
+                        dur = et - st
+                        if 0.04 <= t_local <= max(0.04, dur - 0.2):
+                            return ((t_local * 6.25) % 1.0) < 0.55
                 return False
                 
             def get_current_emotion(t, c_name):
