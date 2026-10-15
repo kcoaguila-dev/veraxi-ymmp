@@ -475,7 +475,7 @@ class YMMPCompiler:
                 "EnableLayers": b_layers,
                 "EnableLayerPaths": b_paths,
                 "EyeAnimation": "Default",
-                "MouthAnimation": "Default"
+                "MouthAnimation": "VolumeLipSyncPriority"
             }
             c["Font"] = "メイリオ"
             c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
@@ -525,7 +525,7 @@ class YMMPCompiler:
                     "EnableLayers": face_layers,
                     "EnableLayerPaths": face_paths,
                     "EyeAnimation": "Default",
-                    "MouthAnimation": "Default"
+                    "MouthAnimation": "VolumeLipSyncPriority"
                 },
                 "Layer": face_layer,
                 "Frame": frm,
@@ -569,12 +569,24 @@ class YMMPCompiler:
                 "CharacterName": char,
                 "Serif": wrap_japanese(txt, width=24),
                 "Decorations": [],
-                "Hatsuon": str(a_path.resolve()) if a_path else clip.hatsuon,
+                "Hatsuon": clip.hatsuon if clip.hatsuon else txt,
                 "Pronounce": None,
                 "LipSyncFrames": None,
                 "FilePath": str(a_path.resolve()) if a_path else "",
                 "VoiceLength": voice_len_str,
                 "VoiceCache": voice_cache_b64,
+                "VoiceParameter": {
+                    "$type": "YukkuriMovieMaker.Voice.VOICEVOXVoiceParameter, YukkuriMovieMaker",
+                    "StyleID": 3 if is_zunda else 2,
+                    "MorphingStyleID": -1,
+                    "MorphingRate": 50.0,
+                    "Speed": 100,
+                    "Pitch": 100.0,
+                    "Intonation": 100.0,
+                    "PrePhonemeLength": 0.1,
+                    "PostPhonemeLength": 0.1,
+                    "PauseLengthScale": 100.0
+                },
                 "Volume": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Pan": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
                 "PlaybackRate": 100.0,
