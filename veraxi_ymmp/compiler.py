@@ -587,6 +587,16 @@ class YMMPCompiler:
                     "PostPhonemeLength": 0.1,
                     "PauseLengthScale": 100.0
                 },
+                "TachieFaceParameter": {
+                    "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                    "IsEnabled": True,
+                    "FilePath": str(psd_p),
+                    "EnableLayers": face_layers,
+                    "EnableLayerPaths": face_paths,
+                    "EyeAnimation": "Default",
+                    "MouthAnimation": "VolumeLipSyncPriority"
+                },
+                "TachieFaceEffects": [],
                 "Volume": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Pan": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
                 "PlaybackRate": 100.0,
