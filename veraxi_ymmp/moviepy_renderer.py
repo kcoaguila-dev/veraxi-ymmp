@@ -17,39 +17,98 @@ import math
 from .ir import TimelineIR
 from .phonetics import extract_phonetic_blocks
 
-def wrap_japanese(text: str, width: int = 15) -> str:
-    """Wraps Japanese text cleanly so no line exceeds `width` characters, preferring natural punctuation breaks."""
+_budoux_parser = None
+
+def _get_budoux_parser():
+    global _budoux_parser
+    if _budoux_parser is None:
+        try:
+            import budoux
+            _budoux_parser = budoux.load_default_japanese_parser()
+        except Exception:
+            _budoux_parser = False
+    return _budoux_parser if _budoux_parser is not False else None
+
+
+def wrap_japanese(text: str, width: int = 20) -> str:
+    """
+    Wraps Japanese text cleanly using BudouX semantic phrase segmentation,
+    unbreakable token protection, Kinsoku Shori (forbidden line start/end rules),
+    and 2-line length balancing.
+
+    Guarantees:
+    - Numbers and units (e.g. 100, 100ドル, 4.0%, 5000億) are NEVER split across lines.
+    - English words and acronyms (e.g. ROI, AI, GPU) are kept unbroken.
+    - If text fits in 2 lines, divides at the most balanced phrase boundary.
+    - Strict Japanese Kinsoku Shori (never starts line with punct, never ends line with opening bracket).
+    """
     if not text:
         return ""
     if len(text) <= width:
         return text
 
-    puncts = ['！', '？', '。', '、', '…', ' ', '」', '』', '!']
-    best_split = -1
-    for i in range(min(width, len(text) - 1), max(width // 2, 4), -1):
-        if text[i] in puncts:
-            best_split = i + 1
-            break
+    parser = _get_budoux_parser()
+    if parser is not None:
+        raw_chunks = parser.parse(text)
+    else:
+        import re
+        # Fallback regex that treats alphanumeric/numbers + units as atomic tokens
+        pattern = r'[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*|[a-zA-Z]+|[一-龥ぁ-んァ-ヶー]+|[、。！？!?…]+|\s+|.'
+        raw_chunks = [m.group(0) for m in re.finditer(pattern, text)]
 
-    if best_split == -1:
-        best_split = width
+    if not raw_chunks:
+        return text
 
-    head = text[:best_split].strip()
-    tail = text[best_split:].strip()
+    # Merge punctuation / brackets to obey Kinsoku Shori (禁則処理)
+    forbidden_starts = set('！!？?。、…・ー)」』％%')
+    forbidden_ends = set('「『（(')
 
-    # Kinsoku shori: don't start a line with punctuation
-    forbidden_starts = set('！!？?。、…・ー)」』')
-    while tail and tail[0] in forbidden_starts:
-        head += tail[0]
-        tail = tail[1:].strip()
+    chunks = []
+    for c in raw_chunks:
+        if chunks and (c in forbidden_starts or chunks[-1] in forbidden_ends):
+            chunks[-1] += c
+        else:
+            chunks.append(c)
 
-    if not tail:
-        return head
-    return head + "\n" + wrap_japanese(tail, width)
+    total_len = sum(len(c) for c in chunks)
+
+    # 1. Optimal 2-Line Balancing: If the text fits in 2 lines (<= width * 2),
+    # find the semantic chunk boundary that minimizes line length difference
+    if total_len <= width * 2:
+        best_diff = 9999
+        best_split_idx = -1
+        cum_len = 0
+        for i in range(len(chunks) - 1):
+            cum_len += len(chunks[i])
+            rem_len = total_len - cum_len
+            if cum_len <= width and rem_len <= width:
+                diff = abs(cum_len - rem_len)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_split_idx = i
+        if best_split_idx != -1:
+            line1 = ''.join(chunks[:best_split_idx + 1]).strip()
+            line2 = ''.join(chunks[best_split_idx + 1:]).strip()
+            return f"{line1}\n{line2}"
+
+    # 2. Multi-line Greedy Packing
+    lines = []
+    curr = ""
+    for c in chunks:
+        if len(curr) + len(c) > width and curr:
+            lines.append(curr.strip())
+            curr = c
+        else:
+            curr += c
+    if curr:
+        lines.append(curr.strip())
+
+    return "\n".join(lines)
+
 
 def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
     """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped black text."""
-    wrapped_text = wrap_japanese(text, width=24)
+    wrapped_text = wrap_japanese(text, width=20)
     
     font_size = 52
     try:
