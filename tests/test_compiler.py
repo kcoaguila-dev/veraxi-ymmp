@@ -186,3 +186,103 @@ def test_compile_tts_unavailable(tmp_path):
 
     with pytest.raises(RuntimeError, match="TTS Backend not reachable"):
         compiler.compile(script, str(output_path))
+
+
+def test_coalesce_consecutive_images_and_tachie(tmp_path):
+    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    compiler = YMMPCompiler(template_path)
+
+    # 1. Setup dummy images
+    img1 = tmp_path / "chart1.png"
+    img2 = tmp_path / "chart2.png"
+    img1.write_bytes(b"dummy image 1")
+    img2.write_bytes(b"dummy image 2")
+
+    # Script with consecutive lines using the same image, then switching to a new image, then without image
+    script = [
+        {"character": "ずんだもん", "text": "一行目なのだ", "image": str(img1)},
+        {"character": "ずんだもん", "text": "二行目なのだ", "image": str(img1)},
+        {"character": "四国めたん", "text": "三行目ですわ", "image": str(img2)},
+        {"character": "四国めたん", "text": "四行目ですわ"},
+        {"character": "ずんだもん", "text": "五行目なのだ"},
+    ]
+
+    # Verify IR level B-roll DynamicImageClip coalescing in _build_ir
+    audio_dir = tmp_path / "audio"
+    timeline_ir, _ = compiler._build_ir(script, audio_dir)
+
+    # Consecutive script lines with the same image produce a single coalesced DynamicImageClip
+    # with length equal to the sum of consecutive lines' lengths.
+    # Switching to a different image creates a new clip.
+    assert len(timeline_ir.dynamic_image_clips) == 2
+
+    # First clip: coalesced from lines 0 and 1
+    clip0 = timeline_ir.dynamic_image_clips[0]
+    expected_coalesced_len = timeline_ir.voice_clips[0].length + timeline_ir.voice_clips[1].length
+    assert clip0.image_path.resolve() == img1.resolve()
+    assert clip0.start_frame == 0
+    assert clip0.length == expected_coalesced_len
+
+    # Second clip: separate clip for line 2
+    clip1 = timeline_ir.dynamic_image_clips[1]
+    assert clip1.image_path.resolve() == img2.resolve()
+    assert clip1.start_frame == expected_coalesced_len
+    assert clip1.length == timeline_ir.voice_clips[2].length
+
+    # Verify render level coalescing of TachieItem in _render_psd_ymmp
+    output_path = tmp_path / "output_coalesce.ymmp"
+    compiler.compile(script, str(output_path))
+
+    with open(output_path, "r", encoding="utf-8") as f:
+        output_data = json.load(f)
+
+    items = output_data["Timeline"]["Items"]
+
+    # Layer 1 ImageItems match the 2 dynamic image clips
+    l1_items = [i for i in items if i.get("Layer") == 1 and "ImageItem" in i.get("$type", "")]
+    assert len(l1_items) == 2
+    assert l1_items[0]["Length"] == expected_coalesced_len
+    assert l1_items[1]["Length"] == timeline_ir.voice_clips[2].length
+
+    # Tachie items on Layer 4 and Layer 6
+    l4_items = [i for i in items if i.get("Layer") == 4 and "TachieItem" in i.get("$type", "")]
+    l6_items = [i for i in items if i.get("Layer") == 6 and "TachieItem" in i.get("$type", "")]
+
+    # Layer 4 (四国めたん):
+    # - Line 2 has B-roll, 四国めたん is speaking: placed at X=650, Y=280, Zoom=55
+    # - Lines 3 & 4 have no B-roll: 四国めたん placed at X=-550, Y=250, Zoom=70
+    #   Lines 3 and 4 have identical spatial state -> coalesced into a single TachieItem!
+    assert len(l4_items) == 2
+    assert l4_items[0]["Length"] == timeline_ir.voice_clips[2].length
+    assert l4_items[1]["Length"] == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    assert l4_items[1]["Frame"] == timeline_ir.voice_clips[3].start_frame
+
+    # Layer 6 (ずんだもん):
+    # - Lines 0 & 1 have B-roll, ずんだもん is speaking: placed at X=650, Y=280, Zoom=55
+    #   Both lines have identical spatial state -> coalesced into a single TachieItem!
+    # - Lines 3 & 4 have no B-roll: ずんだもん placed at X=550, Y=250, Zoom=70
+    #   Both lines have identical spatial state -> coalesced into a single TachieItem!
+    assert len(l6_items) == 2
+    assert l6_items[0]["Length"] == timeline_ir.voice_clips[0].length + timeline_ir.voice_clips[1].length
+    assert l6_items[1]["Length"] == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    assert l6_items[1]["Frame"] == timeline_ir.voice_clips[3].start_frame
+
+    # Verify zero back-to-back duplicate items on Layer 1, 4, 6
+    for layer_num, layer_items in [(1, l1_items), (4, l4_items), (6, l6_items)]:
+        for idx in range(len(layer_items) - 1):
+            curr = layer_items[idx]
+            nxt = layer_items[idx + 1]
+            if curr["Frame"] + curr["Length"] == nxt["Frame"]:
+                if "TachieItem" in curr.get("$type", ""):
+                    same_char = curr.get("CharacterName") == nxt.get("CharacterName")
+                    same_x = curr["X"]["Values"][0]["Value"] == nxt["X"]["Values"][0]["Value"]
+                    same_y = curr["Y"]["Values"][0]["Value"] == nxt["Y"]["Values"][0]["Value"]
+                    same_z = curr["Zoom"]["Values"][0]["Value"] == nxt["Zoom"]["Values"][0]["Value"]
+                    assert not (same_char and same_x and same_y and same_z), (
+                        f"Found uncoalesced back-to-back TachieItem on Layer {layer_num}: {curr} and {nxt}"
+                    )
+                elif "ImageItem" in curr.get("$type", ""):
+                    assert curr.get("FilePath") != nxt.get("FilePath"), (
+                        f"Found uncoalesced back-to-back ImageItem on Layer {layer_num}: {curr} and {nxt}"
+                    )
+
