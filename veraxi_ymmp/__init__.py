@@ -35,6 +35,12 @@ except ImportError:
     pass
 
 from . import broll
+from .thumbnail import (
+    ThumbnailConfig,
+    generate_thumbnail,
+    auto_extract_thumbnail_config,
+    generate_project_thumbnail,
+)
 
 __all__ = [
     "YMMPCompiler",
@@ -51,6 +57,11 @@ __all__ = [
     "generate_fcp_xml",
     "generate_srt",
     "broll",
+    "ThumbnailConfig",
+    "generate_thumbnail",
+    "auto_extract_thumbnail_config",
+    "generate_project_thumbnail",
 ]
 
 __version__ = "0.1.0"
+

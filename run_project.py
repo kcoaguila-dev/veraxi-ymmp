@@ -11,6 +11,7 @@ from veraxi_ymmp.compiler import YMMPCompiler
 from veraxi_ymmp.voicevox import VoicevoxClient
 from veraxi_ymmp.premiere_exporter import export_to_premiere
 from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
+from veraxi_ymmp.thumbnail import generate_project_thumbnail
 
 
 def run_project(
@@ -19,6 +20,7 @@ def run_project(
     do_ymmp: bool = True,
     do_qa: bool = True,
     qa_duration: float = 30.0,
+    do_thumbnail: bool = True,
 ):
     proj_dir = Path(project_path).resolve()
     if not proj_dir.exists():
@@ -91,13 +93,21 @@ def run_project(
 
     # 4. MoviePy QA Video
     if do_qa:
-        print(f"\n--- [3/3] Rendering MoviePy QA Preview Video ({qa_duration}s) ---")
+        print(f"\n--- [3/4] Rendering MoviePy QA Preview Video ({qa_duration}s) ---")
         renderer = MoviePyRenderer(timeline_ir)
         renderer.fast_qa_duration = qa_duration
         qa_out = proj_dir / "qa_test.mp4"
         renderer.render(str(qa_out))
         print(f"Success! QA preview video ready at:")
         print(f"  -> {qa_out}")
+
+    # 5. High-CTR YouTube Thumbnail
+    if do_thumbnail:
+        print(f"\n--- [4/4] Generating High-CTR YouTube Thumbnail ---")
+        thumb_out = proj_dir / "thumbnail.png"
+        generate_project_thumbnail(proj_dir, out_path=thumb_out)
+        print(f"Success! High-CTR YouTube thumbnail ready at:")
+        print(f"  -> {thumb_out}")
 
     print(f"\n=======================================================")
     print(f"  Project '{proj_dir.name}' Execution Finished!")
@@ -111,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-ymmp", action="store_true", help="Skip YMM4 export")
     parser.add_argument("--no-qa", action="store_true", help="Skip MoviePy QA render")
     parser.add_argument("--qa-duration", type=float, default=30.0, help="Duration for QA render in seconds")
+    parser.add_argument("--no-thumbnail", action="store_true", help="Skip YouTube thumbnail generation")
 
     args = parser.parse_args()
     run_project(
@@ -119,4 +130,5 @@ if __name__ == "__main__":
         do_ymmp=not args.no_ymmp,
         do_qa=not args.no_qa,
         qa_duration=args.qa_duration,
+        do_thumbnail=not args.no_thumbnail,
     )
