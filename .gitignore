@@ -66,6 +66,7 @@ artifacts/
 projects/*/audio/
 projects/*/ymmp/
 projects/*/premiere/
+projects/*/plates/
 projects/*/*.png
 projects/*/*.mp4
 
