@@ -134,6 +134,42 @@ def get_status_colors(accent_color: Tuple[int, int, int]):
         return (12, 74, 110, 255), (14, 165, 233, 255), (255, 255, 255, 255)
 
 
+# Cognitive Load Safety Ceiling for 4-6 second YouTube Cuts
+MAX_SLIDE_CHARS = 100
+MAX_SLIDE_ELEMENTS = 6
+
+def check_cognitive_load(
+    slide_title: str,
+    text_elements: List[str],
+    max_chars: int = MAX_SLIDE_CHARS,
+    max_elements: int = MAX_SLIDE_ELEMENTS
+):
+    """
+    Systematic Cognitive Load & Text Density Check.
+    Enforces the '1-Slide-1-Impact' rule for video presentation boards.
+    Rejects slides with excessive text, overcrowded bullet lists, or visual clutter
+    that causes viewer reading fatigue during 4-6 second cuts.
+    """
+    clean_texts = [str(t).strip() for t in text_elements if t and str(t).strip()]
+    total_chars = sum(len(t) for t in clean_texts)
+
+    if len(clean_texts) > max_elements:
+        raise ValueError(
+            f"Cognitive Overload Violation on slide '{slide_title}': "
+            f"Contains {len(clean_texts)} discrete text blocks (max {max_elements} allowed).\n"
+            f"Elements: {clean_texts}\n"
+            "Rule: YouTube presentation cuts require 1-Slide-1-Takeaway architecture to avoid cognitive fatigue."
+        )
+
+    if total_chars > max_chars:
+        raise ValueError(
+            f"Cognitive Overload Violation on slide '{slide_title}': "
+            f"Total text length ({total_chars} chars) exceeds the safe limit of {max_chars} chars.\n"
+            f"Elements: {clean_texts}\n"
+            "Rule: Video viewers have only 4-6 seconds to read. Streamline copy to punchy key phrases."
+        )
+
+
 def render_metric_slide(
     out_path: Path,
     title: str,
@@ -152,6 +188,13 @@ def render_metric_slide(
     - 1 Dominant Hero Focus Card (Giant Number + Status Pill)
     - 1 Clean Single Impact Banner (eliminating the cluttered multi-card stack)
     """
+    # Systematic Cognitive Load Validation
+    check_cognitive_load(
+        title,
+        [title, step_tag, category_tag, hero_metric, status_pill, impact_tag, impact_text, badge_text],
+        max_chars=MAX_SLIDE_CHARS,
+        max_elements=MAX_SLIDE_ELEMENTS
+    )
     img, draw, fonts = create_slide_base(title, step_tag=step_tag, category_tag=category_tag, theme_color=theme_color)
     x1, x2 = 70, 1340
 
@@ -221,6 +264,15 @@ def render_vs_slide(
     """
     Renders a Pro Split Comparison "VS" Slide for instant comprehension.
     """
+    # Systematic Cognitive Load Validation
+    left_texts = [left_box[0], left_box[1]] + list(left_box[2]) if left_box else []
+    right_texts = [right_box[0], right_box[1]] + list(right_box[2]) if right_box else []
+    check_cognitive_load(
+        title,
+        [title, step_tag, top_badge, hero_title, hero_status, bottom_tag, bottom_text] + left_texts + right_texts,
+        max_chars=MAX_SLIDE_CHARS,
+        max_elements=MAX_SLIDE_ELEMENTS
+    )
     img, draw, fonts = create_slide_base(title, step_tag=step_tag, theme_color=theme_color)
     x1, x2 = 70, 1340
 
@@ -310,6 +362,17 @@ def render_overview_slide(
     - If conclusion_text is empty, omits the bottom banner for a clean agenda look
     - Dynamic badge width prevents cutoff for 第１期 / 第２期 / 条件 01
     """
+    # Systematic Cognitive Load Validation
+    card_texts = []
+    for c in cards:
+        if isinstance(c, (list, tuple)):
+            card_texts.extend([str(x) for x in c[:-1] if isinstance(x, str)])
+    check_cognitive_load(
+        title,
+        [title, conclusion_tag, conclusion_text] + card_texts,
+        max_chars=MAX_SLIDE_CHARS,
+        max_elements=MAX_SLIDE_ELEMENTS + 4
+    )
     img, draw, fonts = create_slide_base(title, theme_color=theme_color)
     x1, x2 = 70, 1340
     n = len(cards)
