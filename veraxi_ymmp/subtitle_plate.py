@@ -24,7 +24,7 @@ def create_speech_plate(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
-    wrapped_text = wrap_japanese(text, width=24)
+    wrapped_text = wrap_japanese(text, width=20)
     font_size = 48
     try:
         try:
