@@ -10,10 +10,16 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 
 ## Pipeline Steps
 
-### 1. Script Generation
+### 1. Script Generation & B-Roll Assets
 - Write the JSON script (e.g. `artifacts/script.json`).
 - Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"jump"` or `"shake"`) when appropriate.
 - Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
+- **B-Roll Presentation Boards Standard (`veraxi_ymmp.broll`)**:
+  - Always use **Pro Dark Slate Theme** (`#0F172A` / `#1E293B`) for explanatory slides.
+  - Apply **1-Slide-1-Impact Architecture** (VS comparisons, big impact metric, or 3-card overview).
+  - Strictly **NO redundant category badges** (e.g. no `【マクロ経済】`), **NO English jargon** (`OVERVIEW`, `Higher for Longer`), **NO robotic brackets** (`【警告】`, `【急騰】`), and **NO premature conclusion labels** (`本日の結論` in video intro).
+  - **Overview / Agenda Slides**: Strictly **single-line headlines only** (no sub-bullet points, no premature conclusion boxes). 4-5 second cuts only allow scanning 3 clear headlines without cognitive overload.
+  - Use `veraxi_ymmp.broll` (`render_metric_slide`, `render_vs_slide`, `render_overview_slide`) to generate all slide assets.
 
 ### 2. Internal MP4 Render
 - Use the compiler to build the TimelineIR and render an internal `.mp4` video.
