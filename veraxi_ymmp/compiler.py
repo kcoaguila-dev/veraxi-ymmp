@@ -831,15 +831,15 @@ class YMMPCompiler:
             "VideoEffects": []
         })
 
-        # 4. Layer 1: B-Roll Images
+        # 4. Layer 1: B-Roll Images (Full-Screen 1920x1080 Presentation Slide)
         for clip in timeline_ir.dynamic_image_clips:
             items.append({
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
                 "FilePath": str(clip.image_path.resolve()),
-                "X": {"Values": [{"Value": -60.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Y": {"Values": [{"Value": -40.0}], "Span": 0.0, "AnimationType": "なし"},
+                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Y": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Opacity": {"Values": [{"Value": 100.0}]},
-                "Zoom": {"Values": [{"Value": 125.0}], "Span": 0.0, "AnimationType": "加減速移動"},
+                "Zoom": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Rotation": {"Values": [{"Value": 0.0}]},
                 "Blend": "Normal",
                 "Layer": 1,
