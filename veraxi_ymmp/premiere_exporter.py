@@ -181,9 +181,14 @@ def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int,
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
     
-    # Dynamic box size (YMM4 style zabuton)
-    box_w = min(max(text_w + 140, 600), 1700)
-    box_h = max(text_h + 50, 130)
+    # Dynamic box size with systematic harmonious padding
+    pad_x = 72
+    pad_y = 38
+    min_box_w = 480
+    min_box_h = 136
+    max_box_w = 1600
+    box_w = min(max(text_w + pad_x * 2, min_box_w), max_box_w)
+    box_h = max(text_h + pad_y * 2, min_box_h)
     
     # Make canvas full HD to avoid Premiere XML anchor/scale bugs
     canvas_w = 1920
