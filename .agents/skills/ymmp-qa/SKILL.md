@@ -53,12 +53,27 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - Are the subtitles readable and correctly positioned?
   - Is the pacing (TTS duration) correct?
 
-### 4. Revision Loop
-- If the QA fails (e.g., subtitles cut off, pacing is too fast), edit the JSON script and repeat Steps 2 & 3.
-
-### 5. Final Output
-- ONLY when you visually confirm the `.mp4` looks perfect, compile the final `.ymmp` for the user.
-- ```python
-  compiler._render_ymmp(timeline_ir, Path('artifacts/final_video.ymmp'), False, len(script), [])
+### 4. High-CTR YouTube Thumbnail Generation & QA
+- Every generated video project MUST have a publication-grade YouTube thumbnail (`thumbnail.png`).
+- Auto-generate using `veraxi_ymmp.thumbnail`:
+  ```python
+  from veraxi_ymmp.thumbnail import generate_project_thumbnail
+  generate_project_thumbnail(proj_dir, out_path=proj_dir / "thumbnail.png")
   ```
-- Notify the user and present the final `.ymmp` path.
+- **Thumbnail Review Criteria (Multimodal Inspection via `view_file`)**:
+  - **3-Split Composition**: Prominent character reaction face on the right (Zundamon/Metan), punchy copy on the left.
+  - **YouTube Safe Zone**: Bottom-right corner strictly clear of text or critical facial features (protected against duration badge `12:34`).
+  - **Multi-layer Outline (袋文字)**: Text has thick black stroke + drop shadow and is easily readable on mobile.
+  - **Jump Rate**: Key trigger word (e.g. 「ボロ儲け」「大波乱」) is highlighted in gold/red.
+  - **Character Cutout (白フチ)**: Clean white sticker rim stroke separating character from the dark blurred background.
+
+### 5. Revision Loop
+- If the QA fails (e.g., subtitles cut off, pacing is too fast, thumbnail text overlaps), edit the configuration/script and re-verify.
+
+### 6. Final Output
+- ONLY when you visually confirm the `.mp4` and `thumbnail.png` look perfect, hand the project to the user.
+- Output paths to report:
+  - `final_video.ymmp`
+  - `thumbnail.png`
+  - `qa_test.mp4` / Premiere XML
+
