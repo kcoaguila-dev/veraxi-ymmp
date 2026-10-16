@@ -113,12 +113,12 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
                         return layers
             except Exception:
                 pass
-    # Known defaults for standard characters if psd-ymm.json not found
+    # Known defaults for standard characters (strictly 1 open + 1 closed mouth, rival standard)
     p_name = p.name.lower()
     if "ずんだ" in p_name or "zunda" in p_name:
-        return {"n108", "n109", "n110", "n111", "n112", "n113", "n104"}
+        return {"n108", "n109"}
     elif "めたん" in p_name or "metan" in p_name:
-        return {"n47", "n48", "n46", "n43", "n42", "n41", "n39"}
+        return {"n47", "n48"}
     return set()
 
 
