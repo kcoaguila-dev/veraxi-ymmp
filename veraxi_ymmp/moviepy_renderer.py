@@ -138,9 +138,14 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
     
-    # Dynamic box size (YMM4 style zabuton)
-    box_w = min(max(text_w + 140, 750), 1680)
-    box_h = text_h + 60
+    # Dynamic box size with systematic harmonious padding
+    pad_x = 72
+    pad_y = 38
+    min_box_w = 480
+    min_box_h = 136
+    max_box_w = 1600
+    box_w = min(max(text_w + pad_x * 2, min_box_w), max_box_w)
+    box_h = max(text_h + pad_y * 2, min_box_h)
     
     # Center the dynamic box in the fixed canvas
     box_x = (canvas_w - box_w) / 2
