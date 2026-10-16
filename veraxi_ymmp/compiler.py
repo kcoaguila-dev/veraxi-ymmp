@@ -33,7 +33,7 @@ from .hatsuon import Hatsuon, HatsuonError
 from dataclasses import dataclass
 from .voicevox import VoicevoxClient, TTSBackend
 from .config import CompilerConfig
-from .utils import resolve_path, ensure_path
+from .utils import resolve_path, ensure_path, normalize_japanese_typography
 from .cache import TTSCache
 from .validation import validate_output_path, sanitize_filename
 from .logging import logger
@@ -196,7 +196,7 @@ class YMMPCompiler:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
-            text = line.get("text", "")
+            text = normalize_japanese_typography(line.get("text", ""))
             if not char_name:
                 continue
                 
@@ -571,7 +571,7 @@ class YMMPCompiler:
             char = clip.character
             frm = clip.start_frame
             lng = clip.length
-            txt = clip.text
+            txt = normalize_japanese_typography(clip.text)
             emo = clip.emotion
             a_path = clip.audio_path
             is_zunda = "ずんだ" in char

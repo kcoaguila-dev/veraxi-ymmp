@@ -27,7 +27,7 @@ def generate_market_regime_overview(out_path: Path):
     ]
     render_overview_slide(
         out_path=out_path,
-        title="2026年 株式市場の現在地と３大変化",
+        title="2026年 株式市場の現在地と3大変化",
         cards=cards,
         theme_color=ACCENT_BLUE
     )
@@ -37,7 +37,7 @@ def generate_market_regime_pt1(out_path: Path):
         out_path=out_path,
         title="世界最高峰の金融引き締めが長期化",
         step_tag="要点 01",
-        hero_metric="米国政策金利： 3.75 〜 4.00 ％",
+        hero_metric="米国政策金利：3.75〜4.00%",
         status_pill="インフレ高止まりにより「高金利が長期固定化」",
         impact_tag="",
         impact_text="企業の利払い負担が倍増 → 財務脆弱な企業を容赦なく淘汰",
@@ -49,7 +49,7 @@ def generate_market_regime_pt2(out_path: Path):
         out_path=out_path,
         title="地政学リスクによるエネルギー価格の再燃",
         step_tag="要点 02",
-        hero_metric="原油価格： 1バレル 100ドル突破",
+        hero_metric="原油価格：1バレル100ドル突破",
         status_pill="エネルギー・物流コストのインフレ圧力が世界的に再燃",
         impact_tag="",
         impact_text="コスト高騰が直撃 → 価格転嫁できない企業から脱落",
@@ -61,7 +61,7 @@ def generate_market_regime_pt3(out_path: Path):
         out_path=out_path,
         title="30年ぶりの「金利のある世界」が完全定着",
         step_tag="要点 03",
-        hero_metric="日銀利上げ： 政策金利 1.25 ％到達",
+        hero_metric="日銀利上げ：政策金利1.25%到達",
         status_pill="30年ぶりの「金利ある世界」へ完全移行",
         impact_tag="",
         impact_text="低金利バブルの終焉 → 借金依存のゾンビ企業が退場",
@@ -70,12 +70,12 @@ def generate_market_regime_pt3(out_path: Path):
 
 def generate_ai_phase_overview(out_path: Path):
     cards = [
-        ("第１期", "設備投資の熱狂（2024〜2025年）", ACCENT_VIOLET),
-        ("第２期", "投資回収（ROI）の試練（2026年〜現在）", ACCENT_RED),
+        ("第1期", "設備投資の熱狂（2024〜2025年）", ACCENT_VIOLET),
+        ("第2期", "投資回収（ROI）の試練（2026年〜現在）", ACCENT_RED),
     ]
     render_overview_slide(
         out_path=out_path,
-        title="AI市場は『選別の第２期』へ突入",
+        title="AI市場は『選別の第2期』へ突入",
         cards=cards,
         theme_color=ACCENT_VIOLET
     )
@@ -84,7 +84,7 @@ def generate_ai_phase_pt1(out_path: Path):
     render_metric_slide(
         out_path=out_path,
         title="設備投資の熱狂相場（2024〜2025年）",
-        step_tag="第１期",
+        step_tag="第1期",
         hero_metric="半導体・GPUの買い漁り熱狂",
         status_pill="『AI』の看板だけで資金が殺到した初期ブーム",
         impact_tag="",
@@ -96,7 +96,7 @@ def generate_ai_phase_pt2(out_path: Path):
     render_metric_slide(
         out_path=out_path,
         title="投資回収（ROI）の過酷な試練（2026年〜現在）",
-        step_tag="第２期",
+        step_tag="第2期",
         hero_metric="年間5,000億ドルの回収要求",
         status_pill="「そのAIで実際にいくら利益が増えたのか？」の検証期",
         impact_tag="",
@@ -112,7 +112,7 @@ def generate_checklist_overview(out_path: Path):
     ]
     render_overview_slide(
         out_path=out_path,
-        title="高金利時代に勝つ「優良企業の３条件」",
+        title="高金利時代に勝つ「優良企業の3つの条件」",
         cards=cards,
         theme_color=ACCENT_GREEN
     )
