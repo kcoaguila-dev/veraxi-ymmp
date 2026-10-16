@@ -647,7 +647,7 @@ class YMMPCompiler:
                 "$type": "YukkuriMovieMaker.Project.Items.VoiceItem, YukkuriMovieMaker",
                 "IsWaveformEnabled": True,
                 "CharacterName": char,
-                "Serif": wrap_japanese(txt, width=24),
+                "Serif": wrap_japanese(txt, width=20),
                 "Decorations": [],
                 "Hatsuon": clip.hatsuon if clip.hatsuon else txt,
                 "Pronounce": None,
@@ -948,7 +948,7 @@ class YMMPCompiler:
             
             # Apply Japanese word wrapping to avoid text cutoff in YMM4
             from veraxi_ymmp.moviepy_renderer import wrap_japanese
-            new_item["Serif"] = wrap_japanese(clip.text, width=24)
+            new_item["Serif"] = wrap_japanese(clip.text, width=20)
             
             new_item["Hatsuon"] = clip.hatsuon
             new_item["Frame"] = clip.start_frame
