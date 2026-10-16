@@ -89,8 +89,8 @@ class ThumbnailConfig:
         return cls(**filtered)
 
 
-def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, ImageFont.FreeTypeFont]:
-    """Loads fonts with automatic fallback."""
+def find_best_font_path(font_bold: str = "BIZ-UDGothicB.ttc") -> Tuple[Optional[str], int]:
+    """Finds the best available font path and font index."""
     candidate_fonts = [
         font_bold,
         "meiryob.ttc",
@@ -98,27 +98,23 @@ def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, Image
         "BIZ-UDGothicR.ttc",
         "msgothic.ttc",
     ]
-    
-    font_path = None
-    font_index = 0
     for cand in candidate_fonts:
         try:
-            # Try index 1 first for TTC fonts (Japanese full width), then index 0
             try:
-                test_f = ImageFont.truetype(cand, 30, index=1)
-                font_path = cand
-                font_index = 1
-                break
+                ImageFont.truetype(cand, 30, index=1)
+                return cand, 1
             except Exception:
-                test_f = ImageFont.truetype(cand, 30, index=0)
-                font_path = cand
-                font_index = 0
-                break
+                ImageFont.truetype(cand, 30, index=0)
+                return cand, 0
         except Exception:
             continue
+    return None, 0
 
+
+def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, ImageFont.FreeTypeFont]:
+    """Loads fonts with automatic fallback."""
+    font_path, font_index = find_best_font_path(font_bold)
     if font_path is None:
-        # Ultimate fallback
         default_f = ImageFont.load_default()
         return {
             "badge": default_f,
@@ -133,6 +129,66 @@ def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, Image
         "title2": ImageFont.truetype(font_path, 225, index=font_index),
         "sub": ImageFont.truetype(font_path, 58, index=font_index),
     }
+
+
+def calculate_line_width(font: ImageFont.FreeTypeFont, text: str, hl_word: str = "") -> int:
+    """Calculates total pixel width of a text line (taking highlight spacing into account)."""
+    if not text:
+        return 0
+    if hl_word and hl_word in text:
+        parts = text.split(hl_word, 1)
+        prefix, suffix = parts[0], parts[1]
+        w = 0
+        if prefix:
+            b_p = font.getbbox(prefix)
+            w += (b_p[2] - b_p[0]) + 10
+        b_hl = font.getbbox(hl_word)
+        w += (b_hl[2] - b_hl[0]) + 14
+        if suffix:
+            b_s = font.getbbox(suffix)
+            w += (b_s[2] - b_s[0])
+        return w
+    bbox = font.getbbox(text)
+    return bbox[2] - bbox[0]
+
+
+def fit_font_to_width(
+    text: str,
+    base_size: int,
+    max_w: int,
+    font_path: Optional[str],
+    font_index: int = 0,
+    hl_word: str = "",
+    min_size: int = 40,
+) -> Tuple[ImageFont.FreeTypeFont, int]:
+    """
+    Dynamically scales font size down so text fits strictly within max_w.
+    Guarantees text never encroaches into character safe zone.
+    """
+    if not text:
+        return (ImageFont.load_default() if not font_path else ImageFont.truetype(font_path, base_size, index=font_index)), base_size
+    if not font_path or max_w <= 0:
+        return ImageFont.load_default(), base_size
+
+    size = base_size
+    font = ImageFont.truetype(font_path, size, index=font_index)
+    cur_w = calculate_line_width(font, text, hl_word)
+
+    if cur_w > max_w:
+        # Fast proportional jump
+        ratio = max_w / max(cur_w, 1)
+        size = max(min_size, int(base_size * ratio))
+        font = ImageFont.truetype(font_path, size, index=font_index)
+        cur_w = calculate_line_width(font, text, hl_word)
+
+        # Precise clamp downwards
+        while size > min_size and cur_w > max_w:
+            size -= 2
+            font = ImageFont.truetype(font_path, size, index=font_index)
+            cur_w = calculate_line_width(font, text, hl_word)
+
+    return font, size
+
 
 
 def draw_fukuro_text(
@@ -305,49 +361,69 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
         # Default: Cinematic Dark Studio Background with Manga Speedlines & Theme Aura
         canvas = create_pro_background(w, h, theme=config.theme)
 
-    # 2. Load System Fonts
-    fonts = get_thumbnail_fonts()
-
-    # 3. Character Rendering on Right Side (Massive Dominant Bust Shot)
+    # 2. Character Preparation & Bounding Box Extraction
     char_path = resolve_character_face(config.character, config.emotion, config.mouth_open)
+    char_data = None
+    char_left_edge_x = w - 70  # Default text margin if no character
+
     if char_path and char_path.exists():
-        char_img = Image.open(char_path).convert("RGBA")
-        target_h = int(1600 * config.character_scale)
-        aspect = char_img.width / char_img.height
-        target_w = int(target_h * aspect)
-        char_resized = char_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        try:
+            char_img = Image.open(char_path).convert("RGBA")
+            target_h = int(1600 * config.character_scale)
+            aspect = char_img.width / char_img.height
+            target_w = int(target_h * aspect)
+            char_resized = char_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
-        # Right-aligned, head anchored near top
-        char_x = w - target_w + 140
-        char_y = 30
+            # Anchor character on right side with head near top
+            char_x = w - target_w + 180
+            char_y = 30
 
-        # Alpha Extraction for White Rim Stroke & Drop Shadow
-        alpha = char_resized.split()[3]
-        stroke_width = 22
-        dilated_alpha = alpha.filter(ImageFilter.MaxFilter(2 * stroke_width + 1))
+            # Alpha Extraction for White Rim Stroke & Drop Shadow
+            alpha = char_resized.split()[3]
+            stroke_width = 22
+            dilated_alpha = alpha.filter(ImageFilter.MaxFilter(2 * stroke_width + 1))
+            bbox_dilated = dilated_alpha.getbbox()
 
-        # Ambient Drop Shadow
-        shadow_mask = dilated_alpha.filter(ImageFilter.GaussianBlur(25))
-        shadow_img = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 240))
-        shadow_img.putalpha(shadow_mask)
-        canvas.paste(shadow_img, (char_x - 16, char_y + 22), shadow_img)
+            if bbox_dilated:
+                char_left_edge_x = char_x + bbox_dilated[0]
 
-        # White Rim Stroke (22px Sticker Effect)
-        rim_img = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 255))
-        rim_img.putalpha(dilated_alpha)
-        canvas.paste(rim_img, (char_x, char_y), rim_img)
+            # Ambient Drop Shadow
+            shadow_mask = dilated_alpha.filter(ImageFilter.GaussianBlur(25))
+            shadow_img = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 240))
+            shadow_img.putalpha(shadow_mask)
 
-        # Paste Character Core
-        canvas.paste(char_resized, (char_x, char_y), char_resized)
+            # White Rim Stroke (22px Sticker Effect)
+            rim_img = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 255))
+            rim_img.putalpha(dilated_alpha)
 
-    # 4. Top Hook Pill Badge (Huge, High Contrast)
+            char_data = {
+                "resized": char_resized,
+                "shadow": shadow_img,
+                "rim": rim_img,
+                "pos": (char_x, char_y),
+                "shadow_pos": (char_x - 16, char_y + 22),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to process character for thumbnail: {e}")
+
+    # 3. Dynamic Safe Text Bounds (Mathematically Enforce Zero Collision with Character)
+    safety_margin = 50
+    max_text_right_bound = char_left_edge_x - safety_margin
+    start_x = 70
+    max_available_w = max(300, max_text_right_bound - start_x)
+
+    # 4. Load System Font Paths
+    font_path, font_index = find_best_font_path()
     draw = ImageDraw.Draw(canvas)
+
+    # 5. Top Hook Pill Badge (Huge, High Contrast)
     if config.badge:
         b_text = config.badge
-        b_bbox = fonts["badge"].getbbox(b_text)
+        f_badge, _ = fit_font_to_width(b_text, 56, max_available_w - 68, font_path, font_index)
+        b_bbox = f_badge.getbbox(b_text)
         bw = b_bbox[2] - b_bbox[0] + 68
         bh = 90
-        bx, by = 70, 75
+        bx, by = start_x, 75
 
         badge_bg = theme_colors["badge_bg"]
         badge_txt_color = theme_colors["badge_text"]
@@ -358,41 +434,45 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
             outline=(255, 255, 255, 255),
             width=4,
         )
-        draw.text((bx + 34, by + 14), b_text, font=fonts["badge"], fill=badge_txt_color + (255,))
+        draw.text((bx + 34, by + 14), b_text, font=f_badge, fill=badge_txt_color + (255,))
 
-    # 5. Main Ultra-Gigantic Catchphrase (Line 1: 185pt, Line 2: 225pt)
+    # 6. Main Ultra-Gigantic Catchphrase (Line 1: base 185pt, Line 2: base 225pt)
     t1_y = 195
     if config.title_line1:
+        f_t1, s_t1 = fit_font_to_width(config.title_line1, 185, max_available_w, font_path, font_index)
+        stroke_w1 = max(14, int(s_t1 * (26 / 185)))
         draw_fukuro_text(
             draw,
-            (70, t1_y),
+            (start_x, t1_y),
             config.title_line1,
-            fonts["title1"],
+            f_t1,
             fill_color=(255, 255, 255, 255),
-            stroke_w=26,
+            stroke_w=stroke_w1,
         )
 
     t2_y = 420
     if config.title_line2:
         t2_text = config.title_line2
         hl_word = config.highlight_word.strip()
+        f_t2, s_t2 = fit_font_to_width(t2_text, 225, max_available_w, font_path, font_index, hl_word=hl_word)
+        stroke_w2 = max(16, int(s_t2 * (28 / 225)))
 
         if hl_word and hl_word in t2_text:
             parts = t2_text.split(hl_word, 1)
             prefix = parts[0]
             suffix = parts[1]
 
-            cur_x = 70
+            cur_x = start_x
             if prefix:
                 draw_fukuro_text(
                     draw,
                     (cur_x, t2_y),
                     prefix,
-                    fonts["title2"],
+                    f_t2,
                     fill_color=(255, 255, 255, 255),
-                    stroke_w=28,
+                    stroke_w=stroke_w2,
                 )
-                bbox_p = fonts["title2"].getbbox(prefix)
+                bbox_p = f_t2.getbbox(prefix)
                 cur_x += (bbox_p[2] - bbox_p[0]) + 10
 
             # Highlight word in Canary Gold or Crimson Red
@@ -401,11 +481,11 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
                 draw,
                 (cur_x, t2_y),
                 hl_word,
-                fonts["title2"],
+                f_t2,
                 fill_color=hl_color,
-                stroke_w=28,
+                stroke_w=stroke_w2,
             )
-            bbox_hl = fonts["title2"].getbbox(hl_word)
+            bbox_hl = f_t2.getbbox(hl_word)
             cur_x += (bbox_hl[2] - bbox_hl[0]) + 14
 
             if suffix:
@@ -413,27 +493,28 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
                     draw,
                     (cur_x, t2_y),
                     suffix,
-                    fonts["title2"],
+                    f_t2,
                     fill_color=(255, 255, 255, 255),
-                    stroke_w=28,
+                    stroke_w=stroke_w2,
                 )
         else:
             draw_fukuro_text(
                 draw,
-                (70, t2_y),
+                (start_x, t2_y),
                 t2_text,
-                fonts["title2"],
+                f_t2,
                 fill_color=(255, 255, 255, 255),
-                stroke_w=28,
+                stroke_w=stroke_w2,
             )
 
-    # 6. Sub-Hook Pill Banner (58pt)
+    # 7. Sub-Hook Pill Banner (base 58pt)
     if config.sub_hook:
         sub_text = config.sub_hook
-        s_bbox = fonts["sub"].getbbox(sub_text)
+        f_sub, _ = fit_font_to_width(sub_text, 58, max_available_w - 74, font_path, font_index)
+        s_bbox = f_sub.getbbox(sub_text)
         sw = s_bbox[2] - s_bbox[0] + 74
         sh = 98
-        sx, sy = 70, 700
+        sx, sy = start_x, 700
 
         sub_bg = theme_colors["sub_bg"] + (250,)
         sub_border = theme_colors["sub_border"] + (255,)
@@ -446,7 +527,13 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
             outline=sub_border,
             width=4,
         )
-        draw.text((sx + 37, sy + 18), sub_text, font=fonts["sub"], fill=sub_txt)
+        draw.text((sx + 37, sy + 18), sub_text, font=f_sub, fill=sub_txt)
+
+    # 8. Character Layer Compositing on Top (Physical Zero-Collision Safety)
+    if char_data:
+        canvas.paste(char_data["shadow"], char_data["shadow_pos"], char_data["shadow"])
+        canvas.paste(char_data["rim"], char_data["pos"], char_data["rim"])
+        canvas.paste(char_data["resized"], char_data["pos"], char_data["resized"])
 
     canvas.save(out_file, "PNG")
     return out_file

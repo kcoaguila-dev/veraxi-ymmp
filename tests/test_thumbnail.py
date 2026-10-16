@@ -128,3 +128,18 @@ def test_generate_project_thumbnail(tmp_path: Path):
         res = generate_project_thumbnail(proj_dir, out_path=out_target)
         assert res.exists()
         assert res.stat().st_size > 0
+
+
+def test_thumbnail_auto_fit_long_text(tmp_path: Path):
+    out_target = tmp_path / "long_text_thumb.png"
+    config = ThumbnailConfig(
+        title_line1="非常に長すぎるスーパーウルトラ見出しテキスト",
+        title_line2="限界突破のハイパークライシス！？",
+        highlight_word="限界突破",
+        sub_hook="▶ 長いサブフックも完全に安全ゾーン内に自動スケール収容されることをテスト",
+        character="ずんだもん",
+    )
+    res = generate_thumbnail(config, out_target)
+    assert res.exists()
+    assert res.stat().st_size > 0
+
