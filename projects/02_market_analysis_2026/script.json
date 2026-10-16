@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "type": "bgm",
     "path": "assets/bgm/2_23_AM.mp3",
@@ -33,7 +33,7 @@
   {
     "character": "四国めたん",
     "emotion": "normal",
-    "text": "今、株式市場の深部では、過去２０年で最も劇的な地殻変動が起きているのです。"
+    "text": "今、株式市場の深部では、過去20年で最も劇的な地殻変動が起きているのです。"
   },
   {
     "character": "ずんだもん",
@@ -50,13 +50,13 @@
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/market_regime_pt1.png",
-    "text": "第一に、米国の政策金利は４％前後の高水準に留まり、長期化しています。"
+    "text": "第一に、米国の政策金利は4%前後の高水準に留まり、長期化しています。"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/market_regime_pt2.png",
-    "text": "第二に、地政学リスクにより原油価格が１バレル１００ドルを突破しました。"
+    "text": "第二に、地政学リスクにより原油価格が1バレル100ドルを突破しました。"
   },
   {
     "character": "四国めたん",
@@ -72,7 +72,7 @@
   {
     "character": "四国めたん",
     "emotion": "normal",
-    "text": "その通りですわ。過去１０年間続いた『タダ同然でお金を借りて急成長する時代』は完全に終了しました。"
+    "text": "その通りですわ。過去10年間続いた『タダ同然でお金を借りて急成長する時代』は完全に終了しました。"
   },
   {
     "character": "四国めたん",
@@ -82,25 +82,25 @@
   {
     "character": "ずんだもん",
     "emotion": "happy",
-    "text": "でもめたん、ＡＩブームがあるからハイテク株は安泰なんじゃないのだ？"
+    "text": "でもめたん、AIブームがあるからハイテク株は安泰なんじゃないのだ？"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/ai_phase_shift.png",
-    "text": "甘いですわね。ＡＩ市場は今、最も過酷な『選別の第２期』に突入しています。"
+    "text": "甘いですわね。AI市場は今、最も過酷な『選別の第2期』に突入しています。"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/ai_phase_pt1.png",
-    "text": "２０２４年から２０２５年は『半導体や設備を買い漁るフェーズ』でした。"
+    "text": "2024年から2025年は『半導体や設備を買い漁るフェーズ』でした。"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/ai_phase_pt1.png",
-    "text": "ＡＩと言えばどんな会社でも株価が跳ね上がる、いわばお祭り騒ぎでしたわ。"
+    "text": "AIと言えばどんな会社でも株価が跳ね上がる、いわばお祭り騒ぎでしたわ。"
   },
   {
     "character": "ずんだもん",
@@ -111,13 +111,13 @@
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/ai_phase_pt2.png",
-    "text": "ですが２０２６年の現在は、年間５０００億ドルに及ぶ巨額投資の『回収』を問われる段階です。"
+    "text": "ですが2026年の現在は、年間5000億ドルに及ぶ巨額投資の『回収』を問われる段階です。"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/ai_phase_pt2.png",
-    "text": "投資家たちは今、『で、そのＡＩで実際にいくら純利益が増えたの？』と冷徹に迫っています。"
+    "text": "投資家たちは今、『で、そのAIで実際にいくら純利益が増えたの？』と冷徹に迫っています。"
   },
   {
     "character": "ずんだもん",
@@ -138,13 +138,13 @@
     "character": "四国めたん",
     "emotion": "happy",
     "image": "projects/02_market_analysis_2026/broll/expert_checklist_2026.png",
-    "text": "お待たせしましたわ。プロが今、血眼で探している『勝ち組企業の３条件』を伝授します！"
+    "text": "お待たせしましたわ。プロが今、血眼で探している『勝ち組企業の3つの条件』を伝授します！"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/expert_checklist_pt1.png",
-    "text": "条件の１つ目は、『豊富なフリーキャッシュフローと無借金経営』です。"
+    "text": "条件の1つ目は、『豊富なフリーキャッシュフローと無借金経営』です。"
   },
   {
     "character": "四国めたん",
@@ -161,7 +161,7 @@
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/expert_checklist_pt2.png",
-    "text": "条件の２つ目は、『圧倒的な価格転嫁力』です。"
+    "text": "条件の2つ目は、『圧倒的な価格転嫁力』です。"
   },
   {
     "character": "四国めたん",
@@ -178,19 +178,19 @@
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/expert_checklist_pt3.png",
-    "text": "そして条件の３つ目は、『ＡＩを使って業務効率化・コスト削減に成功している実業企業』です。"
+    "text": "そして条件の3つ目は、『AIを使って業務効率化・コスト削減に成功している実業企業』です。"
   },
   {
     "character": "四国めたん",
     "emotion": "normal",
     "image": "projects/02_market_analysis_2026/broll/expert_checklist_pt3.png",
-    "text": "ＡＩを作る側ではなく、ＡＩを社内業務に組み込んで人件費や販管費を削り、利益率を伸ばす側ですわ。"
+    "text": "AIを作る側ではなく、AIを社内業務に組み込んで人件費や販管費を削り、利益率を伸ばす側ですわ。"
   },
   {
     "character": "ずんだもん",
     "emotion": "happy",
-    "text": "派手なＡＩスタートアップより、地味にＡＩを使いこなして利益を爆増させている既存企業なのだ！",
-    "tts_text": "派手なＡＩスタートアップより、地味にＡＩを使いこなして利益をばくぞうさせている既存企業なのだ！"
+    "text": "派手なAIスタートアップより、地味にAIを使いこなして利益を爆増させている既存企業なのだ！",
+    "tts_text": "派手なAIスタートアップより、地味にAIを使いこなして利益をばくぞうさせている既存企業なのだ！"
   },
   {
     "character": "四国めたん",
@@ -205,7 +205,7 @@
   {
     "character": "四国めたん",
     "emotion": "normal",
-    "text": "この３つを兼ね備えた企業こそが、次の数年で市場平均を圧倒する真の勝ち組になりますわ。"
+    "text": "この3つを兼ね備えた企業こそが、次の数年で市場平均を圧倒する真の勝ち組になりますわ。"
   },
   {
     "character": "ずんだもん",
@@ -215,7 +215,7 @@
   {
     "character": "四国めたん",
     "emotion": "happy",
-    "text": "当チャンネルでは、今後も世界を制する強いビジネスモデルの企業を１社ずつ徹底解剖していきますわ。"
+    "text": "当チャンネルでは、今後も世界を制する強いビジネスモデルの企業を1社ずつ徹底解剖していきますわ。"
   },
   {
     "character": "ずんだもん",
