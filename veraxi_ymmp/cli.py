@@ -72,6 +72,14 @@ def main():
     
     # YMM4 Export Feature
     parser.add_argument("--export-mp4", type=str, help="Automatically render to MP4 using YMM4 CLI (requires YMM4_PATH env var)")
+    
+    # YouTube Thumbnail Feature
+    parser.add_argument(
+        "--thumbnail",
+        nargs="?",
+        const="default",
+        help="Automatically generate high-CTR YouTube thumbnail PNG (optional: specify custom output path)"
+    )
 
     args = parser.parse_args()
 
@@ -257,6 +265,19 @@ def _compile(args: argparse.Namespace) -> None:
                 "--export"
             ], check=True)
             print("Export finished successfully!")
+
+        # Thumbnail Generation Feature
+        if getattr(args, "thumbnail", None):
+            from .thumbnail import generate_thumbnail, auto_extract_thumbnail_config
+            if args.thumbnail != "default":
+                thumb_target = Path(args.thumbnail)
+            else:
+                thumb_target = output_path.with_name(f"{output_path.stem}_thumbnail.png")
+
+            print(f"Generating high-CTR YouTube thumbnail to {thumb_target}...")
+            t_config = auto_extract_thumbnail_config(script_path.parent if script_path.exists() else validated_script)
+            generate_thumbnail(t_config, thumb_target)
+            print(f"Thumbnail generated successfully at: {thumb_target}")
 
     except (CompilerError, ValueError) as e:
         logger.error(f"Compilation error: {e}")
