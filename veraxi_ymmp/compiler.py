@@ -120,6 +120,8 @@ class YMMPCompiler:
         self.warnings.clear()
         self.errors.clear()
         audio_dir = output_path.parent / "audio"
+        if not audio_dir.exists() and (output_path.parent.parent / "audio").exists():
+            audio_dir = output_path.parent.parent / "audio"
         timeline_ir, audio_files = self._build_ir(script, audio_dir)
         return self._render_ymmp(timeline_ir, output_path, use_bom, len(script), audio_files)
 
@@ -293,6 +295,18 @@ class YMMPCompiler:
                 if not img_path.exists():
                     img_path = Path("artifacts") / img_name
                 if img_path.exists():
+                    resolved_img = img_path.resolve()
+                    for prev_clip in reversed(dynamic_image_clips):
+                        if prev_clip is active_bg or prev_clip.length == -1:
+                            continue
+                        if (
+                            prev_clip.image_path.resolve() == resolved_img
+                            and prev_clip.start_frame + prev_clip.length == current_frame
+                        ):
+                            prev_clip.length += length
+                            return
+                        if prev_clip.start_frame + prev_clip.length <= current_frame:
+                            break
                     dynamic_image_clips.append(DynamicImageClip(
                         image_path=img_path,
                         start_frame=current_frame,
@@ -688,8 +702,65 @@ class YMMPCompiler:
                 "VideoEffects": []
             })
 
-        # 2. Tachie Characters (L4 & L6)
+        # 2. Tachie Characters (L4 & L6) - Coalesce contiguous spans with identical spatial layout
         broll_intervals = [(img.start_frame, img.start_frame + img.length) for img in timeline_ir.dynamic_image_clips]
+        active_tachie_by_layer: Dict[int, Dict[str, Any]] = {}
+
+        def add_or_coalesce_tachie(
+            char_name: str,
+            t_layer: int,
+            t_psd: Path,
+            t_layers: List[str],
+            t_paths: List[str],
+            x_val: float,
+            y_val: float,
+            zoom_val: float,
+            frm: int,
+            lng: int,
+        ) -> None:
+            prev = active_tachie_by_layer.get(t_layer)
+            if (
+                prev is not None
+                and prev.get("CharacterName") == char_name
+                and prev["Frame"] + prev["Length"] == frm
+                and prev["X"]["Values"][0]["Value"] == x_val
+                and prev["Y"]["Values"][0]["Value"] == y_val
+                and prev["Zoom"]["Values"][0]["Value"] == zoom_val
+            ):
+                prev["Length"] += lng
+                return
+
+            new_tachie = {
+                "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
+                "CharacterName": char_name,
+                "TachieItemParameter": {
+                    "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                    "FilePath": str(t_psd),
+                    "EnableLayers": t_layers,
+                    "EnableLayerPaths": t_paths,
+                    "IsHiddenWhenNoSpeech": False
+                },
+                "X": {"Values": [{"Value": x_val}], "Span": 0.0, "AnimationType": "なし"},
+                "Y": {"Values": [{"Value": y_val}], "Span": 0.0, "AnimationType": "なし"},
+                "Zoom": {"Values": [{"Value": zoom_val}], "Span": 0.0, "AnimationType": "なし"},
+                "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "Blend": "Normal",
+                "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "FadeIn": 0.0,
+                "FadeOut": 0.0,
+                "Group": 0,
+                "KeyFrames": {"Frames": [], "Count": 0},
+                "IsLocked": False,
+                "IsHidden": False,
+                "Layer": t_layer,
+                "Frame": frm,
+                "Length": lng,
+                "VideoEffects": []
+            }
+            items.append(new_tachie)
+            active_tachie_by_layer[t_layer] = new_tachie
+
         for clip in timeline_ir.voice_clips:
             char = clip.character
             frm = clip.start_frame
@@ -701,91 +772,43 @@ class YMMPCompiler:
                 t_psd = zunda_psd if is_zunda else metan_psd
                 t_layers = zunda_base_layers if is_zunda else metan_base_layers
                 t_paths = zunda_base_paths if is_zunda else metan_base_paths
-                items.append({
-                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
-                    "CharacterName": char,
-                    "TachieItemParameter": {
-                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                        "FilePath": str(t_psd),
-                        "EnableLayers": t_layers,
-                        "EnableLayerPaths": t_paths,
-                        "IsHiddenWhenNoSpeech": False
-                    },
-                    "X": {"Values": [{"Value": 650.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Y": {"Values": [{"Value": 280.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Zoom": {"Values": [{"Value": 55.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Blend": "Normal",
-                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "FadeIn": 0.0,
-                    "FadeOut": 0.0,
-                    "Group": 0,
-                    "KeyFrames": {"Frames": [], "Count": 0},
-                    "IsLocked": False,
-                    "IsHidden": False,
-                    "Layer": t_layer,
-                    "Frame": frm,
-                    "Length": lng,
-                    "VideoEffects": []
-                })
+                add_or_coalesce_tachie(
+                    char_name=char,
+                    t_layer=t_layer,
+                    t_psd=t_psd,
+                    t_layers=t_layers,
+                    t_paths=t_paths,
+                    x_val=650.0,
+                    y_val=280.0,
+                    zoom_val=55.0,
+                    frm=frm,
+                    lng=lng,
+                )
             else:
-                items.append({
-                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
-                    "CharacterName": "四国めたん",
-                    "TachieItemParameter": {
-                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                        "FilePath": str(metan_psd),
-                        "EnableLayers": metan_base_layers,
-                        "EnableLayerPaths": metan_base_paths,
-                        "IsHiddenWhenNoSpeech": False
-                    },
-                    "X": {"Values": [{"Value": -550.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Y": {"Values": [{"Value": 250.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Zoom": {"Values": [{"Value": 70.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Blend": "Normal",
-                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "FadeIn": 0.0,
-                    "FadeOut": 0.0,
-                    "Group": 0,
-                    "KeyFrames": {"Frames": [], "Count": 0},
-                    "IsLocked": False,
-                    "IsHidden": False,
-                    "Layer": 4,
-                    "Frame": frm,
-                    "Length": lng,
-                    "VideoEffects": []
-                })
-                items.append({
-                    "$type": "YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker",
-                    "CharacterName": "ずんだもん",
-                    "TachieItemParameter": {
-                        "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                        "FilePath": str(zunda_psd),
-                        "EnableLayers": zunda_base_layers,
-                        "EnableLayerPaths": zunda_base_paths,
-                        "IsHiddenWhenNoSpeech": False
-                    },
-                    "X": {"Values": [{"Value": 550.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Y": {"Values": [{"Value": 250.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Zoom": {"Values": [{"Value": 70.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "Blend": "Normal",
-                    "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                    "FadeIn": 0.0,
-                    "FadeOut": 0.0,
-                    "Group": 0,
-                    "KeyFrames": {"Frames": [], "Count": 0},
-                    "IsLocked": False,
-                    "IsHidden": False,
-                    "Layer": 6,
-                    "Frame": frm,
-                    "Length": lng,
-                    "VideoEffects": []
-                })
+                add_or_coalesce_tachie(
+                    char_name="四国めたん",
+                    t_layer=4,
+                    t_psd=metan_psd,
+                    t_layers=metan_base_layers,
+                    t_paths=metan_base_paths,
+                    x_val=-550.0,
+                    y_val=250.0,
+                    zoom_val=70.0,
+                    frm=frm,
+                    lng=lng,
+                )
+                add_or_coalesce_tachie(
+                    char_name="ずんだもん",
+                    t_layer=6,
+                    t_psd=zunda_psd,
+                    t_layers=zunda_base_layers,
+                    t_paths=zunda_base_paths,
+                    x_val=550.0,
+                    y_val=250.0,
+                    zoom_val=70.0,
+                    frm=frm,
+                    lng=lng,
+                )
 
         # 3. Layer 0: Background ImageItem (Zoom: 187.5 to fully fill 1920x1080)
         bg_candidate = Path("assets/bg/clean_classroom.jpg").resolve()
