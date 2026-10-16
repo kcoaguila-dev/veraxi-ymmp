@@ -380,8 +380,8 @@ class PremiereExporter:
                 dur = total_frames if bg.length == -1 else bg.length
                 self._create_clipitem(v1_track, bg.image_path, bg.start_frame, dur, f"bg_{i}", "Background", fit_to_screen=True)
             else:
-                # B-Roll (V2) placed on right side
-                self._create_clipitem(v2_track, bg.image_path, bg.start_frame, bg.length, f"broll_{i}", "B-Roll", scale=45.0, x_offset=0.2, y_offset=-0.05)
+                # B-Roll (V2) Full-Screen 1920x1080 Presentation Slide
+                self._create_clipitem(v2_track, bg.image_path, bg.start_frame, bg.length, f"broll_{i}", "B-Roll", fit_to_screen=True)
 
     def _populate_character_lipsync(self, char_tracks: list, unique_chars: list, proj_dir: Path, total_frames: int) -> None:
         import math

@@ -166,7 +166,7 @@ class MoviePyRenderer:
             }
             border_color = char_colors.get(vc.character, (120, 130, 150, 255))
             
-            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 700))
+            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 725))
             bubbles_list.append(bubble)
             
             current_time += dur
@@ -215,8 +215,7 @@ class MoviePyRenderer:
                 bgs.append(img)
             else:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                img = img.resized(width=1650)
-                img = img.with_position((35, 25))
+                img = img.resized((1920, 1080)).with_position("center")
                 brolls.append(img)
 
                 
@@ -311,7 +310,7 @@ class MoviePyRenderer:
                     if is_in_broll(t):
                         spk = get_active_speaker(t)
                         if spk == c_name:
-                            bx, by = 1280, 220
+                            bx, by = 1350, 240
                         else:
                             return (-9999, -9999)
                     else:
