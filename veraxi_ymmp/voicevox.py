@@ -147,6 +147,19 @@ class VoicevoxClient:
         except requests.exceptions.RequestException:
             return False
 
+    def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
+        """Fetch AudioQuery dictionary for text without synthesizing audio."""
+        try:
+            res = requests.post(
+                f"{self.base_url}/audio_query",
+                params={"text": text, "speaker": speaker_id},
+                timeout=30
+            )
+            res.raise_for_status()
+            return res.json()
+        except requests.exceptions.RequestException as e:
+            raise VoicevoxError(f"Failed to fetch audio_query: {e}")
+
     def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
         """
         Synthesize speech from text using a specific speaker.

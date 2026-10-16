@@ -15,6 +15,7 @@ from moviepy import AudioFileClip
 import math
 
 from .ir import TimelineIR
+from .phonetics import extract_phonetic_blocks
 
 def wrap_japanese(text: str, width: int = 15) -> str:
     """Wraps Japanese text cleanly so no line exceeds `width` characters, preferring natural punctuation breaks."""
@@ -133,6 +134,7 @@ class MoviePyRenderer:
         talk_times = []
         audio_readers = []
         bubbles_list = []
+        char_open_intervals = {}
         
         for vc in self.ir.voice_clips:
             start_time = current_time
@@ -148,6 +150,14 @@ class MoviePyRenderer:
             if vc.audio_path:
                 audio_readers.append((start_time, start_time + dur, ac, vc.character))
                 audio_clips.append(ac.with_start(start_time))
+
+            # Sliced phonetic open intervals for speech lip-sync
+            if vc.character not in char_open_intervals:
+                char_open_intervals[vc.character] = []
+            blocks = extract_phonetic_blocks(vc.audio_query, dur, fps=fps)
+            for b_s, b_e, is_open in blocks:
+                if is_open:
+                    char_open_intervals[vc.character].append((start_time + b_s, start_time + b_e))
             
             char_colors = {
                 "ずんだもん": (34, 197, 94, 255),    # Vibrant Green
@@ -320,29 +330,11 @@ class MoviePyRenderer:
                 return get_bounce_offset
                 
             def get_mouth_state(t, c_name):
-                # 1. First check audio_readers for real audio timing
-                for st, et, ac, char_speaker in audio_readers:
-                    if st <= t <= et and char_speaker == c_name:
-                        t_local = t - st
-                        if 0.04 <= t_local <= max(0.04, ac.duration - 0.04):
-                            try:
-                                vol = np.abs(ac.get_frame(t_local)).mean()
-                                if vol < 0.0001:
-                                    vol_ahead = np.abs(ac.get_frame(min(ac.duration - 0.01, t_local + 0.02))).mean()
-                                    if vol_ahead < 0.0001:
-                                        return False
-                            except Exception:
-                                pass
-                            # Natural speech mouth flapping cadence: ~6.25 Hz (open ~90ms, closed ~70ms)
-                            return ((t_local * 6.25) % 1.0) < 0.55
-                        return False
-                # 2. Fallback to talk_times if audio_readers didn't match
-                for st, et, emo, motion, char_speaker in talk_times:
-                    if st <= t <= et and char_speaker == c_name:
-                        t_local = t - st
-                        dur = et - st
-                        if 0.04 <= t_local <= max(0.04, dur - 0.2):
-                            return ((t_local * 6.25) % 1.0) < 0.55
+                # Check exact mora-synchronized vowel intervals (the rival standard)
+                intervals = char_open_intervals.get(c_name, [])
+                for op_s, op_e in intervals:
+                    if op_s <= t < op_e:
+                        return True
                 return False
                 
             def get_current_emotion(t, c_name):
