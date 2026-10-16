@@ -19,6 +19,11 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - Apply **1-Slide-1-Impact Architecture** (VS comparisons, big impact metric, or 3-card overview).
   - Strictly **NO redundant category badges** (e.g. no `【マクロ経済】`), **NO English jargon** (`OVERVIEW`, `Higher for Longer`), **NO robotic brackets** (`【警告】`, `【急騰】`), and **NO premature conclusion labels** (`本日の結論` in video intro).
   - **Overview / Agenda Slides**: Strictly **single-line headlines only** (no sub-bullet points, no premature conclusion boxes). 4-5 second cuts only allow scanning 3 clear headlines without cognitive overload.
+  - **Systematic Cognitive Load & Text Density Rule**:
+    - Hard ceiling: **<= 100 characters total** across all text on any slide.
+    - Maximum **6 discrete text elements** (title, step tag, hero, status pill, impact text, optional badge).
+    - **Zero nested bullet lists** on presentation cuts (causes severe reading fatigue and fights with subtitles/characters).
+    - Maintain visual symmetry across related sequences (e.g. Condition 01, 02, 03 must share the same clean `render_metric_slide` structure).
   - Use `veraxi_ymmp.broll` (`render_metric_slide`, `render_vs_slide`, `render_overview_slide`) to generate all slide assets.
 
 ### 2. Internal MP4 Render
