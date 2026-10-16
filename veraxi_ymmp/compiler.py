@@ -446,17 +446,13 @@ class YMMPCompiler:
                     layers.extend(["n147", "n139"])
                     paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0"])
 
-                zunda_mouth_map = {
-                    "a": ("n108", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*あは\x1d0"),
-                    "i": ("n113", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*えへ\x1d0"),
-                    "u": ("n104", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*お\x1d0"),
-                    "e": ("n112", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほあ\x1d0"),
-                    "o": ("n111", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほう\x1d0"),
-                    "silent": ("n109", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"),
-                }
-                m_lid, m_path = zunda_mouth_map.get(vowel, zunda_mouth_map["silent"])
-                layers.append(m_lid)
-                paths.append(m_path)
+                is_mouth_open = is_open if is_open is not None else (vowel != "silent")
+                if is_mouth_open:
+                    layers.append("n108")
+                    paths.append("\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*あは\x1d0")
+                else:
+                    layers.append("n109")
+                    paths.append("\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0")
                 return layers, paths
             else:  # 四国めたん
                 layers = ["n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33", "n79", "n70", "n49", "n86", "n85", "n82", "n84"]
@@ -481,17 +477,13 @@ class YMMPCompiler:
                     layers.extend(["n78", "n69", "n60", "n68", "n67"])
                     paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0"])
 
-                metan_mouth_map = {
-                    "a": ("n48", "\x1c!口\x1d0\x1c*わあー\x1d0"),
-                    "i": ("n41", "\x1c!口\x1d0\x1c*△\x1d0"),
-                    "u": ("n42", "\x1c!口\x1d0\x1c*ゆ\x1d0"),
-                    "e": ("n46", "\x1c!口\x1d0\x1c*▽\x1d0"),
-                    "o": ("n43", "\x1c!口\x1d0\x1c*お\x1d0"),
-                    "silent": ("n47", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"),
-                }
-                m_lid, m_path = metan_mouth_map.get(vowel, metan_mouth_map["silent"])
-                layers.append(m_lid)
-                paths.append(m_path)
+                is_mouth_open = is_open if is_open is not None else (vowel != "silent")
+                if is_mouth_open:
+                    layers.append("n48")
+                    paths.append("\x1c!口\x1d0\x1c*わあー\x1d0")
+                else:
+                    layers.append("n47")
+                    paths.append("\x1c!口\x1d0\x1c*ほほえみ\x1d0")
                 return layers, paths
 
         # Load prototype character to preserve all 86 YMM4 properties
@@ -531,7 +523,7 @@ class YMMPCompiler:
                 "EnableLayers": b_layers,
                 "EnableLayerPaths": b_paths,
                 "EyeAnimation": "Default",
-                "MouthAnimation": "VowelLipSyncPriority"
+                "MouthAnimation": "VolumeLipSyncPriority"
             }
             c["Font"] = "メイリオ"
             c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
@@ -572,21 +564,20 @@ class YMMPCompiler:
             face_layer = 11 if is_zunda else 10
             psd_p = zunda_psd if is_zunda else metan_psd
 
-            face_layers_key, face_paths_key = get_face_layers_and_paths(char, emo, vowel="a")
+            face_layers_key, face_paths_key = get_face_layers_and_paths(char, emo, is_open=True)
 
-            # Face items (L10/L11) - Sliced by 5-vowel phonetic mora blocks for natural articulation
+            # Face items (L10/L11) - Sliced by 2-state phonetic blocks (1 open mouth + 1 closed mouth, rival standard)
             clip_dur = lng / timeline_ir.fps
-            vowel_blocks = extract_vowel_blocks(clip.audio_query, clip_dur, fps=timeline_ir.fps)
+            phonetic_blocks = extract_phonetic_blocks(clip.audio_query, clip_dur, fps=timeline_ir.fps)
             cur_f = frm
-            for b_idx, (b_s, b_e, vowel_shape) in enumerate(vowel_blocks):
-                if b_idx == len(vowel_blocks) - 1:
+            for b_idx, (b_s, b_e, is_open) in enumerate(phonetic_blocks):
+                if b_idx == len(phonetic_blocks) - 1:
                     b_end_f = frm + lng
                 else:
                     b_end_f = min(frm + lng, frm + int(round(b_e * timeline_ir.fps)))
                 b_len = b_end_f - cur_f
                 if b_len > 0:
-                    f_layers, f_paths = get_face_layers_and_paths(char, emo, vowel=vowel_shape)
-                    is_open_vowel = vowel_shape != "silent"
+                    f_layers, f_paths = get_face_layers_and_paths(char, emo, is_open=is_open)
                     items.append({
                         "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
                         "CharacterName": char,
@@ -597,12 +588,12 @@ class YMMPCompiler:
                             "EnableLayers": f_layers,
                             "EnableLayerPaths": f_paths,
                             "EyeAnimation": "Default",
-                            "MouthAnimation": "AlwaysOpen" if is_open_vowel else "AlwaysClose"
+                            "MouthAnimation": "AlwaysOpen" if is_open else "AlwaysClose"
                         },
                         "Layer": face_layer,
                         "Frame": cur_f,
                         "Length": b_len,
-                        "Remark": f"{emo}_{vowel_shape}"
+                        "Remark": f"{emo}_{'open' if is_open else 'closed'}"
                     })
                     cur_f = b_end_f
 
