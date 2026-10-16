@@ -34,6 +34,8 @@ try:
 except ImportError:
     pass
 
+from . import broll
+
 __all__ = [
     "YMMPCompiler",
     "CompilerError",
@@ -48,6 +50,7 @@ __all__ = [
     "export_to_premiere",
     "generate_fcp_xml",
     "generate_srt",
+    "broll",
 ]
 
 __version__ = "0.1.0"
