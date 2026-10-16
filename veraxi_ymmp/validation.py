@@ -105,6 +105,10 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
                     layers = set()
                     for ma in d.get("MouthAnimations", []):
                         layers.update(ma.get("Layers", []))
+                    for mva in d.get("MouthVowelAnimations", []):
+                        for k in ("Key", "A", "I", "U", "E", "O", "Silence"):
+                            if mva.get(k):
+                                layers.add(mva[k])
                     if layers:
                         return layers
             except Exception:
@@ -112,9 +116,9 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
     # Known defaults for standard characters if psd-ymm.json not found
     p_name = p.name.lower()
     if "ずんだ" in p_name or "zunda" in p_name:
-        return {"n108", "n109"}
+        return {"n108", "n109", "n110", "n111", "n112", "n113", "n104"}
     elif "めたん" in p_name or "metan" in p_name:
-        return {"n47", "n48"}
+        return {"n47", "n48", "n46", "n43", "n42", "n41", "n39"}
     return set()
 
 
