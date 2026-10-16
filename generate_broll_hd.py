@@ -97,8 +97,8 @@ def generate_ai_phase_pt2(out_path: Path):
         out_path=out_path,
         title="投資回収（ROI）の過酷な試練（2026年〜現在）",
         step_tag="第2期",
-        hero_metric="年間5,000億ドルの回収要求",
-        status_pill="「そのAIで実際にいくら利益が増えたのか？」の検証期",
+        hero_metric="年間7,000億ドルの回収要求",
+        status_pill="米ビッグテック巨額投資の「回収（ROI）」を問う検証期",
         impact_tag="",
         impact_text="支出に見合う利益が出ない企業は急落 → 実力派へ資金集中",
         theme_color=ACCENT_RED
@@ -142,24 +142,14 @@ def generate_checklist_pt2(out_path: Path):
     )
 
 def generate_checklist_pt3(out_path: Path):
-    render_vs_slide(
+    render_metric_slide(
         out_path=out_path,
         title="派手なAI開発ではなく「実業の利益率改善」",
         step_tag="条件 03",
-        hero_title="実務の「AI効率化」で利益率拡大",
-        hero_status="AIを社内業務に組み込み、人件費・販管費を削る側",
-        left_box=(
-            "AIを「作る」側",
-            "巨額の研究開発費 ＆ 消耗戦",
-            ["ROI（投資回収）の重いプレッシャー", "大半のスタートアップが淘汰"]
-        ),
-        right_box=(
-            "AIを「使う」側",
-            "人件費を削り、利益率を向上",
-            ["既存の巨大顧客基盤に自動化を実装", "確実な増益体質を実現"]
-        ),
-        bottom_tag="視点",
-        bottom_text="巨大顧客基盤 × AIによる業務自動化 ＝ 確実な増益体質！",
+        hero_metric="実務の「AI効率化」で利益率拡大",
+        status_pill="開発競争ではなく、社内業務に組み込み販管費を削る側",
+        impact_tag="",
+        impact_text="巨大顧客基盤 × AI自動化 ＝ 確実な増益体質を実現",
         theme_color=ACCENT_BLUE
     )
 
