@@ -64,6 +64,9 @@ class CompilerError(Exception):
 # Type alias for script entries
 ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 
+from .phonetics import extract_phonetic_blocks
+
+
 
 class YMMPCompiler:
     """
@@ -221,8 +224,17 @@ class YMMPCompiler:
             # Check for actual audio file to get accurate length
             if self.config.use_tts:
                 audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
+                query_filename = f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
                 audio_path = audio_dir / audio_filename
+                query_path = audio_dir / query_filename
                 
+                if query_path.exists():
+                    try:
+                        with open(query_path, "r", encoding="utf-8") as qf:
+                            audio_query = json.load(qf)
+                    except Exception as e:
+                        logger.warning(f"Failed to read query json for {audio_filename}: {e}")
+
                 # If the audio file already exists (e.g. from a previous run or cache)
                 if audio_path.exists():
                     try:
@@ -240,6 +252,17 @@ class YMMPCompiler:
                     raise RuntimeError("TTS Backend not reachable")
                 if not audio_path or not audio_path.exists():
                     length, audio_path, audio_query = self._synthesize_audio(idx, char_name, text, audio_dir)
+                elif audio_query is None:
+                    try:
+                        spk_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
+                        if hasattr(self.tts_backend, "get_audio_query"):
+                            audio_query = self.tts_backend.get_audio_query(text, spk_id)
+                            query_path = audio_dir / f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
+                            with open(query_path, "w", encoding="utf-8") as qf:
+                                json.dump(audio_query, qf, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch audio query for existing audio {audio_filename}: {e}")
+
                 if audio_path and audio_path not in audio_files:
                     audio_files.append(audio_path)
             else:
@@ -388,7 +411,7 @@ class YMMPCompiler:
             "\x1c!口\x1d0\x1c*ほほえみ\x1d0"
         ]
 
-        def get_face_layers_and_paths(char: str, emo: str) -> Tuple[List[str], List[str]]:
+        def get_face_layers_and_paths(char: str, emo: str, is_open: bool = False) -> Tuple[List[str], List[str]]:
             if "ずんだ" in char:
                 layers = ["n153", "n89", "n88", "n83", "n97", "n95", "n148", "n140", "n115", "n21", "n15", "n12", "n4", "n1", "n0"]
                 paths = [
@@ -399,20 +422,27 @@ class YMMPCompiler:
                     "\x1c!体\x1d0", "\x1c尻尾のような何か\x1d0"
                 ]
                 if emo == "surprised":
-                    layers.extend(["n145", "n132", "n109"])
-                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*上がり眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目2\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n145", "n132"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*上がり眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目2\x1d0"])
                 elif emo == "angry":
-                    layers.extend(["n149", "n135", "n109"])
-                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*怒り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*怒り目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n149", "n135"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*怒り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*怒り目\x1d0"])
                 elif emo == "sad":
-                    layers.extend(["n144", "n130", "n109"])
-                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*困り目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n144", "n130"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*困り目\x1d0"])
                 elif emo == "happy":
-                    layers.extend(["n147", "n121", "n109"])
-                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*にっこり\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n147", "n121"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*にっこり\x1d0"])
                 else: # normal
-                    layers.extend(["n147", "n139", "n109"])
-                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0", "\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n147", "n139"])
+                    paths.extend(["\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0", "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0"])
+
+                if is_open:
+                    layers.append("n108")
+                    paths.append("\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*あは\x1d0")
+                else:
+                    layers.append("n109")
+                    paths.append("\x1c*頭_正面向き\x1d0\x1c!口\x1d0\x1c*ほほえみ\x1d0")
                 return layers, paths
             else: # 四国めたん
                 layers = ["n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33", "n79", "n70", "n49", "n86", "n85", "n82", "n84"]
@@ -425,17 +455,24 @@ class YMMPCompiler:
                     "\x1c頭部アクセサリ\x1d0\x1cヘッドドレス\x1d0"
                 ]
                 if emo == "surprised":
-                    layers.extend(["n78", "n69", "n62", "n68", "n67", "n47"])
-                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*見開き白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n78", "n69", "n62", "n68", "n67"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*見開き白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0"])
                 elif emo == "angry":
-                    layers.extend(["n74", "n69", "n64", "n68", "n67", "n47"])
-                    paths.extend(["\x1c!眉\x1d0\x1c*怒り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*ジト白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n74", "n69", "n64", "n68", "n67"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*怒り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*ジト白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0"])
                 elif emo == "sad":
-                    layers.extend(["n77", "n69", "n65", "n68", "n67", "n47"])
-                    paths.extend(["\x1c!眉\x1d0\x1c*困り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*困り白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n77", "n69", "n65", "n68", "n67"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*困り\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*困り白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0"])
                 else: # happy or normal
-                    layers.extend(["n78", "n69", "n60", "n68", "n67", "n47"])
-                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0", "\x1c!口\x1d0\x1c*ほほえみ\x1d0"])
+                    layers.extend(["n78", "n69", "n60", "n68", "n67"])
+                    paths.extend(["\x1c!眉\x1d0\x1c*ごきげん\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0", "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0"])
+
+                if is_open:
+                    layers.append("n48")
+                    paths.append("\x1c!口\x1d0\x1c*わあー\x1d0")
+                else:
+                    layers.append("n47")
+                    paths.append("\x1c!口\x1d0\x1c*ほほえみ\x1d0")
                 return layers, paths
 
         # Load prototype character to preserve all 86 YMM4 properties
@@ -512,26 +549,38 @@ class YMMPCompiler:
             face_layer = 7 if is_zunda else 5
             psd_p = zunda_psd if is_zunda else metan_psd
 
-            face_layers, face_paths = get_face_layers_and_paths(char, emo)
+            face_layers_closed, face_paths_closed = get_face_layers_and_paths(char, emo, is_open=False)
 
-            # Face item (L5/L7)
-            items.append({
-                "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
-                "CharacterName": char,
-                "TachieFaceParameter": {
-                    "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                    "IsEnabled": True,
-                    "FilePath": str(psd_p),
-                    "EnableLayers": face_layers,
-                    "EnableLayerPaths": face_paths,
-                    "EyeAnimation": "Default",
-                    "MouthAnimation": "VolumeLipSyncPriority"
-                },
-                "Layer": face_layer,
-                "Frame": frm,
-                "Length": lng,
-                "Remark": f"emotion:{emo}"
-            })
+            # Face items (L5/L7) - Sliced by phonetic mora blocks for realistic rival-standard lip sync
+            clip_dur = lng / timeline_ir.fps
+            blocks = extract_phonetic_blocks(clip.audio_query, clip_dur, fps=timeline_ir.fps)
+            cur_f = frm
+            for b_idx, (b_s, b_e, is_open) in enumerate(blocks):
+                if b_idx == len(blocks) - 1:
+                    b_end_f = frm + lng
+                else:
+                    b_end_f = min(frm + lng, frm + int(round(b_e * timeline_ir.fps)))
+                b_len = b_end_f - cur_f
+                if b_len > 0:
+                    f_layers, f_paths = get_face_layers_and_paths(char, emo, is_open=is_open)
+                    items.append({
+                        "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
+                        "CharacterName": char,
+                        "TachieFaceParameter": {
+                            "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                            "IsEnabled": True,
+                            "FilePath": str(psd_p),
+                            "EnableLayers": f_layers,
+                            "EnableLayerPaths": f_paths,
+                            "EyeAnimation": "Default",
+                            "MouthAnimation": "VolumeLipSyncPriority"
+                        },
+                        "Layer": face_layer,
+                        "Frame": cur_f,
+                        "Length": b_len,
+                        "Remark": f"{emo}_{'open' if is_open else 'closed'}"
+                    })
+                    cur_f = b_end_f
 
             # Plate item (L8)
             plate_file = plates_dir / f"plate_{frm}_{char}.png"
@@ -589,12 +638,12 @@ class YMMPCompiler:
                 },
                 "TachieFaceParameter": {
                     "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                    "IsEnabled": True,
+                    "IsEnabled": False,
                     "FilePath": str(psd_p),
-                    "EnableLayers": face_layers,
-                    "EnableLayerPaths": face_paths,
+                    "EnableLayers": face_layers_closed,
+                    "EnableLayerPaths": face_paths_closed,
                     "EyeAnimation": "Default",
-                    "MouthAnimation": "VolumeLipSyncPriority"
+                    "MouthAnimation": "Default"
                 },
                 "TachieFaceEffects": [],
                 "Volume": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
@@ -1062,21 +1111,42 @@ class YMMPCompiler:
 
     def _synthesize_audio(self, idx: int, char_name: str, text: str, audio_dir: "Path") -> Tuple[int, Optional["Path"], Optional[Dict[str, Any]]]:
         speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
-        out_path = audio_dir / f"{idx:03d}_{char_name}.wav"
+        safe_char_name = sanitize_filename(char_name)
+        out_path = audio_dir / f"{idx:03d}_{safe_char_name}.wav"
+        query_path = audio_dir / f"{idx:03d}_{safe_char_name}.query.json"
         
+        audio_query = None
+        if query_path.exists():
+            try:
+                with open(query_path, "r", encoding="utf-8") as qf:
+                    audio_query = json.load(qf)
+            except Exception:
+                pass
+
         if out_path.exists():
+            if audio_query is None and hasattr(self.tts_backend, "get_audio_query"):
+                try:
+                    audio_query = self.tts_backend.get_audio_query(text, speaker_id)
+                    with open(query_path, "w", encoding="utf-8") as qf:
+                        json.dump(audio_query, qf, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
             import wave
             try:
                 with wave.open(str(out_path), 'rb') as wav:
                     actual_duration = wav.getnframes() / float(wav.getframerate())
-                    return int((actual_duration + 0.3) * self._get_fps()), out_path, None
+                    return int((actual_duration + 0.3) * self._get_fps()), out_path, audio_query
             except Exception:
-                return int(3.0 * self._get_fps()), out_path, None
+                return int(3.0 * self._get_fps()), out_path, audio_query
 
         cached = self.cache.get(text, speaker_id)
         if cached:
             wav_bytes, duration = cached
-            audio_query = None # Cache doesn't store audio_query yet
+            if audio_query is None and hasattr(self.tts_backend, "get_audio_query"):
+                try:
+                    audio_query = self.tts_backend.get_audio_query(text, speaker_id)
+                except Exception:
+                    pass
         else:
             try:
                 wav_bytes, duration, audio_query = self.tts_backend.synthesize(text, speaker_id)
@@ -1085,15 +1155,18 @@ class YMMPCompiler:
                 raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
 
         audio_dir.mkdir(parents=True, exist_ok=True)
-        safe_char_name = sanitize_filename(char_name)
-        audio_filename = f"{idx:03d}_{safe_char_name}.wav"
-        audio_path = audio_dir / audio_filename
-
-        with open(audio_path, 'wb') as f:
+        with open(out_path, 'wb') as f:
             f.write(wav_bytes)
 
+        if audio_query:
+            try:
+                with open(query_path, "w", encoding="utf-8") as qf:
+                    json.dump(audio_query, qf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
         length = int(duration * self._get_fps())
-        return length, audio_path, audio_query
+        return length, out_path, audio_query
 
     def _calculate_placeholder_length(self, text: str) -> int:
         return max(self.config.min_length_frames, len(text) * self.config.frames_per_char)
