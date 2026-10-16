@@ -97,18 +97,22 @@ def verify_project(ymmp_path_str: str):
 
     # 4. TachieFaceItems
     face_items = [it for it in items if 'TachieFaceItem' in it.get('$type', '')]
-    print(f"\n[4] TachieFaceItems (facial expressions): {len(face_items)} items")
+    print(f"\n[4] TachieFaceItems (facial expressions & 2-state lip-sync): {len(face_items)} items")
+    forbidden_zunda_mouths = {'n104', 'n110', 'n111', 'n112', 'n113'}
+    forbidden_metan_mouths = {'n39', 'n41', 'n42', 'n43', 'n46'}
     for f_it in face_items:
         char = f_it.get('CharacterName')
         fl = f_it.get('Layer')
-        assert fl in (5, 7), f"TachieFaceItem on wrong layer: {fl}"
+        assert fl in (5, 7, 10, 11), f"TachieFaceItem on wrong layer: {fl}"
         tfp = f_it.get('TachieFaceParameter', {})
         el = tfp.get('EnableLayers', [])
         assert len(el) > 0, "Face item has empty EnableLayers!"
-        assert tfp.get('MouthAnimation') in ("VolumeLipSyncPriority", "VowelLipSyncPriority"), f"MouthAnimation is {tfp.get('MouthAnimation')}, expected VolumeLipSyncPriority"
-        # Strict lip-sync check: YMM4's GetActiveMouthAnimations requires at least one registered mouth layer
-        expected_mouth = 'n109' if 'ずんだ' in char else 'n47'
-        assert expected_mouth in el, f"TachieFaceItem ({char}) at frame {f_it.get('Frame')} missing registered mouth layer {expected_mouth} in EnableLayers! YMM4 mouth will not move. Found: {el}"
+        assert tfp.get('MouthAnimation') in ("VolumeLipSyncPriority", "VowelLipSyncPriority", "AlwaysOpen", "AlwaysClose"), f"Invalid MouthAnimation: {tfp.get('MouthAnimation')}"
+        # Strict 2-state lip-sync check: only 1 open mouth + 1 closed mouth allowed (rival standard)
+        allowed_mouths = {'n108', 'n109'} if 'ずんだ' in char else {'n47', 'n48'}
+        forbidden_mouths = forbidden_zunda_mouths if 'ずんだ' in char else forbidden_metan_mouths
+        assert set(el) & allowed_mouths, f"TachieFaceItem ({char}) at frame {f_it.get('Frame')} missing 2-state mouth layer {allowed_mouths}! Found: {el}"
+        assert not (set(el) & forbidden_mouths), f"TachieFaceItem ({char}) at frame {f_it.get('Frame')} contains unnatural extra mouth layer {set(el) & forbidden_mouths}!"
 
     # 5. Subtitle Plates
     plates = [it for it in items if it.get('Layer') == 8 and 'ImageItem' in it.get('$type', '')]
