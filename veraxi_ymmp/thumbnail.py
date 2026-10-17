@@ -14,8 +14,10 @@ Features:
 import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+from .logging import logger
 
 # Theme Palettes
 THEMES: Dict[str, Dict[str, Tuple[int, int, int]]] = {
@@ -60,6 +62,29 @@ THEMES: Dict[str, Dict[str, Tuple[int, int, int]]] = {
         "sub_text": (248, 250, 252),
     },
 }
+
+TOPIC_PRESETS: List[Dict[str, Any]] = [
+    {
+        "keywords": ["costco", "コストコ"],
+        "title_line1": "コストコ",
+        "title_line2": "ボロ儲け！？",
+        "highlight_word": "ボロ儲け",
+        "sub_hook": "▶ 商品利益はまさかの「ほぼ0円」！？",
+        "badge": "【超・裏事情】",
+        "theme": "gold",
+        "emotion": "surprised",
+    },
+    {
+        "keywords": ["market", "株価", "金利"],
+        "title_line1": "株式市場",
+        "title_line2": "大暴落！？",
+        "highlight_word": "大暴落",
+        "sub_hook": "▶ 2026年、逃げ遅れたら全滅へ",
+        "badge": "【緊急警告】",
+        "theme": "red",
+        "emotion": "surprised",
+    },
+]
 
 
 @dataclass
@@ -543,36 +568,40 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
     """
     Intelligently analyzes a script or project directory to generate optimal ThumbnailConfig.
     Prioritizes:
-    1. Explicit thumbnail config in script.json (`{"type": "thumbnail", ...}`)
-    2. Explicit thumbnail.json file in project root
+    1. Explicit thumbnail config file in project root (`thumbnail_config.json` or `thumbnail.json`)
+    2. Explicit thumbnail config in script.json (`{"type": "thumbnail", ...}`)
     3. Heuristic topic analysis based on script dialogue and directory naming
     """
-    proj_dir = None
-    script = None
+    proj_dir: Optional[Path] = None
+    script: Optional[List[Any]] = None
 
     if isinstance(project_dir_or_script, (str, Path)):
         p = Path(project_dir_or_script).resolve()
         if p.is_dir():
             proj_dir = p
-            t_json = proj_dir / "thumbnail.json"
-            if t_json.exists():
-                try:
-                    data = json.loads(t_json.read_text(encoding="utf-8-sig"))
-                    return ThumbnailConfig.from_dict(data)
-                except Exception:
-                    pass
+            # 1. FIRST check thumbnail_config.json or thumbnail.json in project root
+            for cfg_name in ("thumbnail_config.json", "thumbnail.json"):
+                cfg_file = proj_dir / cfg_name
+                if cfg_file.exists():
+                    try:
+                        data = json.loads(cfg_file.read_text(encoding="utf-8-sig"))
+                        return ThumbnailConfig.from_dict(data)
+                    except Exception as e:
+                        logger.warning("Failed to load thumbnail config from %s: %s", cfg_file, e)
+
+            # Load script.json if available
             s_json = proj_dir / "script.json"
             if s_json.exists():
                 try:
                     script = json.loads(s_json.read_text(encoding="utf-8-sig"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to parse script.json in %s: %s", proj_dir, e)
         elif p.is_file():
             try:
                 script = json.loads(p.read_text(encoding="utf-8-sig"))
                 proj_dir = p.parent
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load script file %s: %s", p, e)
     elif isinstance(project_dir_or_script, list):
         script = project_dir_or_script
 
@@ -621,35 +650,24 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
             best_emotion = cand_emo
             break
 
-    # Topic-specific intelligence
+    # Topic-specific intelligence via data-driven preset dictionary
     dir_name = proj_dir.name.lower() if proj_dir else ""
     full_text = " ".join(all_texts)
+    combined_context = f"{dir_name} {full_text}"
 
-    if "costco" in dir_name or "コストコ" in full_text:
-        return ThumbnailConfig(
-            title_line1="コストコ",
-            title_line2="ボロ儲け！？",
-            highlight_word="ボロ儲け",
-            sub_hook="▶ 商品利益はまさかの「ほぼ0円」！？",
-            badge="【超・裏事情】",
-            character=lead_char,
-            emotion="surprised",
-            theme="gold",
-            bg_path=None,
-        )
-
-    if "market" in dir_name or "株価" in full_text or "金利" in full_text:
-        return ThumbnailConfig(
-            title_line1="株式市場",
-            title_line2="大暴落！？",
-            highlight_word="大暴落",
-            sub_hook="▶ 2026年、逃げ遅れたら全滅へ",
-            badge="【緊急警告】",
-            character=lead_char,
-            emotion="surprised",
-            theme="red",
-            bg_path=None,
-        )
+    for preset in TOPIC_PRESETS:
+        if any(kw.lower() in combined_context for kw in preset["keywords"]):
+            return ThumbnailConfig(
+                title_line1=preset["title_line1"],
+                title_line2=preset["title_line2"],
+                highlight_word=preset["highlight_word"],
+                sub_hook=preset["sub_hook"],
+                badge=preset["badge"],
+                character=lead_char,
+                emotion=preset.get("emotion", best_emotion),
+                theme=preset["theme"],
+                bg_path=None,
+            )
 
     # General Fallback
     title1 = "ヤバすぎる"

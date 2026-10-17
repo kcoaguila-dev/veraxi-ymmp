@@ -29,7 +29,7 @@ print("Building timeline from script...")
 import time
 audio_dir = Path(f"artifacts/audio_{int(time.time())}")
 audio_dir.mkdir(parents=True, exist_ok=True)
-timeline_ir, _ = compiler._build_ir(script, audio_dir)
+timeline_ir, _ = compiler.build_ir(script, audio_dir)
 
 print("Generating Premiere Pro XML + PNG Speech Bubbles...")
 # Output directories

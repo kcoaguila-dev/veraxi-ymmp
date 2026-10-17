@@ -18,7 +18,7 @@ speaker_map = {
 }
 compiler = YMMPCompiler('examples/full_template.ymmp', voicevox_client=vv, speaker_map=speaker_map)
 print("Building Timeline IR...", flush=True)
-timeline_ir, _ = compiler._build_ir(script, Path('artifacts/audio'))
+timeline_ir, _ = compiler.build_ir(script, Path('artifacts/audio'))
 print("Initializing MoviePyRenderer...", flush=True)
 renderer = MoviePyRenderer(timeline_ir)
 # Smart QA Duration: Render just enough to see every character speak at least once

@@ -58,7 +58,7 @@ def run_project(
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     print("Building Timeline IR & Synthesizing Audio...")
-    timeline_ir, audio_files = compiler._build_ir(script, audio_dir)
+    timeline_ir, audio_files = compiler.build_ir(script, audio_dir)
     print(f"Synthesized {len(timeline_ir.voice_clips)} voice clips successfully.")
 
     # 2. Premiere Pro XML Export
@@ -77,7 +77,7 @@ def run_project(
         ymmp_dir = proj_dir / "ymmp"
         ymmp_dir.mkdir(parents=True, exist_ok=True)
         ymmp_out = ymmp_dir / "final_video.ymmp"
-        compiler._render_ymmp(timeline_ir, ymmp_out, False, len(timeline_ir.voice_clips), audio_files)
+        compiler.render_ymmp(timeline_ir, ymmp_out, False, len(timeline_ir.voice_clips), audio_files)
         from veraxi_ymmp.validation import validate_ymmp_timeline
         with open(ymmp_out, 'r', encoding='utf-8') as f:
             v_data = json.load(f)

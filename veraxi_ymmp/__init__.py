@@ -20,6 +20,9 @@ Example usage:
 from __future__ import annotations
 
 from .compiler import YMMPCompiler, CompilerError
+from .psd_registry import CharacterPSDRegistry
+from .ir_builder import TimelineIRBuilder
+from .ymmp_renderer import YMMPRenderer, CompilationResult
 from .voicevox import VoicevoxClient, VoicevoxError
 from .hatsuon import Hatsuon, HatsuonError
 from .template import load_template, extract_character_templates, CharacterTemplates
@@ -45,6 +48,10 @@ from .thumbnail import (
 __all__ = [
     "YMMPCompiler",
     "CompilerError",
+    "CompilationResult",
+    "CharacterPSDRegistry",
+    "TimelineIRBuilder",
+    "YMMPRenderer",
     "VoicevoxClient",
     "VoicevoxError",
     "Hatsuon",

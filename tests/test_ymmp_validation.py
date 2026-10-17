@@ -9,6 +9,7 @@ import brotli
 import pytest
 from pathlib import Path
 from veraxi_ymmp.validation import validate_ymmp_timeline, ValidationError
+from veraxi_ymmp.psd_registry import CharacterPSDRegistry
 
 
 @pytest.fixture
@@ -20,7 +21,7 @@ def base_valid_ymmp():
     test_wav.write_bytes(wav_bytes)
 
     vc_b64 = base64.b64encode(brotli.compress(wav_bytes)).decode('ascii')
-    psd_path = str(Path.home() / "Pictures" / "ずんだもん立ち絵素材V3.2" / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd")
+    psd_path = str(CharacterPSDRegistry.resolve_psd_path("ずんだもん"))
 
     return {
         "Characters": [

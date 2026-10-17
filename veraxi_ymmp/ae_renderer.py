@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from .ir import TimelineIR
 
@@ -19,7 +20,9 @@ class AfterEffectsRenderer:
         script.append("mainComp.openInViewer();")
         
         # 2. Import PSD
-        psd_path = r"C:\Users\YourUser\Pictures\ずんだもん立ち絵素材V3.2\坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd".replace('\\', '/')
+        psd_dir = Path(os.environ.get("VERAXI_PSD_DIR", Path.home() / "Pictures"))
+        psd_file = psd_dir / "ずんだもん立ち絵素材V3.2" / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
+        psd_path = str(psd_file).replace('\\', '/')
         script.append(f"var psdFile = new File('{psd_path}');")
         script.append("var importOptions = new ImportOptions(psdFile);")
         script.append("importOptions.importAs = ImportAsType.COMP;")

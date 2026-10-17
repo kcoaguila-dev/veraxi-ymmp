@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Tuple, Protocol
 
 import requests
 
+from .logging import logger
+
 
 
 class TTSBackend(Protocol):
@@ -94,7 +96,7 @@ class VoicevoxClient:
         import time
         from pathlib import Path
         
-        print("VOICEVOX is not running. Attempting to start it automatically...")
+        logger.info("VOICEVOX is not running. Attempting to start it automatically...")
         
         # Common installation paths on Windows
         local_app_data = os.environ.get('LOCALAPPDATA', '')
@@ -112,10 +114,10 @@ class VoicevoxClient:
                 break
                 
         if not exe_path:
-            print("Could not find VOICEVOX executable automatically.")
+            logger.warning("Could not find VOICEVOX executable automatically.")
             return False
             
-        print(f"Found VOICEVOX at {exe_path}, launching...")
+        logger.info("Found VOICEVOX at %s, launching...", exe_path)
         try:
             # Launch in background without blocking
             subprocess.Popen([str(exe_path)], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
@@ -124,14 +126,14 @@ class VoicevoxClient:
             for _ in range(30):
                 time.sleep(1)
                 if self.is_available():
-                    print("VOICEVOX started successfully!")
+                    logger.info("VOICEVOX started successfully!")
                     return True
                     
-            print("VOICEVOX process launched, but API didn't become available in time.")
+            logger.warning("VOICEVOX process launched, but API didn't become available in time.")
             return False
             
         except Exception as e:
-            print(f"Failed to launch VOICEVOX: {e}")
+            logger.error("Failed to launch VOICEVOX: %s", e)
             return False
 
     def is_available(self) -> bool:
