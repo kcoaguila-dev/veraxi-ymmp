@@ -10,175 +10,64 @@ if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
     if _ffmpeg_bin:
         os.environ["IMAGEIO_FFMPEG_EXE"] = _ffmpeg_bin
 
-from moviepy import *
-from moviepy import AudioFileClip
+from moviepy import (
+    AudioFileClip,
+    ColorClip,
+    CompositeAudioClip,
+    CompositeVideoClip,
+    ImageClip,
+    TextClip,
+    VideoClip,
+    VideoFileClip,
+    afx,
+    vfx,
+)
 import math
 
 from .ir import TimelineIR
+from .logging import logger
 from .phonetics import extract_phonetic_blocks
-
-_budoux_parser = None
-
-def _get_budoux_parser():
-    global _budoux_parser
-    if _budoux_parser is None:
-        try:
-            import budoux
-            _budoux_parser = budoux.load_default_japanese_parser()
-        except Exception:
-            _budoux_parser = False
-    return _budoux_parser if _budoux_parser is not False else None
-
-
-def wrap_japanese(text: str, width: int = 20) -> str:
-    """
-    Wraps Japanese text cleanly using BudouX semantic phrase segmentation,
-    unbreakable token protection, Kinsoku Shori (forbidden line start/end rules),
-    and 2-line length balancing.
-
-    Guarantees:
-    - Numbers and units (e.g. 100, 100ドル, 4.0%, 5000億) are NEVER split across lines.
-    - English words and acronyms (e.g. ROI, AI, GPU) are kept unbroken.
-    - If text fits in 2 lines, divides at the most balanced phrase boundary.
-    - Strict Japanese Kinsoku Shori (never starts line with punct, never ends line with opening bracket).
-    """
-    if not text:
-        return ""
-    if len(text) <= width:
-        return text
-
-    parser = _get_budoux_parser()
-    if parser is not None:
-        raw_chunks = parser.parse(text)
-    else:
-        import re
-        # Fallback regex that treats alphanumeric/numbers + units as atomic tokens
-        pattern = r'[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*|[a-zA-Z]+|[一-龥ぁ-んァ-ヶー]+|[、。！？!?…]+|\s+|.'
-        raw_chunks = [m.group(0) for m in re.finditer(pattern, text)]
-
-    if not raw_chunks:
-        return text
-
-    # Merge punctuation / brackets to obey Kinsoku Shori (禁則処理)
-    forbidden_starts = set('！!？?。、…・ー)」』％%')
-    forbidden_ends = set('「『（(')
-
-    chunks = []
-    for c in raw_chunks:
-        if chunks and (c in forbidden_starts or chunks[-1] in forbidden_ends):
-            chunks[-1] += c
-        else:
-            chunks.append(c)
-
-    total_len = sum(len(c) for c in chunks)
-
-    # 1. Optimal 2-Line Balancing: If the text fits in 2 lines (<= width * 2),
-    # find the semantic chunk boundary that minimizes line length difference
-    if total_len <= width * 2:
-        best_diff = 9999
-        best_split_idx = -1
-        cum_len = 0
-        for i in range(len(chunks) - 1):
-            cum_len += len(chunks[i])
-            rem_len = total_len - cum_len
-            if cum_len <= width and rem_len <= width:
-                diff = abs(cum_len - rem_len)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_split_idx = i
-        if best_split_idx != -1:
-            line1 = ''.join(chunks[:best_split_idx + 1]).strip()
-            line2 = ''.join(chunks[best_split_idx + 1:]).strip()
-            return f"{line1}\n{line2}"
-
-    # 2. Multi-line Greedy Packing
-    lines = []
-    curr = ""
-    for c in chunks:
-        if len(curr) + len(c) > width and curr:
-            lines.append(curr.strip())
-            curr = c
-        else:
-            curr += c
-    if curr:
-        lines.append(curr.strip())
-
-    return "\n".join(lines)
+from .typography import (
+    calculate_speech_plate_geometry,
+    draw_rounded_speech_bubble,
+    wrap_japanese,
+)
 
 
 def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
     """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped black text."""
-    wrapped_text = wrap_japanese(text, width=20)
-    
-    font_size = 52
-    try:
-        try:
-            font = ImageFont.truetype("meiryob.ttc", font_size)
-        except Exception:
-            font = ImageFont.truetype("meiryo.ttc", font_size)
-    except Exception:
-        font = ImageFont.load_default()
-        
-    canvas_w, canvas_h = 1920, 360
-    
-    # Calculate text size
-    dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=12)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    
-    # If text is still slightly wide, scale down font
-    if text_w > 1550:
-        font_size = 46
-        try:
-            font = ImageFont.truetype("meiryob.ttc", font_size)
-        except Exception:
-            pass
-        bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-    
-    # Dynamic box size with systematic harmonious padding
-    pad_x = 72
-    pad_y = 38
-    min_box_w = 480
-    min_box_h = 136
-    max_box_w = 1600
-    box_w = min(max(text_w + pad_x * 2, min_box_w), max_box_w)
-    box_h = max(text_h + pad_y * 2, min_box_h)
-    
-    # Center the dynamic box in the fixed canvas
-    box_x = (canvas_w - box_w) / 2
-    box_y = (canvas_h - box_h) / 2
-    
-    img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
-    
-    # Draw drop shadow
-    shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([box_x+3, box_y+4, box_x+box_w+3, box_y+box_h+4], radius=22, fill=(0, 0, 0, 85))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(8))
-    img.alpha_composite(shadow)
-    
-    draw = ImageDraw.Draw(img)
-    fill_color = (255, 255, 255, 248)
-    draw.rounded_rectangle([box_x, box_y, box_x+box_w, box_y+box_h], radius=22, fill=fill_color, outline=border_color, width=7)
-    
-    # Calculate text center
-    x = box_x + (box_w - text_w) / 2 - bbox[0]
-    y = box_y + (box_h - text_h) / 2 - bbox[1]
-    
-    draw.multiline_text((x, y), wrapped_text, font=font, fill=(24, 24, 27, 255), spacing=12, align="center")
-    
+    geom = calculate_speech_plate_geometry(
+        text=text,
+        font_size=52,
+        canvas_w=1920,
+        canvas_h=360,
+        wrap_width=20,
+        spacing=12,
+        auto_scale_down=True,
+    )
+    img = draw_rounded_speech_bubble(
+        canvas_size=(1920, 360),
+        geometry=geom,
+        border_color=border_color,
+        fill_color=(255, 255, 255, 248),
+        border_width=7,
+        corner_radius=22,
+        shadow_offset=(3, 4),
+        shadow_color=(0, 0, 0, 85),
+        shadow_blur=8,
+        draw_text=True,
+        text_color=(24, 24, 27, 255),
+        text_spacing=12,
+    )
     img_array = np.array(img)
     clip = ImageClip(img_array).with_duration(duration)
-    
+
     from moviepy.video.fx import Resize
     def pop_in(t):
         if t < 0.15:
             return 0.8 + (t / 0.15) * 0.2
         return 1.0
-        
+
     return clip.with_effects([Resize(pop_in)])
 
 class MoviePyRenderer:
@@ -435,7 +324,7 @@ class MoviePyRenderer:
             video_clips.append(c_clip)
         video_clips.extend(bubbles_list)
 
-        print("Compositing video...")
+        logger.info("Compositing video...")
         final_video = CompositeVideoClip(video_clips, size=(1920, 1080)).with_duration(total_duration)
         # 6. Global Audio (BGM/SFX)
         from moviepy.audio.fx import AudioFadeOut
@@ -454,7 +343,7 @@ class MoviePyRenderer:
                     ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(clip.volume)
                 audio_clips.append(ac.with_start(clip.start_frame/fps))
             except Exception as e:
-                print(f"Failed to load audio {clip.audio_path}: {e}")
+                logger.error(f"Failed to load audio {clip.audio_path}: {e}")
 
         if audio_clips:
             final_audio = CompositeAudioClip(audio_clips).with_duration(total_duration)
@@ -464,7 +353,7 @@ class MoviePyRenderer:
         final_video = final_video.with_effects([FadeOut(2.0)])
             
         self.final_video = final_video
-        print(f"Writing to {output_path}...")
+        logger.info(f"Writing to {output_path}...")
         # Fast QA override if requested
         if getattr(self, 'fast_qa_duration', None):
             final_video = final_video.subclipped(0, min(self.fast_qa_duration, total_duration))

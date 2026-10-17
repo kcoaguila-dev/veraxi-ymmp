@@ -114,12 +114,8 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
             except Exception:
                 pass
     # Known defaults for standard characters (strictly 1 open + 1 closed mouth, rival standard)
-    p_name = p.name.lower()
-    if "ずんだ" in p_name or "zunda" in p_name:
-        return {"n108", "n109"}
-    elif "めたん" in p_name or "metan" in p_name:
-        return {"n47", "n48"}
-    return set()
+    from .psd_registry import CharacterPSDRegistry
+    return CharacterPSDRegistry.get_mouth_layers(p.name)
 
 
 

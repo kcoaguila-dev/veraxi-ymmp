@@ -104,7 +104,9 @@ def verify_video():
     cv2.putText(side_by_side, "OPEN (0.25s)", (560 + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
     cv2.putText(side_by_side, "PAUSE (0.8s)", (1120 + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     
-    out_img_path = 'C:/Users/YourUser/.gemini/antigravity/brain/a68a2470-c16f-4232-8b90-cfebd84730e7/mouth_verification.png'
+    out_dir = Path("artifacts")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_img_path = str(out_dir / "mouth_verification.png")
     cv2.imwrite(out_img_path, side_by_side)
     print(f"\nSaved mouth comparison artifact to: {out_img_path}")
 

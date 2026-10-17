@@ -19,17 +19,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .ir import TimelineIR
 from .logging import logger
+from .typography import (
+    calculate_speech_plate_geometry,
+    draw_rounded_speech_bubble,
+    wrap_japanese,
+)
 
-
-def _wrap_japanese(text: str, width: int = 28) -> str:
-    """Wrap Japanese text at a fixed character width (no word boundaries in Japanese)."""
-    res = []
-    while len(text) > width:
-        res.append(text[:width])
-        text = text[width:]
-    if text:
-        res.append(text)
-    return "\n".join(res)
+_wrap_japanese = wrap_japanese
 
 
 def prettify(elem: Element) -> str:
@@ -126,96 +122,48 @@ def get_audio_reactive_intervals(
 
         return intervals
     except Exception as e:
-        print("Warning: Audio-reactive lipsync fallback:", e)
+        logger.warning("Audio-reactive lipsync fallback: %s", e)
         return [(False, total_expected_frames)]
 
 
-def _wrap_japanese(text: str, width: int = 22) -> str:
-    if len(text) <= width:
-        return text
-    puncts = ['！', '？', '。', '、']
-    for p in puncts:
-        idx = text.find(p)
-        if 8 <= idx <= width:
-            return text[:idx+1] + "\n" + text[idx+1:]
-    res = []
-    while len(text) > width:
-        res.append(text[:width])
-        text = text[width:]
-    if text:
-        res.append(text)
-    return "\n".join(res)
-
-
-def create_speech_bubble_png(text: str, out_path: Path, border_color: Tuple[int, int, int] = (46, 139, 87)) -> None:
+def create_speech_bubble_png(
+    text: str,
+    out_path: Union[str, Path],
+    border_color: Tuple[int, int, int] = (46, 139, 87),
+) -> None:
     """Pre-render a Zundamon-style speech bubble to a PNG file.
 
     Creates a white rounded-rectangle with a dynamic border,
     drop shadow, and Meiryo Japanese typography.
     """
-    from PIL import Image, ImageDraw, ImageFont, ImageFilter
-    
-    wrapped_text = _wrap_japanese(text, width=22)
-    font_size = 52
-    try:
-        try:
-            font = ImageFont.truetype("meiryob.ttc", font_size)
-        except Exception:
-            font = ImageFont.truetype("meiryo.ttc", font_size)
-    except Exception:
-        font = ImageFont.load_default()
-
-    # Calculate text size first
-    dummy_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=12)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    
-    if text_w > 1550:
-        font_size = 46
-        try:
-            font = ImageFont.truetype("meiryob.ttc", font_size)
-        except Exception:
-            pass
-        bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=10)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-    
-    # Dynamic box size with systematic harmonious padding
-    pad_x = 72
-    pad_y = 38
-    min_box_w = 480
-    min_box_h = 136
-    max_box_w = 1600
-    box_w = min(max(text_w + pad_x * 2, min_box_w), max_box_w)
-    box_h = max(text_h + pad_y * 2, min_box_h)
-    
-    # Make canvas full HD to avoid Premiere XML anchor/scale bugs
-    canvas_w = 1920
-    canvas_h = 1080
-    
-    # Center the dynamic box horizontally, and place it at the bottom vertically
-    box_x = (canvas_w - box_w) / 2
-    box_y = 1080 - box_h - 40 # 40px padding from the bottom of the screen
-    
-    img = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
-
-    # Drop shadow
-    shadow = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([box_x + 6, box_y + 6, box_x + box_w + 6, box_y + box_h + 6], radius=25, fill=(0, 0, 0, 130))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
-    img.paste(shadow, (0, 0), shadow)
-
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([box_x, box_y, box_x + box_w, box_y + box_h], radius=25, fill=(255, 255, 255, 245), outline=border_color, width=12)
-    
-    # Center text in the dynamic box
-    text_x = box_x + (box_w - text_w) / 2 - bbox[0]
-    text_y = box_y + (box_h - text_h) / 2 - bbox[1]
-    
-    draw.multiline_text((text_x, text_y), wrapped_text, font=font, fill=(30, 30, 30), spacing=12, align="center")
+    geom = calculate_speech_plate_geometry(
+        text=text,
+        font_size=52,
+        canvas_w=1920,
+        canvas_h=1080,
+        wrap_width=22,
+        spacing=12,
+        auto_scale_down=True,
+        bottom_margin=40,
+    )
+    img = draw_rounded_speech_bubble(
+        canvas_size=(1920, 1080),
+        geometry=geom,
+        border_color=border_color,
+        fill_color=(255, 255, 255, 245),
+        border_width=12,
+        corner_radius=25,
+        shadow_offset=(6, 6),
+        shadow_color=(0, 0, 0, 130),
+        shadow_blur=8,
+        draw_text=True,
+        text_color=(30, 30, 30, 255),
+        text_spacing=12,
+    )
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
+
 
 
 class PremiereExporter:
@@ -641,7 +589,7 @@ class PremiereExporter:
             shutil.copy2(output_path, xml_output_dir / "Zundamon_Episode_1_PRO.xml")
 
         logger.info(f"Successfully generated xmeml at {output_path}")
-        print(f"Successfully generated FCPXML at {output_path}")
+        logger.info(f"Successfully generated FCPXML at {output_path}")
         return output_path
 
     def export_xmeml_without_bubbles(self, xml_output_dir: Path, proj_dir: Path) -> Path:
@@ -669,7 +617,7 @@ class PremiereExporter:
         output_path = xml_output_dir / "Zundamon_Episode_1_PRO.xml"
         self._write_xml(root, output_path)
         logger.info(f"Successfully generated xmeml (no bubbles) at {output_path}")
-        print(f"Successfully generated FCPXML (no bubbles) at {output_path}")
+        logger.info(f"Successfully generated FCPXML (no bubbles) at {output_path}")
         return output_path
 
     def export_native_bubbles(

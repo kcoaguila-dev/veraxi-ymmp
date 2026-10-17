@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Union
 from PIL import Image, ImageDraw, ImageFont
 
+from .logging import logger
+
 # Pro Dark Palette
 COLOR_CANVAS = (15, 23, 42, 255)       # Slate 900
 COLOR_SURFACE = (30, 41, 59, 255)      # Slate 800
@@ -245,7 +247,7 @@ def render_metric_slide(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
-    print(f"Saved: {out_path}")
+    logger.info("Saved: %s", out_path)
 
 
 def render_vs_slide(
@@ -344,7 +346,7 @@ def render_vs_slide(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
-    print(f"Saved: {out_path}")
+    logger.info("Saved: %s", out_path)
 
 
 def render_overview_slide(
@@ -457,7 +459,7 @@ def render_overview_slide(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
-    print(f"Saved: {out_path}")
+    logger.info("Saved: %s", out_path)
 
 
 COLOR_MAP: Dict[str, Tuple[int, int, int]] = {
