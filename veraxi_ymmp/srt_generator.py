@@ -7,9 +7,10 @@ pre-rendered PNG speech bubbles.
 """
 
 from pathlib import Path
-from typing import Union
+from typing import Any, Dict, Optional, Union
 
 from .ir import TimelineIR
+from .ports import ExportResult
 
 
 def _format_srt_time(seconds: float) -> str:
@@ -63,3 +64,30 @@ def generate_srt(ir: TimelineIR, output_path: Union[str, Path]) -> Path:
             f.write(f"{vc.text}\n\n")
 
     return output_path
+
+
+class SRTExporter:
+    """Exports TimelineIR voice clips to standard SRT subtitle files."""
+
+    def export(
+        self,
+        ir: TimelineIR,
+        output_path: Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> ExportResult:
+        """Generate an SRT subtitle file from TimelineIR."""
+        out_p = Path(output_path)
+        res_path = generate_srt(ir, out_p)
+        return ExportResult(
+            target_format="srt",
+            output_path=res_path,
+            artifacts=[res_path],
+            metadata={"entry_count": len(ir.voice_clips)},
+        )
+
+
+__all__ = [
+    "generate_srt",
+    "SRTExporter",
+    "_format_srt_time",
+]

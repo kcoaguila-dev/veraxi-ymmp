@@ -19,24 +19,34 @@ Unit test suite for newly extracted Clean Architecture components:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
 
+from veraxi_ymmp.ae_renderer import AfterEffectsRenderer
+from veraxi_ymmp.audio_normalizer import normalize_video_audio
 from veraxi_ymmp.compiler import CompilationResult, YMMPCompiler
+from veraxi_ymmp.constants import (
+    DEFAULT_BG_FILL_ZOOM,
+    DEFAULT_BGM_DUCKING_VOLUME,
+    DEFAULT_CANVAS_HEIGHT,
+    DEFAULT_CANVAS_WIDTH,
+    KNOWN_CHARACTERS,
+)
 from veraxi_ymmp.ir import (
     CharacterClip,
-    DynamicAudioClip,
-    DynamicImageClip,
-    GlobalClip,
     TimelineIR,
     VoiceClip,
 )
+from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
+from veraxi_ymmp.pipeline import ProjectPipeline
+from veraxi_ymmp.ports import ExportResult, TimelineExporter
+from veraxi_ymmp.premiere_exporter import PremiereExporter
 from veraxi_ymmp.psd_registry import CharacterPSDConfig, CharacterPSDRegistry
+from veraxi_ymmp.srt_generator import SRTExporter
 from veraxi_ymmp.typography import (
     CHAR_COLORS,
     DEFAULT_CHAR_COLOR,
@@ -46,6 +56,7 @@ from veraxi_ymmp.typography import (
     get_char_color,
     wrap_japanese,
 )
+from veraxi_ymmp.ymmp_renderer import YMMPRenderer
 
 
 # ==============================================================================
@@ -625,3 +636,209 @@ class TestYMMPCompilerPublicAPI:
             assert i1["$type"] == i2["$type"]
             assert i1["Frame"] == i2["Frame"]
             assert i1["Length"] == i2["Length"]
+
+
+# ==============================================================================
+# 4. Domain Constants & Ports Tests
+# ==============================================================================
+
+
+def _make_dummy_vc(
+    start_frame: int,
+    length: int,
+    text: str,
+    character: str = "ずんだもん",
+    emotion: str = "neutral",
+) -> VoiceClip:
+    return VoiceClip(
+        start_frame=start_frame,
+        length=length,
+        character=character,
+        text=text,
+        emotion=emotion,
+        motion="none",
+        audio_path=None,
+        hatsuon="",
+        subtitle_position="bottom_center",
+        subtitle_style="outlined",
+    )
+
+
+class TestDomainConstantsAndBrandColors:
+    """Tests for expanded domain constants and unified brand colors."""
+
+    def test_domain_constants_exist_and_types(self) -> None:
+        """Verify presence and type signatures of domain constants."""
+        assert DEFAULT_CANVAS_WIDTH == 1920
+        assert DEFAULT_CANVAS_HEIGHT == 1080
+        assert DEFAULT_BGM_DUCKING_VOLUME == 3.0
+        assert DEFAULT_BG_FILL_ZOOM == 187.5
+        assert isinstance(KNOWN_CHARACTERS, tuple)
+        assert "ずんだもん" in KNOWN_CHARACTERS
+        assert "四国めたん" in KNOWN_CHARACTERS
+        assert "春日部つむぎ" in KNOWN_CHARACTERS
+        assert "Zundamon" in KNOWN_CHARACTERS
+
+    def test_premiere_speech_bubbles_use_canonical_brand_color(self, tmp_path: Path) -> None:
+        """Verify PremiereExporter speech bubbles use canonical get_char_color."""
+        vc = _make_dummy_vc(
+            start_frame=0,
+            length=60,
+            character="ずんだもん",
+            text="テストですのだ",
+        )
+        ir = TimelineIR(fps=60, total_frames=60, voice_clips=[vc])
+        exporter = PremiereExporter(ir)
+        xml_dir = tmp_path / "xml"
+        proj_dir = tmp_path / "proj"
+        with patch("veraxi_ymmp.premiere_exporter.create_speech_bubble_png") as mock_create_bubble:
+            exporter.export_xmeml(xml_dir, proj_dir)
+            assert mock_create_bubble.called
+            # The border_color should match get_char_color("ずんだもん")[:3] -> (34, 197, 94)
+            canonical_color = get_char_color("ずんだもん")[:3]
+            call_border_color = mock_create_bubble.call_args[0][2]
+            assert call_border_color == canonical_color
+
+
+class TestTimelineExporterProtocol:
+    """Tests for TimelineExporter Protocol conformance across all adapters."""
+
+    def test_runtime_checkable_exporter_protocol(self) -> None:
+        """Verify all renderer/exporter adapters conform to TimelineExporter protocol."""
+        assert issubclass(YMMPRenderer, TimelineExporter)
+        assert issubclass(PremiereExporter, TimelineExporter)
+        assert issubclass(MoviePyRenderer, TimelineExporter)
+        assert issubclass(AfterEffectsRenderer, TimelineExporter)
+        assert issubclass(SRTExporter, TimelineExporter)
+
+    def test_exporters_can_be_instantiated_without_ir(self) -> None:
+        """MoviePyRenderer and AfterEffectsRenderer allow instantiation with ir=None."""
+        moviepy = MoviePyRenderer()
+        assert moviepy.ir is None
+        assert isinstance(moviepy, TimelineExporter)
+
+        ae = AfterEffectsRenderer()
+        assert ae.ir is None
+        assert isinstance(ae, TimelineExporter)
+
+    def test_srt_exporter_export_method(self, tmp_path: Path) -> None:
+        """SRTExporter produces valid ExportResult."""
+        vc = _make_dummy_vc(
+            start_frame=0,
+            length=120,
+            character="ずんだもん",
+            text="字幕のテストなのだ",
+        )
+        ir = TimelineIR(fps=60, total_frames=120, voice_clips=[vc])
+        exporter = SRTExporter()
+        out_srt = tmp_path / "subtitles.srt"
+        res = exporter.export(ir, out_srt)
+
+        assert isinstance(res, ExportResult)
+        assert res.target_format == "srt"
+        assert res.output_path == out_srt
+        assert out_srt.exists()
+        assert res.metadata["entry_count"] == 1
+        content = out_srt.read_text(encoding="utf-8")
+        assert "字幕のテストなのだ" in content
+
+    def test_ymmp_renderer_export_method(self, sample_template_path: Path, tmp_path: Path) -> None:
+        """YMMPRenderer produces valid ExportResult."""
+        with open(sample_template_path, "r", encoding="utf-8") as f:
+            template_data = json.load(f)
+        from veraxi_ymmp.template import extract_character_templates
+        char_templates = extract_character_templates(template_data)
+        renderer = YMMPRenderer(template_data=template_data, character_templates=char_templates)
+        vc = _make_dummy_vc(
+            start_frame=0,
+            length=60,
+            character="ゆっくり霊夢",
+            text="こんにちは",
+        )
+        ir = TimelineIR(fps=60, total_frames=60, voice_clips=[vc])
+        out_ymmp = tmp_path / "out.ymmp"
+        res = renderer.export(ir, out_ymmp)
+
+        assert isinstance(res, ExportResult)
+        assert res.target_format == "ymmp"
+        assert res.output_path == out_ymmp
+        assert out_ymmp.exists()
+        assert "item_count" in res.metadata
+
+    def test_premiere_exporter_export_method(self, tmp_path: Path) -> None:
+        """PremiereExporter produces valid ExportResult."""
+        vc = _make_dummy_vc(
+            start_frame=0,
+            length=60,
+            character="ずんだもん",
+            text="プレミア出力テスト",
+        )
+        ir = TimelineIR(fps=60, total_frames=60, voice_clips=[vc])
+        exporter = PremiereExporter()
+        out_xml = tmp_path / "output.xml"
+        res = exporter.export(ir, out_xml, options={"proj_dir": tmp_path})
+
+        assert isinstance(res, ExportResult)
+        assert res.target_format == "fcpxml"
+        assert res.output_path == out_xml
+        assert out_xml.exists()
+
+    def test_after_effects_renderer_export_method(self, tmp_path: Path) -> None:
+        """AfterEffectsRenderer produces valid ExportResult."""
+        ir = TimelineIR(fps=60, total_frames=120)
+        exporter = AfterEffectsRenderer()
+        out_jsx = tmp_path / "script.jsx"
+        res = exporter.export(ir, out_jsx)
+
+        assert isinstance(res, ExportResult)
+        assert res.target_format == "jsx"
+        assert res.output_path == out_jsx
+        assert out_jsx.exists()
+
+
+class TestAudioNormalizerService:
+    """Tests for the audio normalizer application service."""
+
+    def test_missing_input_raises_filenotfound(self, tmp_path: Path) -> None:
+        """Missing input video raises FileNotFoundError."""
+        missing = tmp_path / "non_existent.mp4"
+        out = tmp_path / "out.mp4"
+        with pytest.raises(FileNotFoundError):
+            normalize_video_audio(missing, out)
+
+    def test_successful_normalization_invocation(self, tmp_path: Path) -> None:
+        """FFmpeg command is properly composed and executed."""
+        dummy_in = tmp_path / "in.mp4"
+        dummy_in.write_text("dummy", encoding="utf-8")
+        dummy_out = tmp_path / "out.mp4"
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            res = normalize_video_audio(dummy_in, dummy_out, target_i=-16.0)
+
+            assert res == dummy_out.resolve()
+            assert mock_run.called
+            cmd = mock_run.call_args[0][0]
+            assert cmd[0] == "ffmpeg"
+            assert "-vcodec" in cmd
+            assert "loudnorm=I=-16.0:TP=-1.0:LRA=11.0:print_format=summary" in cmd[cmd.index("-af") + 1]
+
+
+class TestProjectPipeline:
+    """Tests for the ProjectPipeline service."""
+
+    def test_pipeline_missing_dir_returns_failure(self, tmp_path: Path) -> None:
+        """Non-existent project dir returns failed PipelineResult."""
+        pipeline = ProjectPipeline()
+        res = pipeline.run(tmp_path / "non_existent")
+        assert not res.success
+        assert len(res.errors) > 0
+
+    def test_pipeline_missing_script_returns_failure(self, tmp_path: Path) -> None:
+        """Project directory without script.json returns failed PipelineResult."""
+        proj_dir = tmp_path / "my_project"
+        proj_dir.mkdir()
+        pipeline = ProjectPipeline()
+        res = pipeline.run(proj_dir)
+        assert not res.success
+        assert any("script.json" in err for err in res.errors)

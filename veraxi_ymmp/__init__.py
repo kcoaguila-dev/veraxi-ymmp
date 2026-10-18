@@ -32,10 +32,15 @@ try:
 except ImportError:
     pass
 
+from .ports import ExportResult, TimelineExporter
+
 try:
-    from .srt_generator import generate_srt
+    from .srt_generator import generate_srt, SRTExporter
 except ImportError:
     pass
+
+from .pipeline import PipelineResult, ProjectPipeline
+from .audio_normalizer import normalize_video_audio
 
 from . import broll
 from .thumbnail import (
@@ -63,6 +68,12 @@ __all__ = [
     "export_to_premiere",
     "generate_fcp_xml",
     "generate_srt",
+    "SRTExporter",
+    "TimelineExporter",
+    "ExportResult",
+    "ProjectPipeline",
+    "PipelineResult",
+    "normalize_video_audio",
     "broll",
     "ThumbnailConfig",
     "generate_thumbnail",
@@ -71,4 +82,3 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
-
