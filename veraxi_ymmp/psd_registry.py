@@ -13,7 +13,9 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from .constants import DEFAULT_TEMPLATE_PATH
 
 
 @dataclass
@@ -440,7 +442,7 @@ class CharacterPSDRegistry:
         Creates a complete YMM4 Character definition preserving all required plugin properties.
         """
         if proto is None:
-            tmpl_p = template_path or Path("examples/full_template.ymmp")
+            tmpl_p = template_path or Path(DEFAULT_TEMPLATE_PATH)
             if tmpl_p.exists():
                 try:
                     with open(tmpl_p, "r", encoding="utf-8-sig") as tf:

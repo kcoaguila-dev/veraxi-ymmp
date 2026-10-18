@@ -1,0 +1,22 @@
+title = "Veraxi YMMP Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "local-user-path"
+description = "Hardcoded local user directory path detected"
+regex = '''(?i)(?:[A-Za-z]:[\\/]+Users[\\/]+|/(?:Users|home)/)[^\\/\s"'`:;,]+'''
+keywords = [
+    "Users",
+    "home",
+]
+
+[rules.allowlist]
+description = "Allowed documentation and generic placeholder user names"
+regexes = [
+    '''(?i)(?:[A-Za-z]:[\\/]+Users[\\/]+|/(?:Users|home)/)(?:YourUser|Public|Default|runner|runneradmin|<user>|\.\.\.)(?:[\\/\s"'`:;,]|$)''',
+]
+paths = [
+    '''scripts/check_no_local_paths\.py''',
+]

@@ -11,3 +11,20 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
+      - id: detect-private-key
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+  - repo: local
+    hooks:
+      - id: check-no-local-paths
+        name: check-no-local-paths
+        entry: python scripts/check_no_local_paths.py
+        language: system
+        types: [text]

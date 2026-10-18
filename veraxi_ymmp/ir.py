@@ -29,7 +29,11 @@ class CharacterClip(IRClip):
 @dataclass
 class GlobalClip(IRClip):
     """Represents a BGM or Background item spanning the video."""
-    template_item: Dict  # For now, we preserve the template item directly for exact YMM4 rendering
+    file_path: Optional[str] = None
+    item_type: Optional[str] = None
+    volume: float = 100.0
+    is_looped: bool = False
+    template_item: Dict = field(default_factory=dict)
 
 @dataclass
 class DynamicImageClip(IRClip):
@@ -51,6 +55,6 @@ class TimelineIR:
     global_clips: List[GlobalClip] = field(default_factory=list)
     dynamic_image_clips: List[DynamicImageClip] = field(default_factory=list)
     dynamic_audio_clips: List[DynamicAudioClip] = field(default_factory=list)
-    
+
     # We still need to pass down the template data so the YMM4 renderer knows how to style things
     template_data: Dict = field(default_factory=dict)

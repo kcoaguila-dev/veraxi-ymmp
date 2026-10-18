@@ -8,15 +8,16 @@ Provides a single source of truth for:
 - Speech plate geometry calculations and PIL rendering
 """
 
-import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-_budoux_parser = None
+FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
+
+_budoux_parser: Any = None
 
 
-def _get_budoux_parser():
+def _get_budoux_parser() -> Any:
     """Lazily load and cache the BudouX Japanese parser."""
     global _budoux_parser
     if _budoux_parser is None:
@@ -61,7 +62,7 @@ def wrap_japanese(text: str, width: int = 20) -> str:
     forbidden_starts = set('！!？?。、…・ー)」』％%')
     forbidden_ends = set('「『（(')
 
-    chunks = []
+    chunks: List[str] = []
     for c in raw_chunks:
         if chunks and (c in forbidden_starts or chunks[-1] in forbidden_ends):
             chunks[-1] += c
@@ -129,7 +130,7 @@ def get_char_color(
     return DEFAULT_CHAR_COLOR
 
 
-def get_speech_font(font_size: int = 52) -> ImageFont.ImageFont:
+def get_speech_font(font_size: int = 52) -> FontType:
     """Load system Japanese font (Meiryo Bold, Meiryo, or default)."""
     try:
         try:
@@ -149,8 +150,8 @@ class SpeechPlateGeometry:
     box_h: float
     text_w: float
     text_h: float
-    bbox: Tuple[int, int, int, int]
-    font: ImageFont.ImageFont
+    bbox: Tuple[float, float, float, float]
+    font: FontType
     wrapped_text: str
 
 

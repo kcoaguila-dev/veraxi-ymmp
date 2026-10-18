@@ -8,7 +8,7 @@ templates for VoiceItems and TachieItems.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, Dict, Optional, TypedDict, cast
 
 
 class CharacterTemplates(TypedDict):
@@ -20,10 +20,10 @@ class CharacterTemplates(TypedDict):
 def get_timeline(template_data: Dict[str, Any]) -> Dict[str, Any]:
     """Return the first timeline for both supported YMM4 project layouts."""
     if isinstance(template_data.get("Timeline"), dict):
-        return template_data["Timeline"]
+        return cast(Dict[str, Any], template_data["Timeline"])
     timelines = template_data.get("Timelines")
     if isinstance(timelines, list) and timelines and isinstance(timelines[0], dict):
-        return timelines[0]
+        return cast(Dict[str, Any], timelines[0])
     raise ValueError("Template does not contain a supported Timeline or Timelines section")
 
 
@@ -43,7 +43,7 @@ def load_template(filepath: str) -> Dict[str, Any]:
         UnicodeDecodeError: If the template file is not UTF-8 encoded.
     """
     with open(filepath, 'r', encoding='utf-8-sig') as f:
-        return json.load(f)
+        return cast(Dict[str, Any], json.load(f))
 
 
 def extract_character_templates(template_data: Dict[str, Any]) -> Dict[str, CharacterTemplates]:
@@ -95,7 +95,7 @@ def extract_text_template(template_data: Dict[str, Any]) -> Optional[Dict[str, A
     """Return the first standalone TextItem used for generated subtitles."""
     for item in get_timeline(template_data).get("Items", []):
         if "TextItem" in item.get("$type", ""):
-            return item
+            return cast(Dict[str, Any], item)
     return None
 
 
@@ -109,20 +109,20 @@ def extract_face_templates(template_data: Dict[str, Any]) -> Dict[str, Dict[str,
     for item in get_timeline(template_data).get("Items", []):
         if "TachieFaceItem" not in item.get("$type", ""):
             continue
-            
+
         char_name = item.get("CharacterName")
         if not char_name:
             continue
-            
+
         if char_name not in result:
             result[char_name] = {}
-            
+
         remark = item.get("Remark", "")
         if remark.startswith("emotion:"):
             emotion = remark.split(":", 1)[1].strip()
             result[char_name].setdefault(emotion, item)
             continue
-            
+
         parameter = item.get("TachieFaceParameter") or {}
         paths = " ".join(parameter.get("EnableLayerPaths", []))
         if "涙" in paths or "青ざめ" in paths:

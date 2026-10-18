@@ -12,7 +12,7 @@ from __future__ import annotations
 import io
 import asyncio
 import wave
-from typing import Any, Dict, List, Tuple, Protocol
+from typing import Any, Dict, List, Tuple, Protocol, Union, cast
 
 import requests
 
@@ -81,7 +81,7 @@ class VoicevoxClient:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.is_available)
 
-    async def synthesize_async(self, text: str, speaker_id: int) -> Tuple[bytes, float]:
+    async def synthesize_async(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
         """Async version of synthesize."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.synthesize, text, speaker_id)
@@ -90,14 +90,14 @@ class VoicevoxClient:
         """Attempts to start VOICEVOX if it's not currently available."""
         if self.is_available():
             return True
-            
+
         import os
         import subprocess
         import time
         from pathlib import Path
-        
+
         logger.info("VOICEVOX is not running. Attempting to start it automatically...")
-        
+
         # Common installation paths on Windows
         local_app_data = os.environ.get('LOCALAPPDATA', '')
         possible_paths = [
@@ -106,32 +106,32 @@ class VoicevoxClient:
             Path("C:/Program Files/VOICEVOX/run.exe"),
             Path("C:/Program Files/VOICEVOX/VOICEVOX.exe"),
         ]
-        
+
         exe_path = None
         for p in possible_paths:
             if p.exists():
                 exe_path = p
                 break
-                
+
         if not exe_path:
             logger.warning("Could not find VOICEVOX executable automatically.")
             return False
-            
+
         logger.info("Found VOICEVOX at %s, launching...", exe_path)
         try:
             # Launch in background without blocking
             subprocess.Popen([str(exe_path)], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
-            
+
             # Wait for it to become available
             for _ in range(30):
                 time.sleep(1)
                 if self.is_available():
                     logger.info("VOICEVOX started successfully!")
                     return True
-                    
+
             logger.warning("VOICEVOX process launched, but API didn't become available in time.")
             return False
-            
+
         except Exception as e:
             logger.error("Failed to launch VOICEVOX: %s", e)
             return False
@@ -152,13 +152,14 @@ class VoicevoxClient:
     def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
         """Fetch AudioQuery dictionary for text without synthesizing audio."""
         try:
+            params: Dict[str, Union[str, int]] = {"text": text, "speaker": speaker_id}
             res = requests.post(
                 f"{self.base_url}/audio_query",
-                params={"text": text, "speaker": speaker_id},
+                params=params,
                 timeout=30
             )
             res.raise_for_status()
-            return res.json()
+            return cast(Dict[str, Any], res.json())
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to fetch audio_query: {e}")
 
@@ -177,13 +178,14 @@ class VoicevoxClient:
             VoicevoxError: If synthesis fails at any step.
         """
         try:
+            params: Dict[str, Union[str, int]] = {"text": text, "speaker": speaker_id}
             query_res = requests.post(
                 f"{self.base_url}/audio_query",
-                params={"text": text, "speaker": speaker_id},
+                params=params,
                 timeout=30
             )
             query_res.raise_for_status()
-            audio_query = query_res.json()
+            audio_query = cast(Dict[str, Any], query_res.json())
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to create audio_query: {e}")
 
@@ -223,6 +225,6 @@ class VoicevoxClient:
         try:
             res = requests.get(f"{self.base_url}/speakers", timeout=5)
             res.raise_for_status()
-            return res.json()
+            return cast(List[Dict[str, Any]], res.json())
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to list speakers: {e}")

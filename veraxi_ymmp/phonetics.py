@@ -6,7 +6,11 @@ native YMM4 LipSyncFrames from VOICEVOX AudioQuery data following Japanese
 animation lip-sync standards (YMM4 / PSDToolKit / KuchiPaku).
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from .logging import logger
 
 VOWEL_MAP_YMM4 = {
     "a": "A",
@@ -175,3 +179,155 @@ def extract_phonetic_blocks(
 
     return [(float(s), float(e), bool(is_open)) for s, e, is_open in merged]
 
+
+def get_audio_reactive_intervals(
+    wav_path: Optional[Union[str, Path]],
+    total_expected_frames: int,
+    fps: int = 60,
+    threshold: float = 0.10,
+) -> List[Tuple[bool, int]]:
+    """Extract realistic audio-reactive lip-sync intervals directly from the WAV waveform."""
+    if not wav_path or not Path(wav_path).exists():
+        # Fallback to standard 0.1s alternation
+        step = int(0.12 * fps)
+        intervals: List[Tuple[bool, int]] = []
+        f = 0
+        state = True
+        while f < total_expected_frames:
+            dur = min(step, total_expected_frames - f)
+            intervals.append((state, dur))
+            f += dur
+            state = not state
+        return intervals
+
+    try:
+        import wave
+        import numpy as np
+
+        with wave.open(str(wav_path), "rb") as wf:
+            sr = wf.getframerate()
+            n_frames = wf.getnframes()
+            data = np.frombuffer(wf.readframes(n_frames), dtype=np.int16)
+
+        samples_per_video_frame = int(sr // fps)
+        total_video_frames = min(total_expected_frames, n_frames // samples_per_video_frame)
+
+        frame_states = []
+        for f in range(total_video_frames):
+            chunk = data[f * samples_per_video_frame : (f + 1) * samples_per_video_frame]
+            rms = np.sqrt(np.mean(chunk.astype(float) ** 2)) if len(chunk) > 0 else 0
+            frame_states.append(rms)
+
+        max_v = max(frame_states) if frame_states else 1.0
+        if max_v == 0:
+            max_v = 1.0
+
+        # Increase threshold to 20% so the mouth actually closes between syllables
+        raw_is_open = [rms / max_v > 0.2 for rms in frame_states]
+
+        # Enforce minimum durations (e.g. mouth must stay open for at least 3 frames, and closed for at least 2 frames)
+        smoothed = []
+        if raw_is_open:
+            current_state = raw_is_open[0]
+            current_len = 0
+            for state in raw_is_open:
+                if state == current_state:
+                    current_len += 1
+                else:
+                    if (current_state and current_len >= 3) or (not current_state and current_len >= 2):
+                        smoothed.extend([current_state] * current_len)
+                        current_state = state
+                        current_len = 1
+                    else:
+                        current_len += 1
+            smoothed.extend([current_state] * current_len)
+
+        intervals = []
+        if smoothed:
+            curr_state = smoothed[0]
+            curr_len = 0
+            for state in smoothed:
+                if state == curr_state:
+                    curr_len += 1
+                else:
+                    intervals.append((curr_state, curr_len))
+                    curr_state = state
+                    curr_len = 1
+            if curr_len > 0:
+                intervals.append((curr_state, curr_len))
+
+        covered = sum(dur for _, dur in intervals)
+        if covered < total_expected_frames:
+            intervals.append((False, total_expected_frames - covered))
+
+        return intervals
+    except Exception as e:
+        logger.warning("Audio-reactive lipsync fallback: %s", e)
+        return [(False, total_expected_frames)]
+
+
+def resolve_lipsync_intervals(
+    audio_path: Optional[Union[str, Path]],
+    duration_sec: float,
+    prefer_phonetic: bool = True,
+    fps: int = 60,
+    audio_query: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[bool, int]]:
+    """
+    Resolves lip-sync open/close intervals in video frames.
+
+    Resolution strategy:
+    1. If prefer_phonetic is True, look for an explicit audio_query or companion
+       `.query.json` file beside audio_path.
+    2. If found, convert phonetic blocks to frame intervals.
+    3. Fall back to audio-reactive waveform analysis (or periodic alternation).
+    """
+    total_expected_frames = int(round(duration_sec * fps))
+    if total_expected_frames <= 0:
+        return []
+
+    query = audio_query
+    if query is None and prefer_phonetic and audio_path:
+        p = Path(audio_path)
+        candidates = [
+            p.with_suffix(".query.json"),
+            p.parent / f"{p.name}.query.json",
+        ]
+        for c in candidates:
+            if c.exists():
+                try:
+                    with open(c, "r", encoding="utf-8") as f:
+                        query = json.load(f)
+                    break
+                except Exception as e:
+                    logger.warning("Failed to load companion query file %s: %s", c, e)
+
+    if prefer_phonetic and query and "accent_phrases" in query:
+        blocks = extract_phonetic_blocks(query, duration_sec, fps=fps)
+        intervals: List[Tuple[bool, int]] = []
+        curr_frame = 0
+        for s_sec, e_sec, is_open in blocks:
+            target_end = min(total_expected_frames, int(round(e_sec * fps)))
+            dur = target_end - curr_frame
+            if dur > 0:
+                if intervals and intervals[-1][0] == is_open:
+                    intervals[-1] = (is_open, intervals[-1][1] + dur)
+                else:
+                    intervals.append((is_open, dur))
+                curr_frame = target_end
+
+        if curr_frame < total_expected_frames:
+            remaining = total_expected_frames - curr_frame
+            if intervals and not intervals[-1][0]:
+                intervals[-1] = (False, intervals[-1][1] + remaining)
+            else:
+                intervals.append((False, remaining))
+
+        if intervals:
+            return intervals
+
+    return get_audio_reactive_intervals(
+        wav_path=audio_path,
+        total_expected_frames=total_expected_frames,
+        fps=fps,
+    )

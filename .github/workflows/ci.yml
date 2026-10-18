@@ -5,9 +5,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Gitleaks Secret & Local Path Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: Check No Local Paths or Secrets
+        run: python scripts/check_no_local_paths.py --all
       - run: pip install -e .
-      - run: pip install pytest pytest-asyncio
+      - run: pip install pytest pytest-asyncio pre-commit detect-secrets
       - run: pytest tests/ -v
