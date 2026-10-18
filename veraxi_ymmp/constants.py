@@ -19,3 +19,10 @@ DEFAULT_BGM_CANDIDATES = [
     "assets/bgm/2_23_AM.mp3",
     "assets/bgm/2_23_AM.m4a",
 ]
+
+# Canvas and layout defaults
+DEFAULT_CANVAS_WIDTH: int = 1920
+DEFAULT_CANVAS_HEIGHT: int = 1080
+DEFAULT_BGM_DUCKING_VOLUME: float = 3.0
+DEFAULT_BG_FILL_ZOOM: float = 187.5
+KNOWN_CHARACTERS: tuple[str, ...] = ("ずんだもん", "四国めたん", "春日部つむぎ", "Zundamon")

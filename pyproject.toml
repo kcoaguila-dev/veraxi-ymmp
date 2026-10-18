@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "veraxi-ymmp"
 version = "0.1.0"
-description = "A Python tool that generates YMM4 .ymmp dialogue timelines by cloning real template items"
+description = "Clean-architecture multi-target video production engine for YMM4 (.ymmp), Premiere Pro (FCPXML), After Effects (.jsx), MoviePy, B-Roll graphics, and YouTube thumbnails."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -34,6 +34,10 @@ dependencies = [
     "alkana>=0.0.3",
     "requests>=2.28",
     "budoux>=0.9.0",
+    "brotli>=1.0.9",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "moviepy>=2.0.0",
 ]
 
 [project.scripts]
@@ -43,10 +47,11 @@ veraxi-ymmp-mcp = "veraxi_ymmp.mcp_server:mcp.run"
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0",
-    "mypy>=1.0",
+    "pytest-asyncio>=0.21.0",
     "ruff>=0.1",
+    "mypy>=1.0",
+    "types-requests>=2.28",
     "pre-commit>=3.5",
     "detect-secrets>=1.5.0",
 ]

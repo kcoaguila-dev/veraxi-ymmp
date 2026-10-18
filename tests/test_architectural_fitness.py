@@ -6,6 +6,8 @@ These tests enforce Clean Architecture constraints and privacy invariants:
 3. Maximum module size ceiling (900 lines) preventing monolithic/God modules.
 4. Zero raw print() statements in core library modules (must use logging/veraxi_ymmp.logging).
 5. Comprehensive unit verification of check_no_local_paths scanner logic.
+6. Zero cross-adapter imports among renderer/exporter adapters.
+7. Pure domain layer modules never import infrastructure or adapter modules.
 """
 
 from __future__ import annotations
@@ -259,3 +261,105 @@ def test_mypy_strict_clean() -> None:
         text=True,
     )
     assert res.returncode == 0, f"mypy checks failed with output:\n{res.stdout}\n{res.stderr}"
+
+
+def _extract_imported_module_names(tree: ast.AST) -> List[Tuple[str, int]]:
+    """Extract (module_reference, lineno) for all imports in an AST."""
+    imports: List[Tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append((alias.name, node.lineno))
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.append((node.module, node.lineno))
+                for alias in node.names:
+                    imports.append((f"{node.module}.{alias.name}", node.lineno))
+            else:
+                for alias in node.names:
+                    imports.append((alias.name, node.lineno))
+    return imports
+
+
+def _matches_module(import_ref: str, module_name: str) -> bool:
+    """Return True if import_ref matches module_name as full name or member."""
+    if import_ref == module_name:
+        return True
+    if import_ref.startswith(f"{module_name}."):
+        return True
+    if import_ref.endswith(f".{module_name}"):
+        return True
+    if f".{module_name}." in import_ref:
+        return True
+    return False
+
+
+def test_no_cross_adapter_imports() -> None:
+    """Ensure renderer/exporter adapters never import from peer renderer/exporter adapters."""
+    adapter_files = [
+        "ymmp_renderer.py",
+        "premiere_exporter.py",
+        "moviepy_renderer.py",
+        "ae_renderer.py",
+        "srt_generator.py",
+    ]
+    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    violations: List[str] = []
+
+    for file_name in adapter_files:
+        file_path = lib_dir / file_name
+        assert file_path.is_file(), f"Adapter file not found: {file_path}"
+        forbidden_mods = [f.replace(".py", "") for f in adapter_files if f != file_name]
+
+        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+        imported = _extract_imported_module_names(tree)
+
+        for mod_ref, lineno in imported:
+            for forbidden in forbidden_mods:
+                if _matches_module(mod_ref, forbidden):
+                    violations.append(
+                        f"{file_name}:{lineno} illegal cross-adapter import '{forbidden}' (ref: '{mod_ref}')"
+                    )
+
+    assert not violations, (
+        f"Cross-adapter imports found ({len(violations)}):\n" + "\n".join(violations)
+    )
+
+
+def test_domain_layer_purity() -> None:
+    """Ensure pure domain modules never import infrastructure or adapter modules."""
+    domain_files = [
+        "ir.py",
+        "script.py",
+        "constants.py",
+    ]
+    forbidden_modules = [
+        "voicevox",
+        "ymmp_renderer",
+        "premiere_exporter",
+        "moviepy_renderer",
+        "ae_renderer",
+        "thumbnail",
+        "broll",
+        "cli",
+        "mcp_server",
+    ]
+    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    violations: List[str] = []
+
+    for file_name in domain_files:
+        file_path = lib_dir / file_name
+        assert file_path.is_file(), f"Domain file not found: {file_path}"
+        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+        imported = _extract_imported_module_names(tree)
+
+        for mod_ref, lineno in imported:
+            for forbidden in forbidden_modules:
+                if _matches_module(mod_ref, forbidden):
+                    violations.append(
+                        f"{file_name}:{lineno} pure domain module illegally imports infrastructure/adapter '{forbidden}' (ref: '{mod_ref}')"
+                    )
+
+    assert not violations, (
+        f"Domain layer purity violations found ({len(violations)}):\n" + "\n".join(violations)
+    )

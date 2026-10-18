@@ -25,12 +25,13 @@ import brotli
 
 from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES
 from .ir import TimelineIR
-from .moviepy_renderer import wrap_japanese
 from .phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
+from .ports import ExportResult
 from .psd_registry import CharacterPSDRegistry
 from .script import DirectorScriptEntry, WriterScriptEntry
 from .subtitle_plate import create_speech_plate
 from .template import get_timeline
+from .typography import wrap_japanese
 from .utils import normalize_japanese_typography
 
 if TYPE_CHECKING:
@@ -848,3 +849,40 @@ class YMMPRenderer:
         encoding = "utf-8-sig" if use_bom else "utf-8"
         with open(output_path, "w", encoding=encoding) as f:
             json.dump(output_data, f, ensure_ascii=False, indent=4)
+
+    def export(
+        self,
+        ir: TimelineIR,
+        output_path: Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> ExportResult:
+        """Export TimelineIR to YMM4 .ymmp project format."""
+        opts = options or {}
+        use_bom = opts.get("use_bom", False)
+        script_len = opts.get("script_len", None)
+        audio_files = opts.get("audio_files", None)
+        out_p = Path(output_path)
+        comp_res = self.render(
+            timeline_ir=ir,
+            output_path=out_p,
+            use_bom=use_bom,
+            script_len=script_len,
+            audio_files=audio_files,
+        )
+        artifacts = [out_p]
+        if comp_res.audio_files:
+            artifacts.extend(comp_res.audio_files)
+        return ExportResult(
+            target_format="ymmp",
+            output_path=out_p,
+            artifacts=artifacts,
+            metadata={
+                "item_count": comp_res.item_count,
+                "voice_item_count": comp_res.voice_item_count,
+                "tachie_item_count": comp_res.tachie_item_count,
+                "total_frames": comp_res.total_frames,
+                "total_duration_seconds": comp_res.total_duration_seconds,
+                "warnings": comp_res.warnings,
+                "errors": comp_res.errors,
+            },
+        )

@@ -1,12 +1,18 @@
 import os
 from pathlib import Path
+from typing import Any, Dict, Optional
+
 from .ir import TimelineIR
+from .ports import ExportResult
+
 
 class AfterEffectsRenderer:
-    def __init__(self, timeline_ir: TimelineIR):
+    def __init__(self, timeline_ir: Optional[TimelineIR] = None) -> None:
         self.ir = timeline_ir
 
     def render(self, output_jsx_path: Path) -> Path:
+        if self.ir is None:
+            raise ValueError("TimelineIR must be provided to render")
         fps = self.ir.fps
 
         script = []
@@ -196,3 +202,21 @@ rect.property('Position').expression = "var src = thisComp.layer('" + textLayer.
 
         output_jsx_path.write_text("\n".join(script), encoding='utf-8')
         return output_jsx_path
+
+    def export(
+        self,
+        ir: TimelineIR,
+        output_path: Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> ExportResult:
+        """Export TimelineIR to After Effects JSX script format."""
+        self.ir = ir
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        res_path = self.render(out_p)
+        return ExportResult(
+            target_format="jsx",
+            output_path=res_path,
+            artifacts=[res_path],
+            metadata={},
+        )

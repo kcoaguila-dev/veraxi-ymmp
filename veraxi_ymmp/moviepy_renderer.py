@@ -21,6 +21,7 @@ import math
 from .ir import TimelineIR
 from .logging import logger
 from .phonetics import extract_phonetic_blocks
+from .ports import ExportResult
 from .typography import (
     calculate_speech_plate_geometry,
     draw_rounded_speech_bubble,
@@ -64,11 +65,13 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
     return clip.with_effects([Resize(pop_in)])
 
 class MoviePyRenderer:
-    def __init__(self, timeline_ir: TimelineIR):
+    def __init__(self, timeline_ir: Optional[TimelineIR] = None) -> None:
         self.ir = timeline_ir
         self.fast_qa_duration: Optional[float] = None
 
     def render(self, output_path: str) -> None:
+        if self.ir is None:
+            raise ValueError("TimelineIR must be provided to render")
         fps = self.ir.fps
         total_duration = self.ir.total_frames / fps
 
@@ -375,3 +378,29 @@ class MoviePyRenderer:
         if not hasattr(self, 'final_video'):
             self.render("temp_dummy.mp4")
         self.final_video.save_frame(str(output_path), t=t)
+
+    def export(
+        self,
+        ir: TimelineIR,
+        output_path: Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> ExportResult:
+        """Export TimelineIR to MoviePy rendered video format (e.g. MP4)."""
+        opts = options or {}
+        self.ir = ir
+        if "fast_qa_duration" in opts:
+            self.fast_qa_duration = opts["fast_qa_duration"]
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        self.render(str(out_p))
+        total_duration = ir.total_frames / ir.fps
+        return ExportResult(
+            target_format="mp4",
+            output_path=out_p,
+            artifacts=[out_p],
+            metadata={
+                "fps": 30,
+                "duration": total_duration,
+                "fast_qa_duration": self.fast_qa_duration,
+            },
+        )

@@ -15,14 +15,16 @@ import os
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from .ir import TimelineIR
 from .logging import logger
 from .phonetics import get_audio_reactive_intervals, resolve_lipsync_intervals
+from .ports import ExportResult
 from .typography import (
     calculate_speech_plate_geometry,
     draw_rounded_speech_bubble,
+    get_char_color,
     wrap_japanese,
 )
 
@@ -100,9 +102,9 @@ class PremiereExporter:
     combination based on MCP bridge availability.
     """
 
-    def __init__(self, ir: TimelineIR):
-        self.ir = ir
-        self.fps = ir.fps
+    def __init__(self, ir: Optional[TimelineIR] = None) -> None:
+        self.ir: TimelineIR = cast(TimelineIR, ir)
+        self.fps = ir.fps if ir is not None else 60
 
     # ------------------------------------------------------------------
     # xmeml building blocks (shared between full and no-bubble exports)
@@ -391,17 +393,11 @@ class PremiereExporter:
         """Populate V4 track with pre-rendered PNG speech bubbles."""
         bubble_dir.mkdir(parents=True, exist_ok=True)
 
-        char_colors = {
-            "ずんだもん": (46, 139, 87),    # Green
-            "四国めたん": (255, 105, 180),  # Pink
-            "春日部つむぎ": (255, 165, 0), # Orange
-        }
-
         import time
         run_id = int(time.time())
         for i, vc in enumerate(self.ir.voice_clips):
             bubble_path = bubble_dir / f"bubble_{i}_{run_id}_pro.png"
-            border_color = char_colors.get(vc.character, (128, 128, 128))
+            border_color = get_char_color(vc.character)[:3]
             create_speech_bubble_png(vc.text, bubble_path, border_color)
             self._create_clipitem(v4_track, bubble_path, vc.start_frame, vc.length, f"bubble_{i}", "Subtitle Bar", scale=100.0, x_offset=0.0, y_offset=0.0)
 
@@ -511,6 +507,8 @@ class PremiereExporter:
 
     def _write_xml(self, root: Element, output_path: Path) -> None:
         """Write the xmeml tree to a file."""
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         xml_str = prettify(root)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(xml_str)
@@ -700,6 +698,35 @@ class PremiereExporter:
             }
             for i, vc in enumerate(self.ir.voice_clips)
         ]
+
+    def export(
+        self,
+        ir: TimelineIR,
+        output_path: Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> ExportResult:
+        """Export TimelineIR to Premiere Pro FCPXML/xmeml format."""
+        opts = options or {}
+        self.ir = ir
+        self.fps = ir.fps
+        out_p = Path(output_path)
+        xml_dir = out_p.parent
+        proj_dir = opts.get("proj_dir", xml_dir)
+        xml_filename = out_p.name
+
+        without_bubbles = opts.get("without_bubbles", False)
+        if without_bubbles:
+            res_path = self.export_xmeml_without_bubbles(xml_dir, proj_dir)
+        else:
+            res_path = self.export_xmeml(xml_dir, proj_dir, xml_filename=xml_filename)
+
+        return ExportResult(
+            target_format="fcpxml",
+            output_path=res_path,
+            artifacts=[res_path],
+            metadata={"fps": self.fps, "total_frames": ir.total_frames},
+        )
+
 
 
 # ======================================================================

@@ -1,73 +1,69 @@
 """
-Automated Audio Loudness Normalizer for Social Media
-Uses FFmpeg to perfectly hit LUFS targets for different platforms.
+Automated Audio Loudness Normalizer for Social Media.
+Thin CLI wrapper delegating to veraxi_ymmp.audio_normalizer.
 """
 
-import subprocess
 import argparse
+import sys
 from pathlib import Path
 
-# Official LUFS targets for different platforms
-PLATFORM_TARGETS = {
-    "youtube": {"I": -14.0, "TP": -1.0, "LRA": 11.0},
-    "spotify": {"I": -14.0, "TP": -1.0, "LRA": 11.0},
-    "tiktok": {"I": -13.0, "TP": -1.0, "LRA": 11.0},
-    "instagram": {"I": -13.0, "TP": -1.0, "LRA": 11.0},
-    "broadcast": {"I": -23.0, "TP": -1.0, "LRA": 11.0},
-    "cinema": {"I": -27.0, "TP": -1.0, "LRA": 11.0},
-}
+from veraxi_ymmp.audio_normalizer import (
+    PLATFORM_TARGETS,
+    normalize_video_audio as _normalize_core,
+)
 
-def normalize_video_audio(input_file: str, platform: str):
+
+def normalize_video_audio(input_file: str, platform: str) -> None:
     """Normalize the audio track of a video file for a specific platform."""
     input_path = Path(input_file)
     if not input_path.exists():
-        print(f"Error: Could not find file {input_file}")
+        print(f"Error: Could not find file {input_file}", file=sys.stderr)
         return
 
     if platform not in PLATFORM_TARGETS:
-        print(f"Error: Unknown platform '{platform}'. Choose from: {', '.join(PLATFORM_TARGETS.keys())}")
+        print(
+            f"Error: Unknown platform '{platform}'. Choose from: {', '.join(PLATFORM_TARGETS.keys())}",
+            file=sys.stderr,
+        )
         return
 
     target = PLATFORM_TARGETS[platform]
     output_path = input_path.parent / f"{input_path.stem}_{platform}{input_path.suffix}"
-    
+
     print(f"--- Normalizing for {platform.upper()} ---")
     print(f"Target: {target['I']} LUFS (Integrated), {target['TP']} dBTP (True Peak)")
-    
-    # FFmpeg loudnorm filter
-    loudnorm_filter = (
-        f"loudnorm=I={target['I']}:TP={target['TP']}:LRA={target['LRA']}:print_format=summary"
-    )
+    print("Running FFmpeg... (this will just copy the video and only process the audio)")
 
-    cmd = [
-        "ffmpeg",
-        "-y",               # Overwrite output
-        "-i", str(input_path),
-        "-vcodec", "copy",  # Copy video stream without re-encoding
-        "-af", loudnorm_filter, # Apply audio normalization
-        "-acodec", "aac",   # Re-encode audio to AAC
-        "-b:a", "320k",     # High quality audio bitrate
-        str(output_path)
-    ]
-
-    print(f"Running FFmpeg... (this will just copy the video and only process the audio)")
-    
     try:
-        # Run ffmpeg and capture output to show to user
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        _normalize_core(
+            input_video=input_path,
+            output_video=output_path,
+            target_i=target["I"],
+            target_tp=target["TP"],
+            target_lra=target["LRA"],
+        )
         print(f"\nSuccess! Created perfectly normalized file: {output_path.name}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error running FFmpeg:\n{e.stderr}")
+    except Exception as e:
+        print(f"Error running FFmpeg:\n{e}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Normalize video audio for social media algorithms.")
     parser.add_argument("input", help="Path to your exported .mp4 video")
-    parser.add_argument("--platform", choices=PLATFORM_TARGETS.keys(), default="youtube",
-                        help="Target platform (default: youtube)")
-    parser.add_argument("--all", action="store_true", help="Generate versions for ALL social media platforms")
-    
+    parser.add_argument(
+        "--platform",
+        choices=PLATFORM_TARGETS.keys(),
+        default="youtube",
+        help="Target platform (default: youtube)",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Generate versions for ALL social media platforms",
+    )
+
     args = parser.parse_args()
-    
+
     if args.all:
         for p in ["youtube", "tiktok", "instagram"]:
             normalize_video_audio(args.input, p)
