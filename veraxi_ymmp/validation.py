@@ -58,7 +58,7 @@ def validate_ymmp_schema(data: dict) -> None:
     C# enum properties match legitimate YMM4 deserializer definitions.
     Prevents desktop YMM4 startup crashes due to enum conversion errors.
     """
-    def _scan(obj, path=""):
+    def _scan(obj: Any, path: str = "") -> None:
         if isinstance(obj, dict):
             for k, v in obj.items():
                 cur_path = f"{path}.{k}" if path else k
@@ -135,16 +135,16 @@ def validate_ymmp_timeline(
     5. Layer layout is clean and MaxLayer >= 10.
     """
     from .template import get_timeline
-    
+
     timeline = get_timeline(data)
     items = timeline.get("Items", [])
-    
+
     # 1. Item categorization
     bgm_items_layer3 = []
     voice_items = []
     tachie_items = []
     plate_items_layer7 = []
-    
+
     for it in items:
         itype = it.get("$type", "")
         layer = it.get("Layer", -1)
@@ -233,7 +233,7 @@ def validate_ymmp_timeline(
         tip = t.get("TachieItemParameter")
         if not isinstance(tip, dict):
             raise ValidationError(f"TachieItem[{i}] ({char}) has no TachieItemParameter.")
-        
+
         is_psd = "Psd" in tip.get("$type", "") or str(tip.get("FilePath", "")).endswith(".psd")
         enable_layers = tip.get("EnableLayers")
         if is_psd:
@@ -285,7 +285,7 @@ def validate_ymmp_timeline(
         c_fp = tcp.get("FilePath")
         if c_fp and not Path(c_fp).exists():
             raise ValidationError(f"Character '{c_name}' TachieCharacterParameter FilePath does not exist: {c_fp}")
-        
+
         if c_fp and str(c_fp).endswith(".psd"):
             ttype = c.get("TachieType", "")
             if not ttype or "PsdTachiePlugin" not in ttype:
@@ -357,6 +357,3 @@ def validate_ymmp_timeline(
         "bgm_items": len(bgm_items_layer3),
         "max_layer": max_layer
     }
-
-
-

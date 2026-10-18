@@ -2,6 +2,7 @@
 Utility functions for veraxi-ymmp.
 """
 
+import re
 from pathlib import Path
 from typing import Union
 
@@ -15,8 +16,6 @@ def resolve_path(path: Union[str, Path]) -> Path:
     """Convert to Path and resolve to absolute path."""
     return ensure_path(path).resolve()
 
-
-import re
 
 def normalize_japanese_typography(text: str) -> str:
     """
@@ -33,7 +32,7 @@ def normalize_japanese_typography(text: str) -> str:
     t = text.replace("3条件", "3つの条件").replace("３条件", "3つの条件")
 
     # Full-width alphanumeric & symbols to standard half-width ASCII
-    def _to_half(m):
+    def _to_half(m: re.Match[str]) -> str:
         c = m.group(0)
         code = ord(c)
         if 0xFF10 <= code <= 0xFF19:  # 0-9

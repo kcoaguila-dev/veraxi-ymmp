@@ -12,12 +12,14 @@ Features:
 """
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from .logging import logger
+
+FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
 
 # Theme Palettes
 THEMES: Dict[str, Dict[str, Tuple[int, int, int]]] = {
@@ -136,7 +138,7 @@ def find_best_font_path(font_bold: str = "BIZ-UDGothicB.ttc") -> Tuple[Optional[
     return None, 0
 
 
-def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, ImageFont.FreeTypeFont]:
+def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, FontType]:
     """Loads fonts with automatic fallback."""
     font_path, font_index = find_best_font_path(font_bold)
     if font_path is None:
@@ -156,14 +158,14 @@ def get_thumbnail_fonts(font_bold: str = "BIZ-UDGothicB.ttc") -> Dict[str, Image
     }
 
 
-def calculate_line_width(font: ImageFont.FreeTypeFont, text: str, hl_word: str = "") -> int:
+def calculate_line_width(font: FontType, text: str, hl_word: str = "") -> int:
     """Calculates total pixel width of a text line (taking highlight spacing into account)."""
     if not text:
         return 0
     if hl_word and hl_word in text:
         parts = text.split(hl_word, 1)
         prefix, suffix = parts[0], parts[1]
-        w = 0
+        w: float = 0.0
         if prefix:
             b_p = font.getbbox(prefix)
             w += (b_p[2] - b_p[0]) + 10
@@ -172,9 +174,9 @@ def calculate_line_width(font: ImageFont.FreeTypeFont, text: str, hl_word: str =
         if suffix:
             b_s = font.getbbox(suffix)
             w += (b_s[2] - b_s[0])
-        return w
+        return int(w)
     bbox = font.getbbox(text)
-    return bbox[2] - bbox[0]
+    return int(bbox[2] - bbox[0])
 
 
 def fit_font_to_width(
@@ -185,7 +187,7 @@ def fit_font_to_width(
     font_index: int = 0,
     hl_word: str = "",
     min_size: int = 40,
-) -> Tuple[ImageFont.FreeTypeFont, int]:
+) -> Tuple[FontType, int]:
     """
     Dynamically scales font size down so text fits strictly within max_w.
     Guarantees text never encroaches into character safe zone.
@@ -196,7 +198,7 @@ def fit_font_to_width(
         return ImageFont.load_default(), base_size
 
     size = base_size
-    font = ImageFont.truetype(font_path, size, index=font_index)
+    font: FontType = ImageFont.truetype(font_path, size, index=font_index)
     cur_w = calculate_line_width(font, text, hl_word)
 
     if cur_w > max_w:
@@ -217,16 +219,16 @@ def fit_font_to_width(
 
 
 def draw_fukuro_text(
-    draw_obj: ImageDraw.Draw,
+    draw_obj: ImageDraw.ImageDraw,
     xy: Tuple[int, int],
     text: str,
-    font: ImageFont.FreeTypeFont,
+    font: FontType,
     fill_color: Tuple[int, int, int, int],
     stroke_color: Tuple[int, int, int, int] = (0, 0, 0, 255),
     stroke_w: int = 26,
     shadow_offset: Tuple[int, int] = (12, 14),
     shadow_alpha: int = 240,
-):
+) -> None:
     """
     Renders multi-layered outline text (袋文字) with soft drop shadow.
     Layer 1: Deep ambient drop shadow
@@ -388,7 +390,7 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
 
     # 2. Character Preparation & Bounding Box Extraction
     char_path = resolve_character_face(config.character, config.emotion, config.mouth_open)
-    char_data = None
+    char_data: Optional[Dict[str, Any]] = None
     char_left_edge_x = w - 70  # Default text margin if no character
 
     if char_path and char_path.exists():
@@ -498,7 +500,7 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
                     stroke_w=stroke_w2,
                 )
                 bbox_p = f_t2.getbbox(prefix)
-                cur_x += (bbox_p[2] - bbox_p[0]) + 10
+                cur_x += int(bbox_p[2] - bbox_p[0]) + 10
 
             # Highlight word in Canary Gold or Crimson Red
             hl_color = theme_colors["highlight"] + (255,)
@@ -511,7 +513,7 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
                 stroke_w=stroke_w2,
             )
             bbox_hl = f_t2.getbbox(hl_word)
-            cur_x += (bbox_hl[2] - bbox_hl[0]) + 14
+            cur_x += int(bbox_hl[2] - bbox_hl[0]) + 14
 
             if suffix:
                 draw_fukuro_text(
@@ -639,7 +641,7 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
     if "ずんだもん" in char_counts:
         lead_char = "ずんだもん"
     elif char_counts:
-        lead_char = max(char_counts, key=char_counts.get)
+        lead_char = max(char_counts, key=lambda c: char_counts[c])
     else:
         lead_char = "ずんだもん"
 

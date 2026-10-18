@@ -9,21 +9,22 @@ import asyncio
 import json
 import logging
 import sys
+from typing import Any, List, Optional
 from pathlib import Path
 
 from .compiler import YMMPCompiler, CompilerError
 from .async_compiler import AsyncYMMPCompiler
 from .config import CompilerConfig
-from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend
+from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend, TTSBackend
 from .logging import setup_logging, logger
 from .script import validate_writer_script, validate_director_script, validate_director_against_writer
 
 # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
-if sys.stdout.encoding != 'utf-8':
+if hasattr(sys.stdout, "reconfigure") and sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 
-def main():
+def main() -> None:
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
         description="Generate YMM4 .ymmp timelines from a template and script."
@@ -69,10 +70,10 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress info logging, only show warnings/errors")
     parser.add_argument("--log-file", type=str, help="Write logs to file")
-    
+
     # YMM4 Export Feature
     parser.add_argument("--export-mp4", type=str, help="Automatically render to MP4 using YMM4 CLI (requires YMM4_PATH env var)")
-    
+
     # YouTube Thumbnail Feature
     parser.add_argument(
         "--thumbnail",
@@ -152,15 +153,16 @@ def _compile(args: argparse.Namespace) -> None:
                 is_director = True
                 break
 
+    validated_script: List[Any]
     if is_director:
         try:
-            validated_script = validate_director_script(script)
+            validated_script = list(validate_director_script(script))
         except ValueError as e:
             print(f"Error: Invalid director script schema: {e}", file=sys.stderr)
             sys.exit(1)
     else:
         try:
-            validated_script = validate_writer_script(script)
+            validated_script = list(validate_writer_script(script))
         except ValueError as e:
             print(f"Error: Invalid writer script schema: {e}", file=sys.stderr)
             sys.exit(1)
@@ -208,27 +210,31 @@ def _compile(args: argparse.Namespace) -> None:
             logger.error(f"Invalid speaker map file: {e}")
             sys.exit(1)
 
-    tts_backend = None
+    tts_backend: Optional[TTSBackend] = None
     if config.use_tts:
-        tts_backend = VoicevoxClient(config.voicevox_url)
-        if not tts_backend.is_available():
+        client = VoicevoxClient(config.voicevox_url)
+        if not client.is_available():
             logger.error(f"VOICEVOX not available at {config.voicevox_url}")
             sys.exit(1)
+        tts_backend = client
     else:
         tts_backend = NullTTSBackend()
 
     try:
-        CompilerClass = AsyncYMMPCompiler if getattr(args, 'use_async', False) else YMMPCompiler
-        compiler = CompilerClass(
-            template_path=template_path,
-            config=config,
-            tts_backend=tts_backend
-        )
-
         if getattr(args, 'use_async', False):
-            result = asyncio.run(compiler.compile_async(script, output_path, use_bom=config.use_bom))
+            async_compiler = AsyncYMMPCompiler(
+                template_path=template_path,
+                config=config,
+                tts_backend=tts_backend,
+            )
+            result = asyncio.run(async_compiler.compile_async(validated_script, output_path, use_bom=config.use_bom))
         else:
-            result = compiler.compile(script, output_path, use_bom=config.use_bom)
+            compiler = YMMPCompiler(
+                template_path=template_path,
+                config=config,
+                tts_backend=tts_backend,
+            )
+            result = compiler.compile(validated_script, output_path, use_bom=config.use_bom)
 
         logger.info(f"Compilation complete: {result.total_frames} frames ({result.total_duration_seconds:.2f}s)")
         logger.info(f"Items: {result.item_count} total, {result.voice_item_count} voice, {result.tachie_item_count} tachie")
@@ -242,21 +248,21 @@ def _compile(args: argparse.Namespace) -> None:
             import os
             import subprocess
             mp4_path = Path(args.export_mp4).resolve()
-            
+
             ymm4_exe_path = os.environ.get("YMM4_PATH")
             if not ymm4_exe_path:
                 print("Error: YMM4_PATH environment variable is not set.", file=sys.stderr)
                 print("Please set it to the path of your YukkuriMovieMaker.exe to use --export-mp4", file=sys.stderr)
                 sys.exit(1)
-                
+
             ymm4_exe = Path(ymm4_exe_path)
             if not ymm4_exe.exists():
                 print(f"Error: YMM4 not found at {ymm4_exe}", file=sys.stderr)
                 sys.exit(1)
-                
+
             if mp4_path.exists():
                 mp4_path.unlink()
-                
+
             print(f"Exporting {output_path} to {mp4_path} using YMM4 CLI...")
             subprocess.run([
                 str(ymm4_exe),

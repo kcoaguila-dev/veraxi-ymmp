@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .ir import TimelineIR
 from .logging import logger
+from .phonetics import get_audio_reactive_intervals, resolve_lipsync_intervals
 from .typography import (
     calculate_speech_plate_geometry,
     draw_rounded_speech_bubble,
@@ -26,6 +27,14 @@ from .typography import (
 )
 
 _wrap_japanese = wrap_japanese
+
+__all__ = [
+    "PremiereExporter",
+    "get_audio_reactive_intervals",
+    "resolve_lipsync_intervals",
+    "prettify",
+    "create_speech_bubble_png",
+]
 
 
 def prettify(elem: Element) -> str:
@@ -37,93 +46,6 @@ def prettify(elem: Element) -> str:
         xml_str = xml_str.split("\n", 1)[1]
     header = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE xmeml>\n'
     return header + xml_str
-
-
-def get_audio_reactive_intervals(
-    wav_path: Optional[Union[str, Path]],
-    total_expected_frames: int,
-    fps: int = 60,
-    threshold: float = 0.10,
-) -> List[Tuple[bool, int]]:
-    """Extract realistic audio-reactive lip-sync intervals directly from the WAV waveform."""
-    if not wav_path or not Path(wav_path).exists():
-        # Fallback to standard 0.1s alternation
-        step = int(0.12 * fps)
-        intervals = []
-        f = 0
-        state = True
-        while f < total_expected_frames:
-            dur = min(step, total_expected_frames - f)
-            intervals.append((state, dur))
-            f += dur
-            state = not state
-        return intervals
-
-    try:
-        import wave
-        import numpy as np
-        with wave.open(str(wav_path), 'rb') as wf:
-            sr = wf.getframerate()
-            n_frames = wf.getnframes()
-            data = np.frombuffer(wf.readframes(n_frames), dtype=np.int16)
-
-        samples_per_video_frame = int(sr // fps)
-        total_video_frames = min(total_expected_frames, n_frames // samples_per_video_frame)
-
-        frame_states = []
-        for f in range(total_video_frames):
-            chunk = data[f * samples_per_video_frame : (f + 1) * samples_per_video_frame]
-            rms = np.sqrt(np.mean(chunk.astype(float)**2)) if len(chunk) > 0 else 0
-            frame_states.append(rms)
-
-        max_v = max(frame_states) if frame_states else 1.0
-        if max_v == 0: max_v = 1.0
-        
-        # Increase threshold to 20% so the mouth actually closes between syllables
-        raw_is_open = [rms / max_v > 0.2 for rms in frame_states]
-
-        # Enforce minimum durations (e.g. mouth must stay open for at least 3 frames, and closed for at least 2 frames)
-        smoothed = []
-        if raw_is_open:
-            current_state = raw_is_open[0]
-            current_len = 0
-            for state in raw_is_open:
-                if state == current_state:
-                    current_len += 1
-                else:
-                    # Only flip state if we've held the current state long enough
-                    if (current_state and current_len >= 3) or (not current_state and current_len >= 2):
-                        smoothed.extend([current_state] * current_len)
-                        current_state = state
-                        current_len = 1
-                    else:
-                        # Otherwise, ignore the flip and keep accumulating
-                        current_len += 1
-            smoothed.extend([current_state] * current_len)
-        
-        intervals = []
-        if smoothed:
-            curr_state = smoothed[0]
-            curr_len = 0
-            for state in smoothed:
-                if state == curr_state:
-                    curr_len += 1
-                else:
-                    intervals.append((curr_state, curr_len))
-                    curr_state = state
-                    curr_len = 1
-            if curr_len > 0:
-                intervals.append((curr_state, curr_len))
-
-        # Fill remaining duration (padding/silence) with closed mouth
-        covered = sum(dur for _, dur in intervals)
-        if covered < total_expected_frames:
-            intervals.append((False, total_expected_frames - covered))
-
-        return intervals
-    except Exception as e:
-        logger.warning("Audio-reactive lipsync fallback: %s", e)
-        return [(False, total_expected_frames)]
 
 
 def create_speech_bubble_png(
@@ -186,11 +108,11 @@ class PremiereExporter:
     # xmeml building blocks (shared between full and no-bubble exports)
     # ------------------------------------------------------------------
 
-    def _build_xmeml_root(self) -> Tuple[Element, Element, Element, Element, Element, Element, Element, int]:
+    def _build_xmeml_root(self) -> Tuple[Element, List[Element], List[Element], int, List[str]]:
         """Build the xmeml root structure with sequence, tracks, and audio.
 
         Returns:
-            Tuple of (root, v1_track, v2_track, v3_track, v4_track, a1_track, a2_track, total_frames)
+            Tuple of (root, video_tracks, audio_tracks, total_frames, unique_chars)
         """
         fps = self.fps
         total_frames = int(self.ir.total_frames + fps * 2.0)
@@ -328,6 +250,12 @@ class PremiereExporter:
 
     def _populate_backgrounds(self, v1_track: Element, v2_track: Element, total_frames: int) -> None:
         """Populate V1 (background) and V2 (B-roll) tracks."""
+        for i, gc in enumerate(self.ir.global_clips):
+            file_path = gc.file_path or (gc.template_item.get("FilePath") if gc.template_item else None)
+            if file_path and gc.item_type != "AudioItem" and ("Volume" not in gc.template_item):
+                dur = total_frames if gc.length in (-1, 0) else gc.length
+                self._create_clipitem(v1_track, file_path, gc.start_frame, dur, f"global_bg_{i}", "Background", fit_to_screen=True)
+
         for i, bg in enumerate(self.ir.dynamic_image_clips):
             if "bg" in str(bg.image_path).lower() or "classroom" in str(bg.image_path).lower():
                 dur = total_frames if bg.length == -1 else bg.length
@@ -341,14 +269,14 @@ class PremiereExporter:
         import os
         fps = self.fps
         faces_dir = Path("assets/faces").absolute()
-        
+
         # Pre-calculate x_offsets based on the number of characters
         num_chars = len(unique_chars)
         x_offsets = {}
-        
+
         # YMM4 Convention: Zundamon is usually the reactor (Right), Metan is explainer (Left)
         # We sort characters so that Zundamon is always pushed to the right side
-        def char_sort_key(c):
+        def char_sort_key(c: str) -> int:
             # Lower score = Left, Higher score = Right
             convention = {
                 "四国めたん": 0,
@@ -356,9 +284,9 @@ class PremiereExporter:
                 "ずんだもん": 10
             }
             return convention.get(c, 5)
-            
+
         sorted_chars = sorted(unique_chars, key=char_sort_key)
-        
+
         if num_chars == 1:
             x_offsets[sorted_chars[0]] = 0.0
         elif num_chars == 2:
@@ -371,7 +299,7 @@ class PremiereExporter:
 
         # We need to track the current frame for EACH character independently
         current_frames = {c: 0 for c in unique_chars}
-        
+
         # Precalculate scales for characters
         from PIL import Image
         import time
@@ -387,7 +315,7 @@ class PremiereExporter:
             for img_file in src_dir.glob("*.png"):
                 new_name = f"{img_file.stem}_{run_id}{img_file.suffix}"
                 shutil.copy(img_file, dst_dir / new_name)
-            
+
             char_faces_dir = dst_dir
             z_body = str(char_faces_dir / f"neutral_closed_{run_id}.png")
             if not os.path.exists(z_body):
@@ -402,9 +330,9 @@ class PremiereExporter:
             v_track = char_tracks[char_idx]
             c_frame = current_frames[vc.character]
             x_pos = x_offsets[vc.character]
-            
+
             char_faces_dir = char_metrics[vc.character]["dir"]
-            
+
             emo = vc.emotion if vc.emotion else "neutral"
             z_body = str(char_faces_dir / f"{emo}_closed_{run_id}.png")
             z_mouth = str(char_faces_dir / f"{emo}_open_{run_id}.png")
@@ -422,8 +350,14 @@ class PremiereExporter:
                 gap_dur = vc.start_frame - c_frame
                 self._create_clipitem(v_track, str(char_faces_dir / f"neutral_closed_{run_id}.png"), c_frame, gap_dur, f"{char_idx}_gap_{i}", f"{vc.character} Neutral", scale=target_scale, x_offset=x_pos, y_offset=base_y)
 
-            # Audio-reactive intervals
-            intervals = get_audio_reactive_intervals(vc.audio_path, vc.length, fps=fps)
+            # Lip-sync intervals (phonetic with companion .query.json fallback to audio-reactive)
+            intervals = resolve_lipsync_intervals(
+                audio_path=vc.audio_path,
+                duration_sec=vc.length / fps,
+                prefer_phonetic=True,
+                fps=fps,
+                audio_query=vc.audio_query,
+            )
 
             f_curr = vc.start_frame
             for k, (is_open, dur) in enumerate(intervals):
@@ -445,18 +379,18 @@ class PremiereExporter:
         for char_idx, char in enumerate(unique_chars):
             c_frame = current_frames[char]
             char_faces_dir = char_metrics[char]["dir"]
-            
+
             tail_body = str(char_faces_dir / f"neutral_closed_{run_id}.png")
             if not os.path.exists(tail_body):
                 tail_body = str(char_faces_dir.parent / f"neutral_closed_{run_id}.png")
-                
+
             if c_frame < total_frames:
                 self._create_clipitem(char_tracks[char_idx], tail_body, c_frame, total_frames - c_frame, f"{char_idx}_gap_end", f"{char} Neutral", scale=char_metrics[char]["scale"], x_offset=x_offsets[char], y_offset=char_metrics[char]["y"])
 
     def _populate_speech_bubbles(self, v4_track: Element, bubble_dir: Path) -> None:
         """Populate V4 track with pre-rendered PNG speech bubbles."""
         bubble_dir.mkdir(parents=True, exist_ok=True)
-        
+
         char_colors = {
             "ずんだもん": (46, 139, 87),    # Green
             "四国めたん": (255, 105, 180),  # Pink
@@ -477,7 +411,43 @@ class PremiereExporter:
         fps = self.fps
         a1_track = audio_tracks[0]
 
-        # BGM
+        # Global clips audio (BGM)
+        for i, gc in enumerate(self.ir.global_clips):
+            file_path = gc.file_path or (gc.template_item.get("FilePath") if gc.template_item else None)
+            if file_path and (gc.item_type == "AudioItem" or "Volume" in gc.template_item):
+                clip = SubElement(a1_track, 'clipitem', id=f"global_bgm_{i}")
+                SubElement(clip, 'name').text = "BGM"
+                SubElement(clip, 'duration').text = str(total_frames)
+                SubElement(clip, 'start').text = "0"
+                SubElement(clip, 'end').text = str(total_frames)
+                SubElement(clip, 'in').text = "0"
+                SubElement(clip, 'out').text = str(total_frames)
+
+                file = SubElement(clip, 'file', id=f"file_global_bgm_{i}")
+                SubElement(file, 'name').text = Path(file_path).name
+                SubElement(file, 'pathurl').text = f"file://localhost/{str(Path(file_path).absolute()).replace(os.sep, '/')}"
+                f_rate = SubElement(file, 'rate')
+                SubElement(f_rate, 'timebase').text = str(fps)
+                SubElement(f_rate, 'ntsc').text = 'FALSE'
+                media_elem = SubElement(file, 'media')
+                audio_elem = SubElement(media_elem, 'audio')
+                a_sc = SubElement(audio_elem, 'samplecharacteristics')
+                SubElement(a_sc, 'depth').text = '16'
+                SubElement(a_sc, 'samplerate').text = '48000'
+                SubElement(audio_elem, 'channelcount').text = '2'
+
+                filter_elem = SubElement(clip, 'filter')
+                effect = SubElement(filter_elem, 'effect')
+                SubElement(effect, 'name').text = "Audio Levels"
+                SubElement(effect, 'effectid').text = "audiolevels"
+                SubElement(effect, 'effecttype').text = "audiolevels"
+                SubElement(effect, 'mediatype').text = "audio"
+                param = SubElement(effect, 'parameter')
+                SubElement(param, 'parameterid').text = "level"
+                SubElement(param, 'name').text = "Level"
+                SubElement(param, 'value').text = "0.17"
+
+        # Dynamic BGM
         for i, ac in enumerate(self.ir.dynamic_audio_clips):
             if ac.audio_path:
                 clip = SubElement(a1_track, 'clipitem', id=f"bgm_{i}")
@@ -517,7 +487,7 @@ class PremiereExporter:
             if vc.audio_path:
                 char_idx = unique_chars.index(vc.character)
                 a_track = audio_tracks[1 + char_idx]
-                
+
                 clip = SubElement(a_track, 'clipitem', id=f"voice_{i}")
                 SubElement(clip, 'name').text = f"Voice ({vc.character})"
                 SubElement(clip, 'duration').text = str(vc.length)
@@ -567,22 +537,22 @@ class PremiereExporter:
         root, video_tracks, audio_tracks, total_frames, unique_chars = self._build_xmeml_root()
 
         self._populate_backgrounds(video_tracks[0], video_tracks[1], total_frames)
-        
+
         # Populate characters
         char_tracks = video_tracks[2:-1]
         self._populate_character_lipsync(char_tracks, unique_chars, proj_dir, total_frames)
-        
+
         # Populate bubbles
         bubble_track = video_tracks[-1]
         self._populate_speech_bubbles(bubble_track, bubble_dir)
-        
+
         # Populate audio
         self._populate_audio(audio_tracks, unique_chars, total_frames)
 
         fname = xml_filename if xml_filename else "Zundamon_Episode_1_PRO.xml"
         output_path = xml_output_dir / fname
         self._write_xml(root, output_path)
-        
+
         # Also ensure Zundamon_Episode_1_PRO.xml exists for backward compatibility
         if fname != "Zundamon_Episode_1_PRO.xml":
             import shutil

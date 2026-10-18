@@ -16,7 +16,7 @@ import copy
 import json
 import wave
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from .cache import TTSCache
 from .config import CompilerConfig
@@ -34,7 +34,7 @@ from .script import DirectorScriptEntry, WriterScriptEntry
 from .template import get_timeline
 from .utils import normalize_japanese_typography
 from .validation import sanitize_filename
-from .voicevox import TTSBackend, VoicevoxClient
+from .voicevox import TTSBackend
 
 if TYPE_CHECKING:
     pass
@@ -71,7 +71,7 @@ class TimelineIRBuilder:
 
     def get_fps(self) -> int:
         """Returns the frame rate from the template or configuration."""
-        return get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps)
+        return cast(int, get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps))
 
     def convert_hatsuon(self, text: str) -> str:
         """Converts Japanese text into phonetic pronunciation string."""
@@ -109,7 +109,7 @@ class TimelineIRBuilder:
                 pass
 
         if out_path.exists():
-            if audio_query is None and hasattr(self.tts_backend, "get_audio_query"):
+            if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
                 try:
                     audio_query = self.tts_backend.get_audio_query(text, speaker_id)
                     with open(query_path, "w", encoding="utf-8") as qf:
@@ -126,12 +126,14 @@ class TimelineIRBuilder:
         cached = self.cache.get(text, speaker_id)
         if cached:
             wav_bytes, duration = cached
-            if audio_query is None and hasattr(self.tts_backend, "get_audio_query"):
+            if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
                 try:
                     audio_query = self.tts_backend.get_audio_query(text, speaker_id)
                 except Exception:
                     pass
         else:
+            if self.tts_backend is None:
+                raise RuntimeError("TTS Backend not initialized")
             try:
                 wav_bytes, duration, audio_query = self.tts_backend.synthesize(text, speaker_id)
                 self.cache.set(text, speaker_id, wav_bytes, duration)
@@ -170,8 +172,9 @@ class TimelineIRBuilder:
         active_bg: Optional[DynamicImageClip] = None
 
         for idx, line in enumerate(script):
-            if line.get("type") == "bgm":
-                raw_p = Path(line.get("path") or line.get("bgm", ""))
+            entry_dict: Dict[str, Any] = cast(Dict[str, Any], line)
+            if entry_dict.get("type") == "bgm":
+                raw_p = Path(str(entry_dict.get("path") or entry_dict.get("bgm", "")))
                 if raw_p.exists():
                     path = raw_p.resolve()
                 elif (Path.cwd() / raw_p).exists():
@@ -182,33 +185,35 @@ class TimelineIRBuilder:
                     path = (audio_dir.parent.parent.parent / raw_p).resolve()
                 else:
                     path = raw_p.resolve()
-                vol = line.get("volume", 15) / 100.0
+                vol = float(entry_dict.get("volume", 15)) / 100.0
                 dynamic_audio_clips.append(
                     DynamicAudioClip(audio_path=path, start_frame=0, length=-1, volume=vol)
                 )
                 continue
 
-            char_name = line.get("character")
+            char_name = str(entry_dict.get("character", ""))
 
-            if "emotion" in line and line["emotion"] != "neutral":
+            emo = entry_dict.get("emotion")
+            if emo and emo != "neutral":
                 char_faces = self.face_templates.get(char_name, {})
-                if line["emotion"] not in char_faces:
+                if emo not in char_faces:
                     msg = (
-                        f"Emotion '{line['emotion']}' for character '{char_name}' "
+                        f"Emotion '{emo}' for character '{char_name}' "
                         f"on entry {idx} is preserved but unsupported in generated YMMP."
                     )
                     self.warnings.append(msg)
 
-            if "motion" in line and line["motion"] != "none":
-                msg = f"Motion '{line['motion']}' on entry {idx} is preserved but unsupported in generated YMMP."
+            motion = entry_dict.get("motion")
+            if motion and motion != "none":
+                msg = f"Motion '{motion}' on entry {idx} is preserved but unsupported in generated YMMP."
                 self.warnings.append(msg)
 
-            text = line.get("text", "")
+            text = str(entry_dict.get("text", ""))
             length = self.calculate_placeholder_length(text)
 
-            bgm_name = line.get("bgm")
+            bgm_name = entry_dict.get("bgm")
             if bgm_name and bgm_name != "none" and bgm_name != "":
-                bgm_path = Path(bgm_name)
+                bgm_path = Path(str(bgm_name))
                 if bgm_path.exists():
                     dynamic_audio_clips.append(
                         DynamicAudioClip(
@@ -222,8 +227,9 @@ class TimelineIRBuilder:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
-            if line.get("sfx") is not None and line["sfx"] != "none" and line["sfx"] != "":
-                sfx_path = Path(line["sfx"])
+            sfx_val = entry_dict.get("sfx")
+            if sfx_val is not None and sfx_val != "none" and sfx_val != "":
+                sfx_path = Path(str(sfx_val))
                 if sfx_path.exists():
                     dynamic_audio_clips.append(
                         DynamicAudioClip(
@@ -233,15 +239,15 @@ class TimelineIRBuilder:
                         )
                     )
                 else:
-                    msg = f"SFX not found: {line['sfx']}"
+                    msg = f"SFX not found: {sfx_val}"
                     logger.warning(msg)
                     self.warnings.append(msg)
 
-            text = normalize_japanese_typography(line.get("text", ""))
+            text = normalize_japanese_typography(str(entry_dict.get("text", "")))
             if not char_name:
                 continue
 
-            character_positions.setdefault(char_name, line.get("character_position", "center"))
+            character_positions.setdefault(char_name, str(entry_dict.get("character_position", "center")))
 
             if char_name not in self.character_templates:
                 # Dynamic fallback: clone the first available character template for known characters
@@ -329,12 +335,12 @@ class TimelineIRBuilder:
                     length=length,
                     character=char_name,
                     text=text,
-                    emotion=line.get("emotion", "neutral"),
-                    motion=line.get("motion", "none"),
+                    emotion=str(entry_dict.get("emotion", "neutral")),
+                    motion=str(entry_dict.get("motion", "none")),
                     audio_path=audio_path,
                     hatsuon=hatsuon,
-                    subtitle_position=line.get("subtitle_position", "bottom_center"),
-                    subtitle_style=line.get("subtitle_style", "outlined"),
+                    subtitle_position=str(entry_dict.get("subtitle_position", "bottom_center")),
+                    subtitle_style=str(entry_dict.get("subtitle_style", "outlined")),
                     audio_query=audio_query,
                 )
             )
@@ -370,33 +376,34 @@ class TimelineIRBuilder:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
-            image_name = line.get("image")
+            image_name = entry_dict.get("image")
             if image_name:
-                add_image_clip(image_name)
+                add_image_clip(str(image_name))
 
-            bg_name = line.get("bg")
+            bg_name = entry_dict.get("bg")
             if bg_name:
+                bg_name_str = str(bg_name)
                 if active_bg:
                     active_bg.length = current_frame - active_bg.start_frame
 
                 active_bg = DynamicImageClip(
-                    image_path=Path(bg_name),
+                    image_path=Path(bg_name_str),
                     start_frame=current_frame,
                     length=-1,
                 )
 
-                img_path = Path("artifacts/.user_uploaded") / bg_name
+                img_path = Path("artifacts/.user_uploaded") / bg_name_str
                 if not img_path.exists():
-                    img_path = Path(bg_name)
+                    img_path = Path(bg_name_str)
                 if not img_path.exists():
-                    img_path = Path("artifacts") / bg_name
+                    img_path = Path("artifacts") / bg_name_str
 
                 if img_path.exists():
                     active_bg.image_path = img_path
                     dynamic_image_clips.append(active_bg)
                 else:
                     active_bg = None
-                    msg = f"BG Image not found: {bg_name}"
+                    msg = f"BG Image not found: {bg_name_str}"
                     logger.warning(msg)
                     self.warnings.append(msg)
 

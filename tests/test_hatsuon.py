@@ -82,3 +82,19 @@ def test_hatsuon_convert_with_kana(hatsuon):
         result = hatsuon.convert(text)
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+def test_hatsuon_number_conv_alias(hatsuon):
+    """Test _number_conv backward compatibility alias."""
+    assert hatsuon._number_conv("456") == "456"
+
+
+def test_hatsuon_kanji_reverse_conv_types(hatsuon):
+    """Test kanji_reverse_conv accepts both str and sequence of str."""
+    res_str = hatsuon.kanji_reverse_conv("漢字")
+    assert isinstance(res_str, str)
+    assert len(res_str) > 0
+
+    res_seq = hatsuon.kanji_reverse_conv(["今日", "は", "晴れ"])
+    assert isinstance(res_seq, str)
+    assert "/" in res_seq

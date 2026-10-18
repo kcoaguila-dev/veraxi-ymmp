@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import List, Union
 
 from .compiler import CompilationResult, ScriptEntry, YMMPCompiler
-from .logging import logger
 
 
 class AsyncYMMPCompiler(YMMPCompiler):
@@ -51,7 +50,7 @@ class AsyncYMMPCompiler(YMMPCompiler):
         if tts_tasks:
             results = await asyncio.gather(*(t for _, _, _, t in tts_tasks), return_exceptions=True)
             for (idx, char_name, text, _), result in zip(tts_tasks, results):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     self.errors.append(f"Async synthesis failed for {char_name}: {result}")
                 else:
                     wav_bytes, duration = result

@@ -10,7 +10,7 @@ Design Standards:
   - Subtitle Safe Zone: strictly leaves Y >= 780 clear for dialogue
 """
 from pathlib import Path
-from typing import List, Tuple, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont
 
 from .logging import logger
@@ -36,7 +36,7 @@ def get_fonts() -> dict:
     """Returns BIZ UDP Gothic Bold fonts with proper proportional kerning."""
     fb = "BIZ-UDGothicB.ttc"
     fr = "BIZ-UDGothicR.ttc"
-    
+
     try:
         return {
             "hero": ImageFont.truetype(fb, 64, index=1),
@@ -83,7 +83,7 @@ def create_slide_base(
     theme_color: Tuple[int, int, int] = ACCENT_BLUE,
     width: int = 1920,
     height: int = 1080
-):
+) -> Tuple[Image.Image, ImageDraw.ImageDraw, dict]:
     """
     Creates a 1920x1080 Studio Presentation Slide in Pro Dark Slate.
     Clean single-anchor header without badge traffic.
@@ -98,7 +98,7 @@ def create_slide_base(
     # Left accent indicator
     draw.rounded_rectangle([60, 24, 76, 116], radius=6, fill=theme_color)
 
-    cur_x = 96
+    cur_x = 96.0
     if category_tag:
         cat_w = draw.textlength(category_tag, font=fonts["badge"]) + 36
         draw.rounded_rectangle([cur_x, 42, cur_x + cat_w, 98], radius=12, fill=COLOR_CANVAS, outline=COLOR_BORDER, width=1)
@@ -122,7 +122,7 @@ def create_slide_base(
     return img, draw, fonts
 
 
-def get_status_colors(accent_color: Tuple[int, int, int]):
+def get_status_colors(accent_color: Tuple[int, int, int]) -> Tuple[Tuple[int, int, int, int], Tuple[int, int, int, int], Tuple[int, int, int, int]]:
     """Returns dark container background, outline, and text color for status pills."""
     if accent_color == ACCENT_RED:
         return (69, 10, 10, 255), (239, 68, 68, 255), (255, 255, 255, 255)
@@ -145,7 +145,7 @@ def check_cognitive_load(
     text_elements: List[str],
     max_chars: int = MAX_SLIDE_CHARS,
     max_elements: int = MAX_SLIDE_ELEMENTS
-):
+) -> None:
     """
     Systematic Cognitive Load & Text Density Check.
     Enforces the '1-Slide-1-Impact' rule for video presentation boards.
@@ -184,7 +184,7 @@ def render_metric_slide(
     badge_text: str = "",
     theme_color: Tuple[int, int, int] = ACCENT_BLUE,
     category_tag: str = ""
-):
+) -> None:
     """
     Renders a high-retention, low-cognitive-load Metric Slide (2-3 second read):
     - 1 Dominant Hero Focus Card (Giant Number + Status Pill)
@@ -262,7 +262,7 @@ def render_vs_slide(
     bottom_text: str,
     top_badge: str = "",
     theme_color: Tuple[int, int, int] = ACCENT_BLUE
-):
+) -> None:
     """
     Renders a Pro Split Comparison "VS" Slide for instant comprehension.
     """
@@ -301,18 +301,18 @@ def render_vs_slide(
 
     # 2. Split Comparison
     box_w = (x2 - x1 - 40) // 2
-    
+
     # Left Box
     tag_l, title_l, bullets_l = left_box
     left_x1 = x1
     left_x2 = left_x1 + box_w
     draw.rounded_rectangle([left_x1, 405, left_x2, 645], radius=16, fill=COLOR_SURFACE, outline=COLOR_BORDER, width=2)
     draw.rounded_rectangle([left_x1, 405, left_x1 + 10, 645], radius=4, fill=ACCENT_RED)
-    
+
     tag_w = draw.textlength(tag_l, font=fonts["badge"]) + 24
     draw.rounded_rectangle([left_x1 + 24, 425, left_x1 + 24 + tag_w, 465], radius=8, fill=(69, 10, 10, 255), outline=ACCENT_RED, width=1)
     draw.text((left_x1 + 24 + tag_w / 2, 445), tag_l, font=fonts["badge"], fill=ACCENT_RED, anchor="mm")
-    
+
     draw.text((left_x1 + 28, 510), title_l, font=fonts["card_title"], fill=COLOR_TEXT_PRIMARY, anchor="lm")
     y_b = 565
     for b in bullets_l[:2]:
@@ -325,11 +325,11 @@ def render_vs_slide(
     right_x2 = x2
     draw.rounded_rectangle([right_x1, 405, right_x2, 645], radius=16, fill=COLOR_SURFACE, outline=ACCENT_GREEN, width=2)
     draw.rounded_rectangle([right_x1, 405, right_x1 + 10, 645], radius=4, fill=ACCENT_GREEN)
-    
+
     tag_w = draw.textlength(tag_r, font=fonts["badge"]) + 24
     draw.rounded_rectangle([right_x1 + 24, 425, right_x1 + 24 + tag_w, 465], radius=8, fill=(6, 78, 59, 255), outline=ACCENT_GREEN, width=1)
     draw.text((right_x1 + 24 + tag_w / 2, 445), tag_r, font=fonts["badge"], fill=ACCENT_GREEN, anchor="mm")
-    
+
     draw.text((right_x1 + 28, 510), title_r, font=fonts["card_title"], fill=ACCENT_GREEN, anchor="lm")
     y_b = 565
     for b in bullets_r[:2]:
@@ -356,7 +356,7 @@ def render_overview_slide(
     conclusion_tag: str = "",
     conclusion_text: str = "",
     theme_color: Tuple[int, int, int] = ACCENT_BLUE
-):
+) -> None:
     """
     Renders an Executive Overview / Agenda Slide:
     - Supports clean single-line cards (zero sub-bullet clutter) for fast 1-2 second scan
@@ -378,7 +378,7 @@ def render_overview_slide(
     img, draw, fonts = create_slide_base(title, theme_color=theme_color)
     x1, x2 = 70, 1340
     n = len(cards)
-    
+
     # Normalize card tuples
     norm_cards = []
     for c in cards:
@@ -387,7 +387,6 @@ def render_overview_slide(
         else:
             norm_cards.append((c[0], c[1], c[2], c[3]))
 
-    has_content = any(bool(c[2]) for c in norm_cards)
     has_banner = bool(conclusion_text.strip()) if conclusion_text else False
 
     if has_banner:
@@ -406,12 +405,12 @@ def render_overview_slide(
         # Card base
         draw.rounded_rectangle([x1, y, x2, y + card_h], radius=18, fill=COLOR_SURFACE, outline=COLOR_BORDER, width=2)
         draw.rounded_rectangle([x1, y, x1 + 10, y + card_h], radius=4, fill=col)
-        
+
         # Badge Pill
         num_w = max(draw.textlength(num, font=fonts["badge"]) + 36, 76)
         pill_h = 48
         pill_txt_col = get_pill_text_color(col)
-        
+
         if not content:
             # Clean single-line headline card (Vertically centered)
             center_y = y + card_h / 2
@@ -419,7 +418,7 @@ def render_overview_slide(
             pill_y2 = center_y + pill_h / 2
             draw.rounded_rectangle([x1 + 28, pill_y1, x1 + 28 + num_w, pill_y2], radius=12, fill=col)
             draw.text((x1 + 28 + num_w / 2, center_y), num, font=fonts["badge"], fill=pill_txt_col, anchor="mm")
-            
+
             # Big, bold headline text
             draw.text((x1 + 48 + num_w, center_y), card_title, font=fonts["card_title_lg"], fill=COLOR_TEXT_PRIMARY, anchor="lm")
         else:
@@ -429,7 +428,7 @@ def render_overview_slide(
             draw.rounded_rectangle([x1 + 28, pill_y1, x1 + 28 + num_w, pill_y2], radius=10, fill=col)
             draw.text((x1 + 28 + num_w / 2, (pill_y1 + pill_y2) / 2), num, font=fonts["badge"], fill=pill_txt_col, anchor="mm")
             draw.text((x1 + 44 + num_w, (pill_y1 + pill_y2) / 2), card_title, font=fonts["card_title"], fill=COLOR_TEXT_PRIMARY, anchor="lm")
-            
+
             if isinstance(content, list):
                 line_y = pill_y2 + 32
                 for i, bullet in enumerate(content[:2]):
@@ -441,7 +440,7 @@ def render_overview_slide(
                 bullet_str = content if content.startswith("•") else f"• {content}"
                 line_y = pill_y2 + (24 if n == 3 else 36)
                 draw.text((x1 + 36, line_y), bullet_str, font=fonts["body"], fill=COLOR_TEXT_SECONDARY, anchor="lm")
-                
+
         y += card_h + gap
 
     # Optional Conclusion Banner
@@ -449,7 +448,7 @@ def render_overview_slide(
         banner_accent = norm_cards[0][3] if norm_cards else theme_color
         draw.rounded_rectangle([x1, 670, x2, 755], radius=14, fill=COLOR_SURFACE, outline=banner_accent, width=2)
         draw.rounded_rectangle([x1, 670, x1 + 8, 755], radius=4, fill=banner_accent)
-        
+
         tag_w = max(draw.textlength(conclusion_tag, font=fonts["badge"]) + 32, 80)
         draw.rounded_rectangle([x1 + 24, 690, x1 + 24 + tag_w, 735], radius=8, fill=banner_accent)
         banner_txt_col = get_pill_text_color(banner_accent)
@@ -474,7 +473,7 @@ def resolve_color(col: Any) -> Tuple[int, int, int]:
     if isinstance(col, str):
         return COLOR_MAP.get(col.lower(), ACCENT_BLUE)
     if isinstance(col, (tuple, list)) and len(col) >= 3:
-        return (col[0], col[1], col[2])
+        return (int(col[0]), int(col[1]), int(col[2]))
     return ACCENT_BLUE
 
 

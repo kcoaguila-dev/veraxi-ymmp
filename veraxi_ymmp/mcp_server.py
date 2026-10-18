@@ -81,12 +81,14 @@ def validate_script(
         for entry in data
     ) if isinstance(data, list) else False
 
+    validated: List[Any]
     if has_director_fields:
-        validated = validate_director_script(data)
+        director_entries = validate_director_script(data)
         script_type = "director"
         if writer_json is not None:
             writer = validate_writer_script(parse_json(writer_json, "writer script"))
-            validate_director_against_writer(validated, writer)
+            validate_director_against_writer(director_entries, writer)
+        validated = director_entries
     else:
         validated = validate_writer_script(data)
         script_type = "writer"

@@ -19,10 +19,11 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union, cast
 
 import brotli
 
+from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES
 from .ir import TimelineIR
 from .moviepy_renderer import wrap_japanese
 from .phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
@@ -134,7 +135,6 @@ class YMMPRenderer:
         if output_data is None:
             output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
-        effective_script_len = script_len if script_len is not None else len(timeline_ir.voice_clips)
         registry = self.psd_registry
 
         # Setup characters
@@ -397,15 +397,16 @@ class YMMPRenderer:
                 )
 
         # 3. Layer 0: Background ImageItem
-        bg_candidate = Path("assets/bg/clean_classroom.jpg").resolve()
+        bg_candidate = Path(DEFAULT_BG_IMAGE_PATH).resolve()
         for gc in timeline_ir.global_clips:
-            ti = gc.template_item
-            if "FilePath" in ti and (
-                "bg" in ti["FilePath"].lower()
-                or "room" in ti["FilePath"].lower()
-                or "classroom" in ti["FilePath"].lower()
+            ti = gc.template_item or {}
+            file_p = gc.file_path or ti.get("FilePath")
+            if file_p and (
+                "bg" in file_p.lower()
+                or "room" in file_p.lower()
+                or "classroom" in file_p.lower()
             ):
-                bg_candidate = Path(ti["FilePath"]).resolve()
+                bg_candidate = Path(file_p).resolve()
         items.append({
             "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
             "FilePath": str(bg_candidate),
@@ -422,10 +423,10 @@ class YMMPRenderer:
         })
 
         # 4. Layer 1: B-Roll Images
-        for clip in timeline_ir.dynamic_image_clips:
+        for d_img_clip in timeline_ir.dynamic_image_clips:
             items.append({
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-                "FilePath": str(clip.image_path.resolve()),
+                "FilePath": str(d_img_clip.image_path.resolve()),
                 "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Y": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
                 "Opacity": {"Values": [{"Value": 100.0}]},
@@ -433,18 +434,21 @@ class YMMPRenderer:
                 "Rotation": {"Values": [{"Value": 0.0}]},
                 "Blend": "Normal",
                 "Layer": 1,
-                "Frame": clip.start_frame,
-                "Length": clip.length,
+                "Frame": d_img_clip.start_frame,
+                "Length": d_img_clip.length,
                 "VideoEffects": [],
             })
 
         # 5. Layer 3: BGM AudioItem
-        bgm_path = Path("assets/bgm/2_23_AM.mp3").resolve()
-        if not bgm_path.exists():
-            bgm_path = Path("assets/bgm/2_23_AM.m4a").resolve()
-        for clip in timeline_ir.dynamic_audio_clips:
-            if clip.length == -1 or "bgm" in str(clip.audio_path).lower():
-                bgm_path = clip.audio_path.resolve()
+        bgm_path = Path(DEFAULT_BGM_CANDIDATES[0]).resolve()
+        for cand in DEFAULT_BGM_CANDIDATES:
+            cand_p = Path(cand).resolve()
+            if cand_p.exists():
+                bgm_path = cand_p
+                break
+        for d_audio_clip in timeline_ir.dynamic_audio_clips:
+            if d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower():
+                bgm_path = d_audio_clip.audio_path.resolve()
         items.append({
             "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
             "FilePath": str(bgm_path),
@@ -586,11 +590,11 @@ class YMMPRenderer:
         )
         items.extend(tachie_items)
 
-        for clip in timeline_ir.dynamic_image_clips:
+        for d_img_clip in timeline_ir.dynamic_image_clips:
             is_bg = (
-                "bg" in str(clip.image_path).lower()
-                or "room" in str(clip.image_path).lower()
-                or "classroom" in str(clip.image_path).lower()
+                "bg" in str(d_img_clip.image_path).lower()
+                or "room" in str(d_img_clip.image_path).lower()
+                or "classroom" in str(d_img_clip.image_path).lower()
             )
 
             if not is_bg:
@@ -607,9 +611,9 @@ class YMMPRenderer:
                     "AnimationType": "なし",
                 }
 
-            image_item = {
+            image_item: Dict[str, Any] = {
                 "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-                "FilePath": str(clip.image_path.resolve()),
+                "FilePath": str(d_img_clip.image_path.resolve()),
                 "X": {
                     "Values": [{"Value": 0.0 if is_bg else broll_cfg["X"]}],
                     "Span": 0.0,
@@ -625,8 +629,8 @@ class YMMPRenderer:
                 "Rotation": {"Values": [{"Value": 0.0}]},
                 "Blend": "Normal",
                 "Layer": 0 if is_bg else 1,
-                "Frame": clip.start_frame,
-                "Length": clip.length,
+                "Frame": d_img_clip.start_frame,
+                "Length": d_img_clip.length,
                 "VideoEffects": [],
             }
             items.append(image_item)
@@ -640,28 +644,28 @@ class YMMPRenderer:
                     "Pan": {"Values": [{"Value": 0.0}]},
                     "PlaybackRate": 100.0,
                     "ContentOffset": "00:00:00",
-                    "Frame": clip.start_frame,
+                    "Frame": d_img_clip.start_frame,
                     "Length": 60,
                     "Layer": 11,
                     "Blend": "Normal",
                     "VideoEffects": [],
                 })
 
-        for clip in timeline_ir.dynamic_audio_clips:
-            if clip.length == -1:
+        for d_audio_clip in timeline_ir.dynamic_audio_clips:
+            if d_audio_clip.length == -1:
                 volume = 3.0  # ducking
             else:
                 volume = 50.0
 
             length = (
-                timeline_ir.total_frames - clip.start_frame
-                if clip.length == -1
-                else clip.length
+                timeline_ir.total_frames - d_audio_clip.start_frame
+                if d_audio_clip.length == -1
+                else d_audio_clip.length
             )
 
             audio_item = {
                 "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
-                "FilePath": str(clip.audio_path.resolve()),
+                "FilePath": str(d_audio_clip.audio_path.resolve()),
                 "Volume": {
                     "Values": [{"Value": volume}],
                     "Span": 0.0,
@@ -670,9 +674,9 @@ class YMMPRenderer:
                 "Pan": {"Values": [{"Value": 0.0}]},
                 "PlaybackRate": 100.0,
                 "Layer": 5,
-                "Frame": clip.start_frame,
+                "Frame": d_audio_clip.start_frame,
                 "Length": length,
-                "IsLooped": clip.length == -1,
+                "IsLooped": d_audio_clip.length == -1,
             }
             items.append(audio_item)
 
@@ -763,20 +767,11 @@ class YMMPRenderer:
         text_item["Frame"] = frame
         text_item["Length"] = length
         text_item["Layer"] = self._get_subtitle_layer()
-        self._set_animated_value(
-            text_item,
-            "X",
-            {"top_center": -480, "center": -480, "bottom_center": -480}[
-                line.get("subtitle_position", "bottom_center")
-            ],
-        )
-        self._set_animated_value(
-            text_item,
-            "Y",
-            {"top_center": -420, "center": 0, "bottom_center": 420}[
-                line.get("subtitle_position", "bottom_center")
-            ],
-        )
+        sub_pos = str(line.get("subtitle_position", "bottom_center"))
+        x_map: Dict[str, float] = {"top_center": -480.0, "center": -480.0, "bottom_center": -480.0}
+        y_map: Dict[str, float] = {"top_center": -420.0, "center": 0.0, "bottom_center": 420.0}
+        self._set_animated_value(text_item, "X", x_map.get(sub_pos, -480.0))
+        self._set_animated_value(text_item, "Y", y_map.get(sub_pos, 420.0))
         if line.get("subtitle_style", "outlined") == "outlined":
             self._set_animated_value(text_item, "FontSize", 56.0)
         return text_item
@@ -796,7 +791,7 @@ class YMMPRenderer:
         template = char_faces.get(emotion)
         if template is None:
             return None
-        face_item = copy.deepcopy(template)
+        face_item = cast(Dict[str, Any], copy.deepcopy(template))
         face_item["Layer"] = 1
         face_item["Frame"] = frame
         face_item["Length"] = length
