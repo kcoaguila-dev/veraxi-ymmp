@@ -354,3 +354,27 @@ def normalize_tts_text(text: str) -> str:
     # Also after sentence-ending punctuation (e.g. "はい。ええ、そうです")
     normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
     return normalized
+
+
+def tune_audio_query_pitch(audio_query: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Directly tunes mora pitches and accent types in a VOICEVOX AudioQuery dictionary.
+    Guarantees natural affirmative intonation:
+    - If a phrase begins with ['エ', 'エ'] with accent == 1 (falling question/incredulous pitch),
+      adjusts accent = 2 and elevates the second mora pitch relative to the first to create
+      a polite, gentle affirmative agreement pitch contour.
+    """
+    accent_phrases = audio_query.get("accent_phrases", [])
+    for p in accent_phrases:
+        moras = p.get("moras", [])
+        mora_texts = [m.get("text") for m in moras]
+        # Check for clause-initial 'ええ'
+        if mora_texts == ["エ", "エ"] and p.get("accent") == 1:
+            p["accent"] = 2
+            # Natural affirmative agreement: first mora starts slightly lower, second mora rises gently
+            base_p = moras[0].get("pitch", 5.4)
+            moras[0]["pitch"] = round(min(base_p, 5.38), 3)
+            moras[1]["pitch"] = round(moras[0]["pitch"] + 0.10, 3)
+            moras[0]["vowel_length"] = 0.13
+            moras[1]["vowel_length"] = 0.15
+    return audio_query

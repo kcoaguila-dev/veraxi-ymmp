@@ -22,6 +22,7 @@ from .ports import NullTTSBackend as NullTTSBackend, TTSBackend as TTSBackend
 
 class VoicevoxError(Exception):
     """Exception raised when VOICEVOX API operations fail."""
+
     pass
 
 
@@ -55,7 +56,9 @@ class VoicevoxClient:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.is_available)
 
-    async def synthesize_async(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+    async def synthesize_async(
+        self, text: str, speaker_id: int
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
         """Async version of synthesize."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.synthesize, text, speaker_id)
@@ -73,7 +76,7 @@ class VoicevoxClient:
         logger.info("VOICEVOX is not running. Attempting to start it automatically...")
 
         # Common installation paths on Windows
-        local_app_data = os.environ.get('LOCALAPPDATA', '')
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
         possible_paths = [
             Path(local_app_data) / "Programs" / "VOICEVOX" / "run.exe",
             Path(local_app_data) / "Programs" / "VOICEVOX" / "VOICEVOX.exe",
@@ -94,9 +97,8 @@ class VoicevoxClient:
         logger.info("Found VOICEVOX at %s, launching...", exe_path)
         try:
             # Launch in background without blocking
-            creationflags = (
-                getattr(subprocess, "DETACHED_PROCESS", 0)
-                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0
             )
             subprocess.Popen([str(exe_path)], creationflags=creationflags)
 
@@ -129,15 +131,13 @@ class VoicevoxClient:
 
     def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
         """Fetch AudioQuery dictionary for text without synthesizing audio."""
+        from .phonetics import tune_audio_query_pitch
+
         try:
             params: Dict[str, Union[str, int]] = {"text": text, "speaker": speaker_id}
-            res = requests.post(
-                f"{self.base_url}/audio_query",
-                params=params,
-                timeout=30
-            )
+            res = requests.post(f"{self.base_url}/audio_query", params=params, timeout=30)
             res.raise_for_status()
-            return cast(Dict[str, Any], res.json())
+            return tune_audio_query_pitch(cast(Dict[str, Any], res.json()))
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to fetch audio_query: {e}")
 
@@ -155,15 +155,13 @@ class VoicevoxClient:
         Raises:
             VoicevoxError: If synthesis fails at any step.
         """
+        from .phonetics import tune_audio_query_pitch
+
         try:
             params: Dict[str, Union[str, int]] = {"text": text, "speaker": speaker_id}
-            query_res = requests.post(
-                f"{self.base_url}/audio_query",
-                params=params,
-                timeout=30
-            )
+            query_res = requests.post(f"{self.base_url}/audio_query", params=params, timeout=30)
             query_res.raise_for_status()
-            audio_query = cast(Dict[str, Any], query_res.json())
+            audio_query = tune_audio_query_pitch(cast(Dict[str, Any], query_res.json()))
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to create audio_query: {e}")
 
@@ -173,7 +171,7 @@ class VoicevoxClient:
                 params={"speaker": speaker_id},
                 json=audio_query,
                 headers={"Content-Type": "application/json"},
-                timeout=self.timeout
+                timeout=self.timeout,
             )
             synth_res.raise_for_status()
             wav_bytes = synth_res.content
@@ -181,7 +179,7 @@ class VoicevoxClient:
             raise VoicevoxError(f"Failed to synthesize audio: {e}")
 
         try:
-            with wave.open(io.BytesIO(wav_bytes), 'rb') as w:
+            with wave.open(io.BytesIO(wav_bytes), "rb") as w:
                 frames = w.getnframes()
                 rate = w.getframerate()
                 duration = frames / float(rate)
