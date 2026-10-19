@@ -55,7 +55,7 @@ YMM4_ENUM_REGISTRY = {
     "BasePoint": {
         "CenterBottom",
         "CenterTop",
-        "Center",
+        "CenterCenter",
         "LeftTop",
         "RightTop",
         "LeftBottom",
@@ -224,7 +224,7 @@ def validate_ymmp_timeline(
             raise ValidationError(
                 f"VoiceItem[{i}] has invalid BasePoint '{bp}'. "
                 f"Must be one of {sorted(YMM4_ENUM_REGISTRY['BasePoint'])}. "
-                "Invalid BasePoint causes YMM4 to default to CenterTop, pushing text down and causing cutoff!"
+                "Invalid BasePoint causes YMM4 project load deserialization failure!"
             )
 
         hatsuon = v.get("Hatsuon", "")
