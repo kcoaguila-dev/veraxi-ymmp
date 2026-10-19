@@ -353,6 +353,8 @@ def normalize_tts_text(text: str) -> str:
     normalized = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", text)
     # Also after sentence-ending punctuation (e.g. "はい。ええ、そうです")
     normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
+    # '何でも' (which OpenJTalk parses as 'なにでも') must be pronounced 'なんでも'
+    normalized = normalized.replace("何でも", "なんでも")
     return normalized
 
 

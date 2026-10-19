@@ -143,7 +143,19 @@ class TimelineIRBuilder:
                 logger.debug(f"Failed to read cached audio query from {query_path}: {exc}")
 
         tts_text = normalize_tts_text(text)
-        if out_path.exists():
+        meta_path = audio_dir / f"{idx:03d}_{safe_char_name}.meta.json"
+        is_cache_valid = False
+        if out_path.exists() and meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf)
+                if meta.get("tts_text") == tts_text and meta.get("speaker_id") == speaker_id:
+                    is_cache_valid = True
+            except Exception as exc:
+                logger.debug(f"Failed to read audio meta from {meta_path}: {exc}")
+                is_cache_valid = False
+
+        if is_cache_valid:
             if (
                 audio_query is None
                 and self.tts_backend is not None
@@ -187,6 +199,17 @@ class TimelineIRBuilder:
         audio_dir.mkdir(parents=True, exist_ok=True)
         with open(out_path, "wb") as f:
             f.write(wav_bytes)
+
+        try:
+            with open(meta_path, "w", encoding="utf-8") as mf:
+                json.dump(
+                    {"text": text, "tts_text": tts_text, "speaker_id": speaker_id},
+                    mf,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except Exception as exc:
+            logger.debug(f"Failed to write audio meta to {meta_path}: {exc}")
 
         if audio_query:
             try:
