@@ -19,13 +19,151 @@ from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend, TTSBackend
 from .logging import setup_logging, logger
 from .script import validate_writer_script, validate_director_script, validate_director_against_writer
 
-# Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
-if hasattr(sys.stdout, "reconfigure") and sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8')
+def _cmd_run(argv: List[str]) -> None:
+    """Run the end-to-end ProjectPipeline for a project directory."""
+    from .pipeline import ProjectPipeline
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp run",
+        description="Run end-to-end Veraxi YMMP project pipeline.",
+    )
+    parser.add_argument("project_dir", type=str, help="Path to project directory")
+    parser.add_argument("--no-tts", action="store_true", help="Disable VOICEVOX TTS synthesis")
+    parser.add_argument("--no-premiere", action="store_true", help="Skip Premiere XML export")
+    parser.add_argument("--no-ymmp", action="store_true", help="Skip YMM4 export")
+    parser.add_argument("--no-qa", action="store_true", help="Skip MoviePy QA render")
+    parser.add_argument("--qa-duration", type=float, default=30.0, help="Duration for QA render in seconds")
+    parser.add_argument("--no-thumbnail", action="store_true", help="Skip YouTube thumbnail generation")
+
+    args = parser.parse_args(argv)
+    pipeline = ProjectPipeline(use_tts=not args.no_tts)
+    result = pipeline.run(
+        project_path=args.project_dir,
+        do_premiere=not args.no_premiere,
+        do_ymmp=not args.no_ymmp,
+        do_qa=not args.no_qa,
+        qa_duration=args.qa_duration,
+        do_thumbnail=not args.no_thumbnail,
+    )
+    if not result.success:
+        for err in result.errors:
+            print(f"Error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_normalize(argv: List[str]) -> None:
+    """Normalize video audio loudness for one or all target platforms."""
+    from .audio_normalizer import (
+        PLATFORM_TARGETS,
+        normalize_all_platforms,
+        normalize_video_audio,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp normalize",
+        description="Normalize video audio loudness to platform LUFS targets.",
+    )
+    parser.add_argument("input", type=str, help="Path to input video file")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Output file or directory path")
+    parser.add_argument(
+        "-p",
+        "--platform",
+        choices=list(PLATFORM_TARGETS.keys()),
+        default="youtube",
+        help="Target platform (default: youtube)",
+    )
+    parser.add_argument("--all", action="store_true", help="Normalize for all configured platforms")
+
+    args = parser.parse_args(argv)
+    input_path = Path(args.input)
+    try:
+        if args.all:
+            outputs = normalize_all_platforms(input_path, output_dir=args.output)
+            for plat, out_p in outputs.items():
+                print(f"Normalized ({plat}): {out_p}")
+        else:
+            target = PLATFORM_TARGETS[args.platform]
+            out_path = (
+                Path(args.output)
+                if args.output
+                else input_path.parent / f"{input_path.stem}_{args.platform}{input_path.suffix}"
+            )
+            res_path = normalize_video_audio(
+                input_video=input_path,
+                output_video=out_path,
+                target_i=target["I"],
+                target_tp=target["TP"],
+                target_lra=target["LRA"],
+            )
+            print(f"Normalized ({args.platform}): {res_path}")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_broll(argv: List[str]) -> None:
+    """Render B-Roll slides from a declarative JSON manifest."""
+    from .broll import render_from_manifest
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp broll",
+        description="Render B-Roll slides from a declarative JSON manifest.",
+    )
+    parser.add_argument("manifest", type=str, help="Path to broll_manifest.json")
+    parser.add_argument("-o", "--output-dir", type=str, default=None, help="Output directory for slides")
+
+    args = parser.parse_args(argv)
+    manifest_path = Path(args.manifest)
+    out_dir = Path(args.output_dir) if args.output_dir else manifest_path.parent / "broll"
+    try:
+        generated = render_from_manifest(manifest_path, out_dir)
+        print(f"Generated {len(generated)} B-roll slides in {out_dir}")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_thumbnail(argv: List[str]) -> None:
+    """Generate a high-CTR YouTube thumbnail for a project directory."""
+    from .thumbnail import generate_project_thumbnail
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp thumbnail",
+        description="Generate a high-CTR YouTube thumbnail for a project directory.",
+    )
+    parser.add_argument("project_dir", type=str, help="Path to project directory")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Output PNG path")
+
+    args = parser.parse_args(argv)
+    proj_path = Path(args.project_dir)
+    out_path = Path(args.output) if args.output else proj_path / "thumbnail.png"
+    try:
+        res = generate_project_thumbnail(proj_path, out_path=out_path)
+        print(f"Thumbnail generated at: {res}")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main() -> None:
     """Main entry point for the CLI."""
+    # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
+    if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail"}:
+        subcmd = sys.argv[1]
+        sub_argv = sys.argv[2:]
+        if subcmd == "run":
+            _cmd_run(sub_argv)
+        elif subcmd == "normalize":
+            _cmd_normalize(sub_argv)
+        elif subcmd == "broll":
+            _cmd_broll(sub_argv)
+        elif subcmd == "thumbnail":
+            _cmd_thumbnail(sub_argv)
+        return
+
     parser = argparse.ArgumentParser(
         description="Generate YMM4 .ymmp timelines from a template and script."
     )

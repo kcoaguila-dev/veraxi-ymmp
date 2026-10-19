@@ -12,38 +12,12 @@ from __future__ import annotations
 import io
 import asyncio
 import wave
-from typing import Any, Dict, List, Tuple, Protocol, Union, cast
+from typing import Any, Dict, List, Tuple, Union, cast
 
 import requests
 
 from .logging import logger
-
-
-
-class TTSBackend(Protocol):
-    """Protocol defining the interface for TTS backends."""
-
-    def is_available(self) -> bool:
-        ...
-
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
-        ...
-
-    def get_speakers(self) -> List[Dict[str, Any]]:
-        ...
-
-
-class NullTTSBackend:
-    """A dummy TTS backend for testing or placeholder generation."""
-
-    def is_available(self) -> bool:
-        return True
-
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
-        return b"", 0.0, {}
-
-    def get_speakers(self) -> List[Dict[str, Any]]:
-        return []
+from .ports import NullTTSBackend as NullTTSBackend, TTSBackend as TTSBackend
 
 
 class VoicevoxError(Exception):
@@ -120,7 +94,11 @@ class VoicevoxClient:
         logger.info("Found VOICEVOX at %s, launching...", exe_path)
         try:
             # Launch in background without blocking
-            subprocess.Popen([str(exe_path)], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            creationflags = (
+                getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            )
+            subprocess.Popen([str(exe_path)], creationflags=creationflags)
 
             # Wait for it to become available
             for _ in range(30):

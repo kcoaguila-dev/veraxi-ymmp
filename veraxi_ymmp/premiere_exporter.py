@@ -11,11 +11,14 @@ Export Strategies:
     - SRT fallback: Generate .srt for Premiere caption track import (see srt_generator.py)
 """
 
+import math
 import os
+import shutil
+import time
 from pathlib import Path
-from xml.etree.ElementTree import Element, SubElement, tostring
-from xml.dom import minidom
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from xml.dom import minidom
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 from .ir import TimelineIR
 from .logging import logger
@@ -259,22 +262,29 @@ class PremiereExporter:
                 self._create_clipitem(v1_track, file_path, gc.start_frame, dur, f"global_bg_{i}", "Background", fit_to_screen=True)
 
         for i, bg in enumerate(self.ir.dynamic_image_clips):
-            if "bg" in str(bg.image_path).lower() or "classroom" in str(bg.image_path).lower():
+            is_bg = getattr(bg, "is_bg", False) or any(
+                k in str(bg.image_path).lower() for k in ("bg", "room", "classroom")
+            )
+            if is_bg:
                 dur = total_frames if bg.length == -1 else bg.length
                 self._create_clipitem(v1_track, bg.image_path, bg.start_frame, dur, f"bg_{i}", "Background", fit_to_screen=True)
             else:
                 # B-Roll (V2) Full-Screen 1920x1080 Presentation Slide
                 self._create_clipitem(v2_track, bg.image_path, bg.start_frame, bg.length, f"broll_{i}", "B-Roll", fit_to_screen=True)
 
-    def _populate_character_lipsync(self, char_tracks: list, unique_chars: list, proj_dir: Path, total_frames: int) -> None:
-        import math
-        import os
+    def _populate_character_lipsync(
+        self,
+        char_tracks: List[Element],
+        unique_chars: List[str],
+        proj_dir: Path,
+        total_frames: int,
+    ) -> None:
         fps = self.fps
         faces_dir = Path("assets/faces").absolute()
 
         # Pre-calculate x_offsets based on the number of characters
         num_chars = len(unique_chars)
-        x_offsets = {}
+        x_offsets: Dict[str, float] = {}
 
         # YMM4 Convention: Zundamon is usually the reactor (Right), Metan is explainer (Left)
         # We sort characters so that Zundamon is always pushed to the right side
@@ -304,16 +314,14 @@ class PremiereExporter:
 
         # Precalculate scales for characters
         from PIL import Image
-        import time
         run_id = int(time.time())
-        char_metrics = {}
+        char_metrics: Dict[str, Dict[str, Any]] = {}
         for char in unique_chars:
             src_dir = faces_dir / char
             if not src_dir.exists():
                 src_dir = faces_dir
             dst_dir = proj_dir / f"faces_{run_id}" / char
             dst_dir.mkdir(parents=True, exist_ok=True)
-            import shutil
             for img_file in src_dir.glob("*.png"):
                 new_name = f"{img_file.stem}_{run_id}{img_file.suffix}"
                 shutil.copy(img_file, dst_dir / new_name)
@@ -393,7 +401,6 @@ class PremiereExporter:
         """Populate V4 track with pre-rendered PNG speech bubbles."""
         bubble_dir.mkdir(parents=True, exist_ok=True)
 
-        import time
         run_id = int(time.time())
         for i, vc in enumerate(self.ir.voice_clips):
             bubble_path = bubble_dir / f"bubble_{i}_{run_id}_pro.png"
@@ -401,9 +408,7 @@ class PremiereExporter:
             create_speech_bubble_png(vc.text, bubble_path, border_color)
             self._create_clipitem(v4_track, bubble_path, vc.start_frame, vc.length, f"bubble_{i}", "Subtitle Bar", scale=100.0, x_offset=0.0, y_offset=0.0)
 
-    def _populate_audio(self, audio_tracks: list, unique_chars: list, total_frames: int) -> None:
-        import os
-        from pathlib import Path
+    def _populate_audio(self, audio_tracks: List[Element], unique_chars: List[str], total_frames: int) -> None:
         fps = self.fps
         a1_track = audio_tracks[0]
 

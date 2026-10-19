@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Tuple, Union
 
 from .typography import (
     CHAR_COLORS,
@@ -10,7 +10,7 @@ from .typography import (
     wrap_japanese,
 )
 
-__all__ = ["CHAR_COLORS", "wrap_japanese", "create_speech_plate"]
+__all__ = ["CHAR_COLORS", "DEFAULT_CHAR_COLOR", "wrap_japanese", "create_speech_plate"]
 
 
 def create_speech_plate(

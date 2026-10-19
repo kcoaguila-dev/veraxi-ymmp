@@ -1,9 +1,8 @@
 """Tests for the refactored PremiereExporter class."""
 
-import os
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 from xml.etree import ElementTree
 
 from veraxi_ymmp.premiere_exporter import (
@@ -11,9 +10,8 @@ from veraxi_ymmp.premiere_exporter import (
     generate_fcp_xml,
     export_to_premiere,
     create_speech_bubble_png,
-    prettify,
 )
-from veraxi_ymmp.ir import TimelineIR, VoiceClip, DynamicImageClip, DynamicAudioClip
+from veraxi_ymmp.ir import TimelineIR, VoiceClip
 
 
 def _make_voice_clip(start_frame, length, text, character="ずんだもん", emotion="neutral", audio_path=None):
@@ -100,7 +98,7 @@ class TestPremiereExporterXmeml:
         assert result.exists()
 
         # Parse XML - V4 should have no clipitems
-        content = result.read_text(encoding="utf-8")
+        result.read_text(encoding="utf-8")
         # The bubble directory should NOT have been created
         bubble_dir = proj_dir / "04_GRAPHICS" / "TITLES" / "speech_bubbles"
         assert not bubble_dir.exists()

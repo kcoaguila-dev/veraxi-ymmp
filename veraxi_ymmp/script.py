@@ -2,18 +2,54 @@
 Models and validation logic for the two-stage script pipeline.
 """
 
-from typing import Any, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
-Emotion = Literal["neutral", "happy", "angry", "sad", "surprised", "confused", "scared", "excited", "disgusted", "smug", "crying", "blushing"]
+Emotion = Literal[
+    "normal",
+    "neutral",
+    "happy",
+    "angry",
+    "sad",
+    "surprised",
+    "confused",
+    "scared",
+    "excited",
+    "disgusted",
+    "smug",
+    "crying",
+    "blushing",
+]
 Motion = Literal["none", "jump", "shake", "nod"]
 CharacterPosition = Literal["left", "center", "right"]
 SubtitlePosition = Literal["top_center", "center", "bottom_center"]
 SubtitleStyle = Literal["default", "outlined"]
 
+VALID_EMOTIONS = {
+    "normal",
+    "neutral",
+    "happy",
+    "angry",
+    "sad",
+    "surprised",
+    "confused",
+    "scared",
+    "excited",
+    "disgusted",
+    "smug",
+    "crying",
+    "blushing",
+}
+VALID_MOTIONS = {"none", "jump", "shake", "nod"}
+VALID_CHARACTER_POSITIONS = {"left", "center", "right"}
+VALID_SUBTITLE_POSITIONS = {"top_center", "center", "bottom_center"}
+VALID_SUBTITLE_STYLES = {"default", "outlined"}
+
+
 class WriterScriptEntry(TypedDict):
     """Factual dialogue entry from the writer."""
     character: str
     text: str
+
 
 class DirectorScriptEntry(TypedDict):
     """Validated director script entry including metadata."""
@@ -27,6 +63,7 @@ class DirectorScriptEntry(TypedDict):
     character_position: CharacterPosition
     subtitle_position: SubtitlePosition
     subtitle_style: SubtitleStyle
+
 
 def validate_writer_script(data: Any) -> List[WriterScriptEntry]:
     """
@@ -56,6 +93,7 @@ def validate_writer_script(data: Any) -> List[WriterScriptEntry]:
 
     return validated
 
+
 def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
     """
     Validates that the input data conforms to the DirectorScriptEntry schema.
@@ -63,14 +101,14 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
     if not isinstance(data, list):
         raise ValueError("Director script must be a JSON array of objects")
 
-    valid_emotions = {"neutral", "happy", "angry", "sad", "surprised", "confused", "scared", "excited", "disgusted", "smug", "crying", "blushing"}
-    valid_motions = {"none", "jump", "shake", "nod"}
+    valid_emotions = VALID_EMOTIONS
+    valid_motions = VALID_MOTIONS
     required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx", "image"}
     optional_keys = {"character_position", "subtitle_position", "subtitle_style"}
     expected_keys = required_keys | optional_keys
-    valid_character_positions = {"left", "center", "right"}
-    valid_subtitle_positions = {"top_center", "center", "bottom_center"}
-    valid_subtitle_styles = {"default", "outlined"}
+    valid_character_positions = VALID_CHARACTER_POSITIONS
+    valid_subtitle_positions = VALID_SUBTITLE_POSITIONS
+    valid_subtitle_styles = VALID_SUBTITLE_STYLES
 
     validated: List[DirectorScriptEntry] = []
     for idx, entry in enumerate(data):
@@ -108,7 +146,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
 
         if sfx is not None and (not isinstance(sfx, str) or not sfx.strip()):
             raise ValueError(f"Entry {idx} 'sfx' must be null or a non-empty string")
-            
+
         if image is not None and (not isinstance(image, str) or not image.strip()):
             raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
 
@@ -133,6 +171,84 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
             "subtitle_position": subtitle_position,  # type: ignore
             "subtitle_style": subtitle_style  # type: ignore
         })
+
+    return validated
+
+
+def validate_production_script(data: Any) -> List[Dict[str, Any]]:
+    """
+    Validates production project scripts (such as projects/*/script.json) which may contain
+    directive entries ({"type": "bgm" | "thumbnail", ...}), optional "bg" keys, and partial
+    director staging fields, populating defaults for omitted staging fields on dialogue entries.
+    """
+    if not isinstance(data, list):
+        raise ValueError("Production script must be a JSON array of objects")
+
+    validated: List[Dict[str, Any]] = []
+    for idx, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Entry {idx} must be an object")
+
+        if "type" in entry and "character" not in entry:
+            directive_type = entry["type"]
+            if not isinstance(directive_type, str) or not directive_type.strip():
+                raise ValueError(f"Entry {idx} directive 'type' must be a non-empty string")
+            validated.append(dict(entry))
+            continue
+
+        if "character" not in entry or "text" not in entry:
+            raise ValueError(f"Entry {idx} must contain 'character' and 'text' fields (or a directive 'type')")
+
+        char = entry["character"]
+        text = entry["text"]
+        if not isinstance(char, str) or not char.strip():
+            raise ValueError(f"Entry {idx} 'character' must be a non-empty string")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(f"Entry {idx} 'text' must be a non-empty string")
+
+        emotion = entry.get("emotion", "neutral")
+        motion = entry.get("motion", "none")
+        bgm = entry.get("bgm", None)
+        sfx = entry.get("sfx", None)
+        image = entry.get("image", None)
+        bg = entry.get("bg", None)
+        character_position = entry.get("character_position", "center")
+        subtitle_position = entry.get("subtitle_position", "bottom_center")
+        subtitle_style = entry.get("subtitle_style", "outlined")
+
+        if not isinstance(emotion, str) or emotion not in VALID_EMOTIONS:
+            raise ValueError(f"Entry {idx} 'emotion' must be one of {VALID_EMOTIONS}")
+        if not isinstance(motion, str) or motion not in VALID_MOTIONS:
+            raise ValueError(f"Entry {idx} 'motion' must be one of {VALID_MOTIONS}")
+        if bgm is not None and (not isinstance(bgm, str) or not bgm.strip()):
+            raise ValueError(f"Entry {idx} 'bgm' must be null or a non-empty string")
+        if sfx is not None and (not isinstance(sfx, str) or not sfx.strip()):
+            raise ValueError(f"Entry {idx} 'sfx' must be null or a non-empty string")
+        if image is not None and (not isinstance(image, str) or not image.strip()):
+            raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
+        if bg is not None and (not isinstance(bg, str) or not bg.strip()):
+            raise ValueError(f"Entry {idx} 'bg' must be null or a non-empty string")
+        if not isinstance(character_position, str) or character_position not in VALID_CHARACTER_POSITIONS:
+            raise ValueError(f"Entry {idx} 'character_position' must be one of {VALID_CHARACTER_POSITIONS}")
+        if not isinstance(subtitle_position, str) or subtitle_position not in VALID_SUBTITLE_POSITIONS:
+            raise ValueError(f"Entry {idx} 'subtitle_position' must be one of {VALID_SUBTITLE_POSITIONS}")
+        if not isinstance(subtitle_style, str) or subtitle_style not in VALID_SUBTITLE_STYLES:
+            raise ValueError(f"Entry {idx} 'subtitle_style' must be one of {VALID_SUBTITLE_STYLES}")
+
+        normalized: Dict[str, Any] = dict(entry)
+        normalized.update({
+            "character": char,
+            "text": text,
+            "emotion": emotion,
+            "motion": motion,
+            "bgm": bgm,
+            "sfx": sfx,
+            "image": image,
+            "character_position": character_position,
+            "subtitle_position": subtitle_position,
+            "subtitle_style": subtitle_style,
+        })
+        validated.append(normalized)
 
     return validated
 

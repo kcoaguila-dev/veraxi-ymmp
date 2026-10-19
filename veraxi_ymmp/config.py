@@ -2,10 +2,14 @@
 Configuration object for compiler settings.
 """
 
-import argparse
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
+
+if TYPE_CHECKING:
+    import argparse
 
 from .constants import (
     DEFAULT_FPS,

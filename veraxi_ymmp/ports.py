@@ -12,11 +12,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 from .director import DirectorProvider
 from .ir import TimelineIR
-from .voicevox import TTSBackend
+
+
+@runtime_checkable
+class TTSBackend(Protocol):
+    """Protocol defining the interface for TTS backends."""
+
+    def is_available(self) -> bool:
+        ...
+
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+        ...
+
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        ...
+
+
+class NullTTSBackend:
+    """A dummy TTS backend for testing or placeholder generation."""
+
+    def is_available(self) -> bool:
+        return True
+
+    def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
+        return {}
+
+    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+        return b"", 0.0, {}
+
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        return []
 
 
 @dataclass
@@ -47,5 +76,6 @@ __all__ = [
     "ExportResult",
     "TimelineExporter",
     "TTSBackend",
+    "NullTTSBackend",
     "DirectorProvider",
 ]

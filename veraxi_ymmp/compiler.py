@@ -9,7 +9,6 @@ Provides the high-level YMMPCompiler facade coordinating:
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
@@ -17,15 +16,14 @@ from .cache import TTSCache
 from .config import CompilerConfig
 from .hatsuon import Hatsuon
 from .ir import (
-    CharacterClip,
-    DynamicAudioClip,
-    DynamicImageClip,
-    GlobalClip,
+    CharacterClip as CharacterClip,
+    DynamicAudioClip as DynamicAudioClip,
+    DynamicImageClip as DynamicImageClip,
+    GlobalClip as GlobalClip,
     TimelineIR,
-    VoiceClip,
+    VoiceClip as VoiceClip,
 )
 from .ir_builder import TimelineIRBuilder
-from .logging import logger
 from .psd_registry import CharacterPSDRegistry
 from .script import DirectorScriptEntry, WriterScriptEntry
 from .template import (
@@ -35,8 +33,13 @@ from .template import (
     load_template,
 )
 from .utils import ensure_path
-from .voicevox import TTSBackend, VoicevoxClient
+from .voicevox import VoicevoxClient
 from .ymmp_renderer import CompilationResult, YMMPRenderer
+
+try:
+    from .ports import TTSBackend
+except ImportError:
+    from .voicevox import TTSBackend
 
 if TYPE_CHECKING:
     pass
@@ -71,7 +74,7 @@ class YMMPCompiler:
     ) -> None:
         self.template_path = ensure_path(template_path)
         self.template_data = load_template(str(self.template_path))
-        self.character_templates = extract_character_templates(self.template_data)
+        self.character_templates = dict(extract_character_templates(self.template_data))
         self.text_template = extract_text_template(self.template_data)
         self.face_templates = extract_face_templates(self.template_data)
         self.hatsuon = hatsuon_converter or Hatsuon()
@@ -154,7 +157,10 @@ class YMMPCompiler:
         audio_dir: Path,
     ) -> Tuple[TimelineIR, List[Path]]:
         """Public method to construct TimelineIR and synthesize audio."""
-        return self._ir_builder.build_ir(script, audio_dir)
+        timeline_ir, audio_files = self._ir_builder.build_ir(script, audio_dir)
+        self.character_templates.update(self._ir_builder.character_templates)
+        self._renderer.character_templates.update(self._ir_builder.character_templates)
+        return timeline_ir, audio_files
 
     def render_ymmp(
         self,

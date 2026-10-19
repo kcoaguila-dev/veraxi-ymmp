@@ -1,7 +1,6 @@
 """
 Unit tests for YouTube Thumbnail Generation Engine (veraxi_ymmp.thumbnail)
 """
-import json
 from pathlib import Path
 from PIL import Image
 
@@ -142,4 +141,3 @@ def test_thumbnail_auto_fit_long_text(tmp_path: Path):
     res = generate_thumbnail(config, out_target)
     assert res.exists()
     assert res.stat().st_size > 0
-

@@ -1,7 +1,5 @@
 """Tests for SRT subtitle generator."""
 
-import pytest
-from pathlib import Path
 from veraxi_ymmp.srt_generator import generate_srt, _format_srt_time
 from veraxi_ymmp.ir import TimelineIR, VoiceClip
 

@@ -94,35 +94,43 @@ flowchart TD
 - **`TTSBackend`**: Protocol abstracting text-to-speech synthesis backends.
 - **`DirectorProvider`**: Protocol for autonomous script direction and staging engines.
 
-### 2.3. Application Services Layer (`veraxi_ymmp/pipeline.py`, `veraxi_ymmp/ir_builder.py`, `veraxi_ymmp/compiler.py`, `veraxi_ymmp/validation.py`)
-- **`ProjectPipeline`**: Unified workflow coordinator orchestrating:
+### 2.3. Application Services Layer (`veraxi_ymmp/pipeline.py`, `veraxi_ymmp/ir_builder.py`, `veraxi_ymmp/compiler.py`, `veraxi_ymmp/async_compiler.py`, `veraxi_ymmp/config.py`, `veraxi_ymmp/validation.py`)
+- **`pipeline.py` (`ProjectPipeline`)**: Unified workflow coordinator orchestrating:
   1. Audio synthesis via `VoicevoxClient` + timeline construction via `TimelineIRBuilder`.
   2. Premiere Pro FCPXML sequence generation (`PremiereExporter`).
   3. YMM4 `.ymmp` timeline cloning and structural validation (`YMMPRenderer` & `validate_ymmp_timeline`).
   4. MoviePy fast QA preview video rendering (`MoviePyRenderer`).
   5. Publication-ready YouTube thumbnail generation (`thumbnail.py`).
-- **`TimelineIRBuilder`**: Synthesizes timing data, phonemes, and script entries into a mathematically aligned `TimelineIR`.
+- **`ir_builder.py` (`TimelineIRBuilder`)**: Synthesizes timing data, phonemes, and script entries into a mathematically aligned `TimelineIR`.
+- **`compiler.py` (`YMMPCompiler`)**: High-level facade coordinating template inspection, `TimelineIRBuilder`, and `YMMPRenderer`.
+- **`async_compiler.py` (`AsyncYMMPCompiler`)**: Asynchronous compilation service supporting parallel TTS synthesis.
+- **`config.py` (`CompilerConfig`)**: Typed configuration object governing compilation options, speaker mappings, and caching.
 - **`validation.py`**: Enforces strict structural QA invariants on generated project files:
   - Non-empty VoiceCache verification.
   - Correct lip-sync parameter attachment (`VolumeLipSyncPriority` / `VowelLipSyncPriority`).
-  - Layer clash and timestamp ordering checks.
+  - Layer clash, C# enum schema validation (`validate_ymmp_schema`), and path traversal protection (`validate_output_path`).
 
-### 2.4. Infrastructure Adapters Layer
+### 2.4. Infrastructure Adapters & Shared Utilities Layer
 - **`ymmp_renderer.py`**: Generates YukkuriMovieMaker4 (`.ymmp`) project JSON by cloning template items, embedding Brotli-compressed voice audio cache bytes, and injecting phonetic mouth animations. Implements `TimelineExporter`.
 - **`premiere_exporter.py`**: Produces Final Cut Pro XML (`xmeml`) compatible with Adobe Premiere Pro. Sets up 4 video tracks (BG, Tachie, B-Roll, Subtitle speech bubbles) and 3 audio tracks (Voice, BGM, SFX). Implements `TimelineExporter`.
 - **`moviepy_renderer.py`**: Fast software renderer producing MP4 preview videos with speech bubbles, lip-sync, and BGM ducking for automated CI/CD and pre-flight QA. Implements `TimelineExporter`.
 - **`ae_renderer.py`**: Generates Adobe After Effects ExtendScript (`.jsx`) compositions with slider-controlled lip-sync and procedural bounce effects. Implements `TimelineExporter`.
-- **`srt_generator.py`**: Generates RFC-compliant `.srt` subtitle files with millisecond precision for Premiere caption tracks.
-- **`voicevox.py`**: HTTP client connecting to local VOICEVOX engine REST endpoints (`/audio_query`, `/synthesis`).
-- **`audio_normalizer.py`**: Two-pass EBU R128 / ITU-R BS.1770 audio loudness normalizer using FFmpeg `loudnorm` filter (YouTube -14 LUFS, TikTok/Instagram -13 LUFS, Broadcast -23 LUFS).
+- **`srt_generator.py`**: Generates RFC-compliant `.srt` subtitle files with millisecond precision for Premiere caption tracks. Implements `TimelineExporter`.
+- **`voicevox.py`**: HTTP client connecting to local VOICEVOX engine REST endpoints (`/audio_query`, `/synthesis`) and `NullTTSBackend` fallback.
+- **`cache.py` (`TTSCache`)**: Content-addressed disk and memory cache for synthesized TTS audio and query payloads.
+- **`audio_normalizer.py`**: Two-pass EBU R128 / ITU-R BS.1770 audio loudness normalizer using FFmpeg `loudnorm` filter (`normalize_video_audio`, `normalize_all_platforms`).
 - **`typography.py`**: Japanese typography engine implementing Kinsoku Shori (禁則処理) line-breaking, two-line balancing, rounded speech bubble geometry, and multi-layer outline rendering (袋文字 + ドロップシャドウ).
-- **`broll.py`**: Dynamic B-roll visual placement enforcing cognitive load ceilings (maximum 1 graphic change per dialogue unit).
+- **`subtitle_plate.py`**: Generates transparent PNG speech bubble plates (`create_speech_bubble_png`, `create_ymm4_plate_png`) for YMM4 and Premiere Pro timelines.
+- **`broll.py`**: Dynamic B-roll visual placement and declarative manifest renderer (`render_from_manifest`) enforcing cognitive load ceilings.
 - **`thumbnail.py`**: High-CTR YouTube thumbnail synthesis engine using the 3-split rule (3分割法), keyword jump-rate scaling, sticker cutout effects, and YouTube timestamp dead-zone protection.
-- **`psd_registry.py`**: Discovers, inspects, and manages Adobe Photoshop PSD standing image assets.
+- **`psd_registry.py`**: Discovers, inspects, and manages Adobe Photoshop PSD standing image assets (`CharacterPSDRegistry`).
+- **`template.py`**: Loads and extracts character/voice/tachie/text/face templates from `.ymmp` files.
+- **`hatsuon.py` & `phonetics.py`**: Kanji-to-Katakana pronunciation conversion (`Hatsuon`) and mora/vowel phonetic interval extraction (`extract_phonetic_blocks`).
+- **`logging.py` & `utils.py`**: Centralized structured logging (`logger`, `setup_logging`) and cross-cutting file/frame utilities.
 
 ### 2.5. Delivery Interfaces Layer (`veraxi_ymmp/cli.py`, `veraxi_ymmp/mcp_server.py`)
-- **`cli.py`**: Command-line interface offering `compile`, `run`, `thumbnail`, and `normalize` commands.
-- **`mcp_server.py`**: Model Context Protocol server enabling LLM agents to execute video synthesis, timeline exports, and thumbnail generation directly via MCP tools.
+- **`cli.py`**: Command-line interface offering template compilation alongside `run`, `normalize`, `broll`, and `thumbnail` subcommands.
+- **`mcp_server.py`**: Model Context Protocol server enabling LLM agents to execute `inspect_template`, `validate_script`, `compile_project`, `run_pipeline`, and `generate_thumbnail_tool` directly via MCP tools.
 
 ---
 
@@ -142,8 +150,8 @@ sequenceDiagram
     participant MP as MoviePyRenderer
     participant Thumb as ThumbnailEngine
 
-    User->>CLI: run_project(project_dir)
-    CLI->>Pipeline: execute(project_dir)
+    User->>CLI: veraxi-ymmp run <project_dir>
+    CLI->>Pipeline: run(project_dir)
 
     rect rgb(240, 248, 255)
         note over Pipeline,VV: Stage 1: Audio & Phoneme Synthesis
@@ -187,7 +195,9 @@ The architecture is continuously guarded by automated fitness functions defined 
 | Fitness Guard | Verification Method | Invariant Enforced |
 |---|---|---|
 | `test_domain_layer_purity` | AST Inspection | Pure domain modules (`ir.py`, `script.py`, `constants.py`) **never** import infrastructure or adapter modules (`voicevox`, `ymmp_renderer`, `premiere_exporter`, `moviepy_renderer`, `ae_renderer`, `thumbnail`, `broll`, `cli`, `mcp_server`). |
+| `test_ports_layer_purity` | AST Inspection | Boundary protocol module (`ports.py`) only imports from `.ir`, `.script`, `.constants`, or standard library and **never** imports concrete adapters. |
 | `test_no_cross_adapter_imports` | AST Inspection | Exporter and renderer adapters (`ymmp_renderer.py`, `premiere_exporter.py`, `moviepy_renderer.py`, `ae_renderer.py`, `srt_generator.py`) **never** import from each other. Shared logic must reside in domain, ports, or shared utility modules (`typography.py`, `phonetics.py`). |
+| `test_no_loose_scripts_in_repo_root` | Directory Scan | Repository root contains zero loose `.py` or `.jsx` scripts; all CLI entry points live in `veraxi_ymmp/cli.py`. |
 | `test_module_size_ceiling` | Source Line Count | No module in `veraxi_ymmp/` may exceed 900 lines of code, preventing God objects. |
 | `test_no_wildcard_imports_in_library` | AST Inspection | Zero `from module import *` statements allowed across the library. |
 | `test_no_raw_print_in_core_modules` | AST Inspection | Zero raw `print()` calls in core modules; all logging must use `veraxi_ymmp.logging`. |

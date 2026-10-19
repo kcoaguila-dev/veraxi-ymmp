@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from pathlib import Path
 
 @dataclass
@@ -18,7 +18,7 @@ class VoiceClip(IRClip):
     hatsuon: str
     subtitle_position: str
     subtitle_style: str
-    audio_query: Optional[Dict] = None
+    audio_query: Optional[Dict[str, Any]] = None
 
 @dataclass
 class CharacterClip(IRClip):
@@ -33,12 +33,19 @@ class GlobalClip(IRClip):
     item_type: Optional[str] = None
     volume: float = 100.0
     is_looped: bool = False
-    template_item: Dict = field(default_factory=dict)
+    template_item: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class DynamicImageClip(IRClip):
     """Represents an image that appears dynamically for a specific duration."""
     image_path: Path
+    is_background: bool = False
+
+    @property
+    def is_bg(self) -> bool:
+        return self.is_background or any(
+            k in str(self.image_path).lower() for k in ("bg", "room", "classroom")
+        )
 
 @dataclass
 class DynamicAudioClip(IRClip):
@@ -57,4 +64,15 @@ class TimelineIR:
     dynamic_audio_clips: List[DynamicAudioClip] = field(default_factory=list)
 
     # We still need to pass down the template data so the YMM4 renderer knows how to style things
-    template_data: Dict = field(default_factory=dict)
+    template_data: Dict[str, Any] = field(default_factory=dict)
+
+    def min_all_speakers_duration(self, default_max: float = 25.0) -> float:
+        """Calculate the end time in seconds of the first VoiceClip for each unique character."""
+        if not self.voice_clips:
+            return default_max
+        first_end_frames: Dict[str, int] = {}
+        for vc in self.voice_clips:
+            if vc.character not in first_end_frames:
+                first_end_frames[vc.character] = vc.start_frame + vc.length
+        max_first_end_sec = max(first_end_frames.values()) / max(self.fps, 1)
+        return max(default_max, max_first_end_sec)
