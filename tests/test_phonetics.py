@@ -168,6 +168,43 @@ def test_normalize_tts_text() -> None:
     assert normalize_tts_text("永遠の愛") == "永遠の愛"
     assert normalize_tts_text("") == ""
 
+    # '何でも' normalized to 'なんでも'
+    assert normalize_tts_text("何でも買えば儲かる") == "なんでも買えば儲かる"
+
+    # '要' normalized to 'かなめ' systematically for keystone/linchpin/noun
+    assert normalize_tts_text("防御の要ですわ。") == "防御のかなめですわ。"
+    assert normalize_tts_text("守りの要として活躍する。") == "守りのかなめとして活躍する。"
+    assert normalize_tts_text("扇の要が壊れた。") == "扇のかなめが壊れた。"
+    assert normalize_tts_text("チームの要になる。") == "チームのかなめになる。"
+    assert normalize_tts_text("肝心要のポイントだ。") == "肝心かなめのポイントだ。"
+    assert normalize_tts_text("守りの要は彼だ。") == "守りのかなめは彼だ。"
+    assert normalize_tts_text("これが要。") == "これがかなめ。"
+
+    # Non-kaname '要' preserved verbatim for OpenJTalk/VOICEVOX standard pronunciations
+    assert normalize_tts_text("極めて重要ですわね。") == "極めて重要ですわね。"
+    assert normalize_tts_text("必要不可欠な要素です。") == "必要不可欠な要素です。"
+    assert normalize_tts_text("要約してください。") == "要約してください。"
+    assert normalize_tts_text("多くの時間を要する。") == "多くの時間を要する。"
+    assert normalize_tts_text("お金が要る。") == "お金が要る。"
+    assert normalize_tts_text("そんなものは要らない。") == "そんなものは要らない。"
+    assert normalize_tts_text("要は、こういうことです。") == "要は、こういうことです。"
+
+
+def test_normalize_kaname_reading() -> None:
+    from veraxi_ymmp.phonetics import normalize_kaname_reading
+
+    assert normalize_kaname_reading("インフレ下でも値上げできる価格転嫁力を持つ企業や、割安で見直されている日本や世界市場へ広く分散することが防御の要ですわ。") == (
+        "インフレ下でも値上げできる価格転嫁力を持つ企業や、割安で見直されている日本や世界市場へ広く分散することが防御のかなめですわ。"
+    )
+    assert normalize_kaname_reading("要の位置") == "かなめの位置"
+    assert normalize_kaname_reading("要を握る") == "かなめを握る"
+    assert normalize_kaname_reading("要だ") == "かなめだ"
+    assert normalize_kaname_reading("要です") == "かなめです"
+    assert normalize_kaname_reading("主要な要因") == "主要な要因"
+    assert normalize_kaname_reading("要綱を確認") == "要綱を確認"
+    assert normalize_kaname_reading("要点") == "要点"
+
+
 
 def test_tune_audio_query_pitch() -> None:
     from veraxi_ymmp.phonetics import tune_audio_query_pitch

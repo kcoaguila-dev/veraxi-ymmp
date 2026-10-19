@@ -336,6 +336,41 @@ def resolve_lipsync_intervals(
     )
 
 
+def normalize_kaname_reading(text: str) -> str:
+    """
+    Normalizes occurrences of '要' that represent the Japanese noun 'かなめ'
+    (keystone, linchpin, pivot, essential core, or fan pivot) to 'かなめ'.
+
+    Distinguishes noun '要' (かなめ) from:
+    - On-yomi compound words ('重要', '必要', '要素', '要求', '要約', '要点', '主要', etc.)
+    - Inflections of the verb '要る' (要る, 要らない, 要ります, 要れば, 要った)
+    - Inflections of '要する' (要する, 要します, 要して, 要した, 要せず)
+    - Sentence/clause-initial adverb '要は' (ようは, meaning 'in short')
+    """
+    if not text or "要" not in text:
+        return text
+
+    # 1. 肝心要 -> 肝心かなめ
+    t = text.replace("肝心要", "肝心かなめ")
+
+    # 2. 〜の要 (e.g. 防御の要, 守りの要, 扇の要, チームの要, 組織の要, 安全の要)
+    # where 要 is not followed by kanji or verb inflection of 要る (る,り,れ,ら,っ) or 要する (す,し,せ)
+    t = re.sub(r"の要(?![一-龥るりれらっすしせ])", "のかなめ", t)
+
+    # 3. Protect clause-initial adverb '要は' (ようは = in short / the point is)
+    # e.g. "^要は" or after punctuation/space
+    t = re.sub(r"(^|[、,\s。！？!?])要は", r"\1__YOU_WA__", t)
+
+    # 4. Standalone '要': not preceded or followed by kanji, and not followed by okurigana (る,り,れ,ら,っ,す,し,せ)
+    # Matches: 要となる, 要として, 要である, 要です, 要だ, 要の位置, 要を握る, 要に据える, 要が外れる, これが要。
+    t = re.sub(r"(?<![一-龥])要(?![一-龥るりれらっすしせ])", "かなめ", t)
+
+    # 5. Restore protected '要は'
+    t = t.replace("__YOU_WA__", "要は")
+
+    return t
+
+
 def normalize_tts_text(text: str) -> str:
     """
     Normalizes text for TTS speech synthesis (VOICEVOX / OpenJTalk).
@@ -345,6 +380,9 @@ def normalize_tts_text(text: str) -> str:
     - Conversational affirmative 'ええ、' / 'ええ' (which OpenJTalk parses with
       an unnatural Atamadaka drop ['エ', 'エ'] accent=1, sounding like 'Eh? What?!')
       is normalized to 'えー、' (accent=2, smooth affirmative rising/flat mora).
+    - '何でも' (which OpenJTalk parses as 'なにでも') is normalized to 'なんでも'.
+    - '要' when used as a noun meaning cornerstone/linchpin/keystone (e.g. '防御の要',
+      '守りの要', '扇の要', '要となる', '要として', '肝心要') is normalized to 'かなめ'.
     """
     if not text:
         return ""
@@ -355,6 +393,8 @@ def normalize_tts_text(text: str) -> str:
     normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
     # '何でも' (which OpenJTalk parses as 'なにでも') must be pronounced 'なんでも'
     normalized = normalized.replace("何でも", "なんでも")
+    # '要' must be pronounced 'かなめ' in keystone/linchpin/noun positions
+    normalized = normalize_kaname_reading(normalized)
     return normalized
 
 

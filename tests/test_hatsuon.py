@@ -98,3 +98,18 @@ def test_hatsuon_kanji_reverse_conv_types(hatsuon):
     res_seq = hatsuon.kanji_reverse_conv(["今日", "は", "晴れ"])
     assert isinstance(res_seq, str)
     assert "/" in res_seq
+
+
+def test_hatsuon_kaname_reading(hatsuon):
+    """Test systematic conversion of '要' to 'かなめ' vs on-yomi compounds."""
+    # Noun / keystone reading 'かなめ'
+    assert "かなめ" in hatsuon.convert("防御の要ですわ。")
+    assert "かなめ" in hatsuon.convert("扇の要が壊れた。")
+    assert "かなめ" in hatsuon.convert("守りの要として活躍する。")
+    assert "かなめ" in hatsuon.convert("肝心要")
+
+    # On-yomi compound words must retain 'よう'
+    assert "じゅうよう" in hatsuon.convert("極めて重要ですわね。")
+    assert "ひつよう" in hatsuon.convert("必要です。")
+    assert "ようそ" in hatsuon.convert("要素です。")
+    assert "ようやく" in hatsuon.convert("要約")
