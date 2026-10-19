@@ -481,6 +481,18 @@ class YMMPRenderer:
         tl["Items"], tl["Length"], tl["MaxLayer"] = items, timeline_ir.total_frames, 12
         self._write_output(output_data, output_path, use_bom)
 
+        has_voice_audio = bool(audio_files) or any(
+            bool(c.audio_path and c.audio_path.exists()) for c in timeline_ir.voice_clips
+        )
+        if has_voice_audio:
+            from .validation import validate_ymmp_timeline
+
+            validate_ymmp_timeline(
+                output_data,
+                expected_voice_count=len(timeline_ir.voice_clips),
+                require_audio=True,
+            )
+
         tachie_count = sum(1 for i in items if "TachieItem" in i.get("$type", ""))
         return CompilationResult(
             output_path=output_path,

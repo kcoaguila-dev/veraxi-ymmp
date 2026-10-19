@@ -319,30 +319,29 @@ class TimelineIRBuilder:
             audio_path = None
             audio_query = None
 
-            # Check for actual audio file to get accurate length
-            if self.config.use_tts:
-                audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
-                query_filename = f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
-                audio_path = audio_dir / audio_filename
-                query_path = audio_dir / query_filename
+            # Check for existing audio file in audio_dir to get accurate length and query
+            audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
+            query_filename = f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
+            candidate_audio = audio_dir / audio_filename
+            candidate_query = audio_dir / query_filename
 
-                if query_path.exists():
-                    try:
-                        with open(query_path, "r", encoding="utf-8") as qf:
-                            audio_query = json.load(qf)
-                    except Exception as e:
-                        logger.warning(f"Failed to read query json for {audio_filename}: {e}")
+            if candidate_query.exists():
+                try:
+                    with open(candidate_query, "r", encoding="utf-8") as qf:
+                        audio_query = json.load(qf)
+                except Exception as e:
+                    logger.warning(f"Failed to read query json for {audio_filename}: {e}")
 
-                # If the audio file already exists (e.g. from a previous run or cache)
-                if audio_path.exists():
-                    try:
-                        with wave.open(str(audio_path), "rb") as wav:
-                            frames = wav.getnframes()
-                            rate = wav.getframerate()
-                            actual_duration = frames / float(rate)
-                            length = int((actual_duration + 0.3) * fps)  # Add 0.3s padding
-                    except Exception as e:
-                        logger.warning(f"Could not read wav length for {audio_filename}: {e}")
+            if candidate_audio.exists():
+                audio_path = candidate_audio
+                try:
+                    with wave.open(str(audio_path), "rb") as wav:
+                        frames = wav.getnframes()
+                        rate = wav.getframerate()
+                        actual_duration = frames / float(rate)
+                        length = int((actual_duration + 0.3) * fps)  # Add 0.3s padding
+                except Exception as e:
+                    logger.warning(f"Could not read wav length for {audio_filename}: {e}")
 
             if self.config.use_tts and self.tts_backend:
                 if not self.tts_backend.is_available():
@@ -370,11 +369,11 @@ class TimelineIRBuilder:
                             f"Failed to fetch audio query for existing audio {audio_filename}: {e}"
                         )
 
-                if audio_path and audio_path not in audio_files:
+            if audio_path and audio_path.exists():
+                if audio_path not in audio_files:
                     audio_files.append(audio_path)
             else:
-                if not audio_path or not audio_path.exists():
-                    length = self.calculate_placeholder_length(text)
+                length = self.calculate_placeholder_length(text)
 
             hatsuon = self.convert_hatsuon(text)
 

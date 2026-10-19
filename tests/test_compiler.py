@@ -1,17 +1,19 @@
 import os
 import json
+from pathlib import Path
 import pytest
 import copy
 from veraxi_ymmp.compiler import YMMPCompiler
 from veraxi_ymmp.voicevox import VoicevoxClient
 from unittest.mock import Mock
 
+
 def test_compile(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
-    script_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_script.json')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
+    script_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_script.json")
     output_path = tmp_path / "output.ymmp"
 
-    with open(script_path, 'r', encoding='utf-8') as f:
+    with open(script_path, "r", encoding="utf-8") as f:
         script = json.load(f)
 
     compiler = YMMPCompiler(template_path)
@@ -24,7 +26,7 @@ def test_compile(tmp_path):
     # Assert deep copy isolated mutations
     assert compiler.template_data == original_template_data
 
-    with open(output_path, 'r', encoding='utf-8') as f:
+    with open(output_path, "r", encoding="utf-8") as f:
         output_data = json.load(f)
 
     assert "Timeline" in output_data
@@ -52,33 +54,26 @@ def test_compile(tmp_path):
     assert voice_items[2]["Serif"] == "今日はいい天気ですね"
     assert voice_items[2]["Frame"] == voice_items[0]["Length"] + voice_items[1]["Length"]
 
-    
-    
-
     for v_item in voice_items:
         assert v_item.get("IsWaveformEnabled") is True
 
     # Missing character handling
-    script_with_missing_char = [
-        { "character": "ゆっくり妖夢", "text": "みょん" }
-    ]
+    script_with_missing_char = [{"character": "ゆっくり妖夢", "text": "みょん"}]
     with pytest.raises(ValueError):
         compiler.compile(script_with_missing_char, str(tmp_path / "output2.ymmp"))
 
 
 def test_compile_tachie_filtering(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
     output_path = tmp_path / "output_tachie.ymmp"
 
     # Template has 2 characters (霊夢 and 魔理沙), script only uses 1 (霊夢)
-    script_one_char = [
-        { "character": "ゆっくり霊夢", "text": "こんにちは" }
-    ]
+    script_one_char = [{"character": "ゆっくり霊夢", "text": "こんにちは"}]
 
     compiler = YMMPCompiler(template_path)
     compiler.compile(script_one_char, str(output_path))
 
-    with open(output_path, 'r', encoding='utf-8') as f:
+    with open(output_path, "r", encoding="utf-8") as f:
         output_data = json.load(f)
 
     items = output_data["Timeline"]["Items"]
@@ -90,18 +85,18 @@ def test_compile_tachie_filtering(tmp_path):
 
 
 def test_compile_tts(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
     output_path = tmp_path / "output_tts.ymmp"
 
     script = [
-        { "character": "ゆっくり霊夢", "text": "こんにちは" },
-        { "character": "ゆっくり魔理沙", "text": "こんばんは" }
+        {"character": "ゆっくり霊夢", "text": "こんにちは"},
+        {"character": "ゆっくり魔理沙", "text": "こんばんは"},
     ]
 
     mock_client = Mock(spec=VoicevoxClient)
     mock_client.is_available.return_value = True
     # 2.0 seconds duration * 60 FPS (from template) = 120 frames
-    mock_client.synthesize.return_value = (b'fake_wav', 2.0, {})
+    mock_client.synthesize.return_value = (b"fake_wav", 2.0, {})
 
     speaker_map = {"ゆっくり霊夢": 10}
 
@@ -109,12 +104,12 @@ def test_compile_tts(tmp_path):
         template_path=template_path,
         voicevox_client=mock_client,
         speaker_map=speaker_map,
-        default_speaker_id=3
+        default_speaker_id=3,
     )
 
     compiler.compile(script, str(output_path))
 
-    with open(output_path, 'r', encoding='utf-8') as f:
+    with open(output_path, "r", encoding="utf-8") as f:
         output_data = json.load(f)
 
     voice_items = [i for i in output_data["Timeline"]["Items"] if "VoiceItem" in i.get("$type", "")]
@@ -128,7 +123,9 @@ def test_compile_tts(tmp_path):
     assert voice_items[1]["Length"] == 120
     assert audio_items[0]["Frame"] == voice_items[0]["Frame"]
     assert audio_items[0]["Length"] == voice_items[0]["Length"]
-    assert audio_items[0]["FilePath"] == str((output_path.parent / "audio" / "000_ゆっくり霊夢.wav").resolve())
+    assert audio_items[0]["FilePath"] == str(
+        (output_path.parent / "audio" / "000_ゆっくり霊夢.wav").resolve()
+    )
     assert voice_items[0]["Volume"]["Values"][0]["Value"] == 0.0
 
     # Assert synthesized audio was saved correctly
@@ -143,7 +140,7 @@ def test_compile_tts(tmp_path):
 
 
 def test_compile_director_script(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
     output_path = tmp_path / "output_director.ymmp"
 
     script = [
@@ -154,7 +151,7 @@ def test_compile_director_script(tmp_path):
             "motion": "jump",
             "bgm": "theme.mp3",
             "sfx": "bang.wav",
-            "image": None
+            "image": None,
         }
     ]
 
@@ -164,19 +161,18 @@ def test_compile_director_script(tmp_path):
     result = compiler.compile(script, str(output_path))
 
     assert compiler.template_data == original_template_data
-    assert len(result.warnings) == 4 # it should match
+    assert len(result.warnings) == 4  # it should match
     assert any("Emotion 'happy'" in w for w in result.warnings)
     assert any("Motion 'jump'" in w for w in result.warnings)
     assert any("BGM not found: theme.mp3" in w for w in result.warnings)
     assert any("SFX not found: bang.wav" in w for w in result.warnings)
 
+
 def test_compile_tts_unavailable(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
     output_path = tmp_path / "output_unavailable.ymmp"
 
-    script = [
-        { "character": "ゆっくり霊夢", "text": "こんにちは" }
-    ]
+    script = [{"character": "ゆっくり霊夢", "text": "こんにちは"}]
 
     mock_client = Mock(spec=VoicevoxClient)
     mock_client.is_available.return_value = False
@@ -189,7 +185,7 @@ def test_compile_tts_unavailable(tmp_path):
 
 
 def test_coalesce_consecutive_images_and_tachie(tmp_path):
-    template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
     compiler = YMMPCompiler(template_path)
 
     # 1. Setup dummy images
@@ -254,7 +250,10 @@ def test_coalesce_consecutive_images_and_tachie(tmp_path):
     #   Lines 3 and 4 have identical spatial state -> coalesced into a single TachieItem!
     assert len(l4_items) == 2
     assert l4_items[0]["Length"] == timeline_ir.voice_clips[2].length
-    assert l4_items[1]["Length"] == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    assert (
+        l4_items[1]["Length"]
+        == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    )
     assert l4_items[1]["Frame"] == timeline_ir.voice_clips[3].start_frame
 
     # Layer 6 (ずんだもん):
@@ -263,8 +262,14 @@ def test_coalesce_consecutive_images_and_tachie(tmp_path):
     # - Lines 3 & 4 have no B-roll: ずんだもん placed at X=550, Y=250, Zoom=70
     #   Both lines have identical spatial state -> coalesced into a single TachieItem!
     assert len(l6_items) == 2
-    assert l6_items[0]["Length"] == timeline_ir.voice_clips[0].length + timeline_ir.voice_clips[1].length
-    assert l6_items[1]["Length"] == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    assert (
+        l6_items[0]["Length"]
+        == timeline_ir.voice_clips[0].length + timeline_ir.voice_clips[1].length
+    )
+    assert (
+        l6_items[1]["Length"]
+        == timeline_ir.voice_clips[3].length + timeline_ir.voice_clips[4].length
+    )
     assert l6_items[1]["Frame"] == timeline_ir.voice_clips[3].start_frame
 
     # Verify zero back-to-back duplicate items on Layer 1, 4, 6
@@ -286,3 +291,28 @@ def test_coalesce_consecutive_images_and_tachie(tmp_path):
                         f"Found uncoalesced back-to-back ImageItem on Layer {layer_num}: {curr} and {nxt}"
                     )
 
+
+def test_compile_discovers_existing_audio_without_tts(tmp_path: Path):
+    template_path = os.path.join(os.path.dirname(__file__), "fixtures", "sample_template.ymmp")
+    output_path = tmp_path / "ymmp" / "final_video.ymmp"
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir(parents=True)
+
+    wav_bytes = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+    (audio_dir / "000_ずんだもん.wav").write_bytes(wav_bytes)
+
+    script = [{"character": "ずんだもん", "text": "テスト音声なのだ"}]
+
+    compiler = YMMPCompiler(template_path)
+    res = compiler.compile(script, str(output_path), audio_dir=str(audio_dir))
+
+    assert len(res.audio_files) == 1
+    assert res.audio_files[0] == audio_dir / "000_ずんだもん.wav"
+
+    with open(output_path, "r", encoding="utf-8") as f:
+        output_data = json.load(f)
+
+    from veraxi_ymmp.validation import validate_ymmp_timeline
+
+    v_res = validate_ymmp_timeline(output_data, expected_voice_count=1, require_audio=True)
+    assert v_res["status"] == "PASS"

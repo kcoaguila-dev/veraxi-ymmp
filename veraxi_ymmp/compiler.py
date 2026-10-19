@@ -50,6 +50,7 @@ ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 
 class CompilerError(Exception):
     """Exception raised when compilation fails."""
+
     pass
 
 
@@ -129,6 +130,7 @@ class YMMPCompiler:
         self,
         script: List[ScriptEntry],
         output_path: Union[str, Path],
+        audio_dir: Optional[Union[str, Path]] = None,
         use_bom: bool = False,
     ) -> CompilationResult:
         """
@@ -138,11 +140,18 @@ class YMMPCompiler:
         output_path = Path(output_path)
         self.warnings.clear()
         self.errors.clear()
-        audio_dir = output_path.parent / "audio"
-        if not audio_dir.exists() and (output_path.parent.parent / "audio").exists():
-            audio_dir = output_path.parent.parent / "audio"
 
-        timeline_ir, audio_files = self.build_ir(script, audio_dir)
+        resolved_audio_dir: Path
+        if audio_dir is not None:
+            resolved_audio_dir = Path(audio_dir)
+        elif (output_path.parent / "audio").exists():
+            resolved_audio_dir = output_path.parent / "audio"
+        elif (output_path.parent.parent / "audio").exists():
+            resolved_audio_dir = output_path.parent.parent / "audio"
+        else:
+            resolved_audio_dir = output_path.parent / "audio"
+
+        timeline_ir, audio_files = self.build_ir(script, resolved_audio_dir)
         return self.render_ymmp(
             timeline_ir,
             output_path,
@@ -284,9 +293,7 @@ class YMMPCompiler:
     ) -> List[Dict[str, Any]]:
         # Synchronize layout_cfg before delegation
         self._renderer.layout_cfg = self.layout_cfg
-        return self._renderer._add_tachie_items(
-            used_characters, total_length, character_positions
-        )
+        return self._renderer._add_tachie_items(used_characters, total_length, character_positions)
 
     @staticmethod
     def _write_output(output_data: Dict[str, Any], output_path: Path, use_bom: bool) -> None:
