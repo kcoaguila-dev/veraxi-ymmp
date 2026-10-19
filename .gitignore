@@ -58,17 +58,12 @@ venv.bak/
 *.swo
 *~
 
-# Output files
+# Output & User-generated project files
 test_output.ymmp
 tests/scratch_audio.wav
 audio/
 artifacts/
-projects/*/audio/
-projects/*/ymmp/
-projects/*/premiere/
-projects/*/plates/
-projects/*/*.png
-projects/*/*.mp4
+projects/
 
 # OS files
 .DS_Store
