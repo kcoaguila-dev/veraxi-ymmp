@@ -167,3 +167,39 @@ def test_normalize_tts_text() -> None:
     assert normalize_tts_text("ええと、これは") == "ええと、これは"
     assert normalize_tts_text("永遠の愛") == "永遠の愛"
     assert normalize_tts_text("") == ""
+
+
+def test_tune_audio_query_pitch() -> None:
+    from veraxi_ymmp.phonetics import tune_audio_query_pitch
+
+    query = {
+        "accent_phrases": [
+            {
+                "moras": [
+                    {"text": "エ", "pitch": 5.64, "vowel_length": 0.16},
+                    {"text": "エ", "pitch": 5.56, "vowel_length": 0.16},
+                ],
+                "accent": 1,
+            },
+            {
+                "moras": [
+                    {"text": "ソ", "pitch": 5.8, "vowel_length": 0.12},
+                    {"text": "ウ", "pitch": 5.7, "vowel_length": 0.12},
+                ],
+                "accent": 1,
+            },
+        ]
+    }
+
+    tuned = tune_audio_query_pitch(query)
+    phrase0 = tuned["accent_phrases"][0]
+    assert phrase0["accent"] == 2
+    assert phrase0["moras"][0]["pitch"] == 5.38
+    assert phrase0["moras"][1]["pitch"] == 5.48
+    assert phrase0["moras"][0]["vowel_length"] == 0.13
+    assert phrase0["moras"][1]["vowel_length"] == 0.15
+
+    # Non-matching phrases (e.g. second phrase) should remain unchanged
+    phrase1 = tuned["accent_phrases"][1]
+    assert phrase1["accent"] == 1
+    assert phrase1["moras"][0]["pitch"] == 5.8
