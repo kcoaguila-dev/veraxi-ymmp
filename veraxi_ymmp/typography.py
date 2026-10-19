@@ -23,6 +23,7 @@ def _get_budoux_parser() -> Any:
     if _budoux_parser is None:
         try:
             import budoux
+
             _budoux_parser = budoux.load_default_japanese_parser()
         except Exception:
             _budoux_parser = False
@@ -51,16 +52,17 @@ def wrap_japanese(text: str, width: int = 20) -> str:
         raw_chunks = parser.parse(text)
     else:
         import re
+
         # Fallback regex that treats alphanumeric/numbers + units as atomic tokens
-        pattern = r'[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*|[a-zA-Z]+|[一-龥ぁ-んァ-ヶー]+|[、。！？!?…]+|\s+|.'
+        pattern = r"[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*|[a-zA-Z]+|[一-龥ぁ-んァ-ヶー]+|[、。！？!?…]+|\s+|."
         raw_chunks = [m.group(0) for m in re.finditer(pattern, text)]
 
     if not raw_chunks:
         return text
 
     # Merge punctuation / brackets to obey Kinsoku Shori (禁則処理)
-    forbidden_starts = set('！!？?。、…・ー)」』％%')
-    forbidden_ends = set('「『（(')
+    forbidden_starts = set("！!？?。、…・ー)」』％%")
+    forbidden_ends = set("「『（(")
 
     chunks: List[str] = []
     for c in raw_chunks:
@@ -86,8 +88,8 @@ def wrap_japanese(text: str, width: int = 20) -> str:
                     best_diff = diff
                     best_split_idx = i
         if best_split_idx != -1:
-            line1 = ''.join(chunks[:best_split_idx + 1]).strip()
-            line2 = ''.join(chunks[best_split_idx + 1:]).strip()
+            line1 = "".join(chunks[: best_split_idx + 1]).strip()
+            line2 = "".join(chunks[best_split_idx + 1 :]).strip()
             return f"{line1}\n{line2}"
 
     # 2. Multi-line Greedy Packing
@@ -106,19 +108,18 @@ def wrap_japanese(text: str, width: int = 20) -> str:
 
 
 # Centralized Character Colors (RGBA)
-DEFAULT_CHAR_COLOR: Tuple[int, int, int, int] = (100, 116, 139, 255) # Slate 500 default
+DEFAULT_CHAR_COLOR: Tuple[int, int, int, int] = (100, 116, 139, 255)  # Slate 500 default
 
 CHAR_COLORS: Dict[str, Tuple[int, int, int, int]] = {
-    "ずんだもん": (34, 197, 94, 255),    # Vibrant Zunda Green (#22C55E)
-    "四国めたん": (236, 72, 153, 255),   # Vibrant Pink (#EC4899)
-    "春日部つむぎ": (249, 115, 22, 255), # Vibrant Orange (#F97316)
+    "ずんだもん": (34, 197, 94, 255),  # Vibrant Zunda Green (#22C55E)
+    "四国めたん": (236, 72, 153, 255),  # Vibrant Pink (#EC4899)
+    "春日部つむぎ": (249, 115, 22, 255),  # Vibrant Orange (#F97316)
     "default": DEFAULT_CHAR_COLOR,
 }
 
 
 def get_char_color(
-    character: str,
-    default: Optional[Union[Tuple[int, int, int], Tuple[int, int, int, int]]] = None
+    character: str, default: Optional[Union[Tuple[int, int, int], Tuple[int, int, int, int]]] = None
 ) -> Tuple[int, int, int, int]:
     """Return the RGBA border/accent color for a character."""
     if character in CHAR_COLORS:
@@ -144,6 +145,7 @@ def get_speech_font(font_size: int = 52) -> FontType:
 @dataclass
 class SpeechPlateGeometry:
     """Geometric dimensions and text layout for a speech bubble plate."""
+
     box_x: float
     box_y: float
     box_w: float
@@ -153,37 +155,43 @@ class SpeechPlateGeometry:
     bbox: Tuple[float, float, float, float]
     font: FontType
     wrapped_text: str
+    font_size: float = 44.0
 
 
 def calculate_speech_plate_geometry(
     text: str,
-    font_size: int = 52,
+    font_size: int = 44,
     canvas_w: int = 1920,
     canvas_h: int = 360,
     wrap_width: int = 20,
-    spacing: int = 12,
+    spacing: int = 14,
     auto_scale_down: bool = True,
     bottom_margin: Optional[int] = None,
     pad_x: int = 72,
-    pad_y: int = 38,
+    pad_y: int = 44,
     min_box_w: int = 480,
     min_box_h: int = 136,
     max_box_w: int = 1600,
 ) -> SpeechPlateGeometry:
     """Calculate speech bubble plate bounding box and text positioning."""
     wrapped_text = wrap_japanese(text, width=wrap_width)
+    effective_font_size = float(font_size)
     font = get_speech_font(font_size)
 
     dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=spacing)
     text_w = float(bbox[2] - bbox[0])
     text_h = float(bbox[3] - bbox[1])
+    line_count = len(wrapped_text.splitlines())
 
-    if auto_scale_down and text_w > 1550:
-        scaled_size = max(font_size - 6, 40)
+    if auto_scale_down and (text_w > 1500 or line_count >= 3 or text_h > 140):
+        scaled_size = max(font_size - 6, 36)
+        effective_font_size = float(scaled_size)
         font = get_speech_font(scaled_size)
         scaled_spacing = max(spacing - 2, 8)
-        bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=scaled_spacing)
+        bbox = dummy_draw.multiline_textbbox(
+            (0, 0), wrapped_text, font=font, spacing=scaled_spacing
+        )
         text_w = float(bbox[2] - bbox[0])
         text_h = float(bbox[3] - bbox[1])
 
@@ -206,6 +214,7 @@ def calculate_speech_plate_geometry(
         bbox=bbox,
         font=font,
         wrapped_text=wrapped_text,
+        font_size=effective_font_size,
     )
 
 

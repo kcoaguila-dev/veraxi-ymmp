@@ -21,6 +21,7 @@ from .constants import DEFAULT_TEMPLATE_PATH
 @dataclass
 class CharacterPSDConfig:
     """Configuration for a PSD-based YMM4 character."""
+
     name: str
     psd_path: Path
     base_layers: List[str]
@@ -40,9 +41,7 @@ class CharacterPSDConfig:
     layout_without_broll: Dict[str, float] = field(
         default_factory=lambda: {"x": -550.0, "y": 300.0, "zoom": 62.0}
     )
-    emotion_rules: Dict[str, Tuple[List[str], List[str]]] = field(
-        default_factory=dict
-    )
+    emotion_rules: Dict[str, Tuple[List[str], List[str]]] = field(default_factory=dict)
 
 
 class CharacterPSDRegistry:
@@ -50,13 +49,31 @@ class CharacterPSDRegistry:
     Registry for managing PSD tachie assets, layer sets, emotions, and spatial layouts.
     """
 
-    DEFAULT_ZUNDA_REL = Path("ずんだもん立ち絵素材V3.2") / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
+    DEFAULT_ZUNDA_REL = (
+        Path("ずんだもん立ち絵素材V3.2") / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
+    )
     DEFAULT_METAN_REL = Path("四国めたん立ち絵素材2.1") / "四国めたん立ち絵素材2.1.psd"
 
     # Base layers & paths for Zundamon
     ZUNDA_BASE_LAYERS = [
-        "n153", "n89", "n88", "n83", "n97", "n95", "n148", "n140", "n115",
-        "n21", "n15", "n12", "n4", "n1", "n0", "n147", "n139", "n109"
+        "n153",
+        "n89",
+        "n88",
+        "n83",
+        "n97",
+        "n95",
+        "n148",
+        "n140",
+        "n115",
+        "n21",
+        "n15",
+        "n12",
+        "n4",
+        "n1",
+        "n0",
+        "n147",
+        "n139",
+        "n109",
     ]
     ZUNDA_BASE_PATHS = [
         "\x1c*頭_正面向き\x1d0",
@@ -81,9 +98,29 @@ class CharacterPSDRegistry:
 
     # Base layers & paths for Metan
     METAN_BASE_LAYERS = [
-        "n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33",
-        "n79", "n70", "n49", "n86", "n85", "n82", "n84", "n78", "n69", "n60",
-        "n68", "n67", "n47"
+        "n1",
+        "n2",
+        "n26",
+        "n11",
+        "n17",
+        "n16",
+        "n25",
+        "n24",
+        "n34",
+        "n33",
+        "n79",
+        "n70",
+        "n49",
+        "n86",
+        "n85",
+        "n82",
+        "n84",
+        "n78",
+        "n69",
+        "n60",
+        "n68",
+        "n67",
+        "n47",
     ]
     METAN_BASE_PATHS = [
         "\x1cツインドリル右\x1d0",
@@ -243,8 +280,21 @@ class CharacterPSDRegistry:
         char_lower = character.lower()
         if "ずんだ" in char_lower or "zunda" in char_lower:
             layers = [
-                "n153", "n89", "n88", "n83", "n97", "n95", "n148", "n140", "n115",
-                "n21", "n15", "n12", "n4", "n1", "n0"
+                "n153",
+                "n89",
+                "n88",
+                "n83",
+                "n97",
+                "n95",
+                "n148",
+                "n140",
+                "n115",
+                "n21",
+                "n15",
+                "n12",
+                "n4",
+                "n1",
+                "n0",
             ]
             paths = [
                 "\x1c*頭_正面向き\x1d0",
@@ -265,34 +315,44 @@ class CharacterPSDRegistry:
             ]
             if emotion == "surprised":
                 layers.extend(["n145", "n132"])
-                paths.extend([
-                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*上がり眉\x1d0",
-                    "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目2\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*上がり眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目2\x1d0",
+                    ]
+                )
             elif emotion == "angry":
                 layers.extend(["n144", "n139"])
-                paths.extend([
-                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*怒り眉\x1d0",
-                    "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*怒り眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
+                    ]
+                )
             elif emotion == "sad":
                 layers.extend(["n142", "n139"])
-                paths.extend([
-                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0",
-                    "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
+                    ]
+                )
             elif emotion == "happy":
                 layers.extend(["n147", "n121"])
-                paths.extend([
-                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0",
-                    "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*にっこり\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*にっこり\x1d0",
+                    ]
+                )
             else:  # normal
                 layers.extend(["n147", "n139"])
-                paths.extend([
-                    "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0",
-                    "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*基本眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*基本目\x1d0",
+                    ]
+                )
 
             if is_mouth_open:
                 layers.append("n108")
@@ -304,8 +364,23 @@ class CharacterPSDRegistry:
         else:
             # 四国めたん
             layers = [
-                "n1", "n2", "n26", "n11", "n17", "n16", "n25", "n24", "n34", "n33",
-                "n79", "n70", "n49", "n86", "n85", "n82", "n84"
+                "n1",
+                "n2",
+                "n26",
+                "n11",
+                "n17",
+                "n16",
+                "n25",
+                "n24",
+                "n34",
+                "n33",
+                "n79",
+                "n70",
+                "n49",
+                "n86",
+                "n85",
+                "n82",
+                "n84",
             ]
             paths = [
                 "\x1cツインドリル右\x1d0",
@@ -328,40 +403,48 @@ class CharacterPSDRegistry:
             ]
             if emotion == "surprised":
                 layers.extend(["n78", "n69", "n59", "n68", "n67"])
-                paths.extend([
-                    "\x1c!眉\x1d0\x1c*ごきげん\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*見開き白目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c!眉\x1d0\x1c*ごきげん\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*見開き白目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
+                    ]
+                )
             elif emotion == "angry":
                 layers.extend(["n76", "n69", "n60", "n68", "n67"])
-                paths.extend([
-                    "\x1c!眉\x1d0\x1c*おこ\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c!眉\x1d0\x1c*おこ\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
+                    ]
+                )
             elif emotion == "sad":
                 layers.extend(["n75", "n69", "n60", "n68", "n67"])
-                paths.extend([
-                    "\x1c!眉\x1d0\x1c*こまり\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c!眉\x1d0\x1c*こまり\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
+                    ]
+                )
             else:  # happy or normal
                 layers.extend(["n78", "n69", "n60", "n68", "n67"])
-                paths.extend([
-                    "\x1c!眉\x1d0\x1c*ごきげん\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
-                    "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
-                ])
+                paths.extend(
+                    [
+                        "\x1c!眉\x1d0\x1c*ごきげん\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c*普通白目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0",
+                        "\x1c!目\x1d0\x1c*目セット\x1d0\x1c!黒目\x1d0\x1c*普通目\x1d0",
+                    ]
+                )
 
             if is_mouth_open:
                 layers.append("n48")
@@ -461,7 +544,9 @@ class CharacterPSDRegistry:
         c = copy.deepcopy(proto) if proto else {}
         c["$type"] = "YukkuriMovieMaker.Project.Character, YukkuriMovieMaker"
         c["Name"] = name
-        c["TachieType"] = "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachiePlugin, YukkuriMovieMaker.Plugin.Tachie.Psd, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+        c["TachieType"] = (
+            "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachiePlugin, YukkuriMovieMaker.Plugin.Tachie.Psd, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+        )
         c["TachieCharacterParameter"] = {
             "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieCharacterParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
             "FilePath": str(psd_path),
@@ -488,7 +573,7 @@ class CharacterPSDRegistry:
         c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
         c["FontColor"] = f_color
         c["StyleColor"] = s_color
-        c["BasePoint"] = "CenterCenter"
+        c["BasePoint"] = "Center"
         c["X"] = {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"}
         c["Y"] = {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"}
         c["Bold"] = True

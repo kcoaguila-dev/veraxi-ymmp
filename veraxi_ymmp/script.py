@@ -2,6 +2,7 @@
 Models and validation logic for the two-stage script pipeline.
 """
 
+import re
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 Emotion = Literal[
@@ -47,12 +48,14 @@ VALID_SUBTITLE_STYLES = {"default", "outlined"}
 
 class WriterScriptEntry(TypedDict):
     """Factual dialogue entry from the writer."""
+
     character: str
     text: str
 
 
 class DirectorScriptEntry(TypedDict):
     """Validated director script entry including metadata."""
+
     character: str
     text: str
     emotion: Emotion
@@ -115,8 +118,12 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         if not isinstance(entry, dict):
             raise ValueError(f"Entry {idx} must be an object")
 
-        if not required_keys.issubset(entry.keys()) or not set(entry.keys()).issubset(expected_keys):
-            raise ValueError(f"Entry {idx} must contain exactly the supported Director fields {expected_keys}")
+        if not required_keys.issubset(entry.keys()) or not set(entry.keys()).issubset(
+            expected_keys
+        ):
+            raise ValueError(
+                f"Entry {idx} must contain exactly the supported Director fields {expected_keys}"
+            )
 
         char = entry["character"]
         text = entry["text"]
@@ -150,27 +157,39 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         if image is not None and (not isinstance(image, str) or not image.strip()):
             raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
 
-        if not isinstance(character_position, str) or character_position not in valid_character_positions:
-            raise ValueError(f"Entry {idx} 'character_position' must be one of {valid_character_positions}")
+        if (
+            not isinstance(character_position, str)
+            or character_position not in valid_character_positions
+        ):
+            raise ValueError(
+                f"Entry {idx} 'character_position' must be one of {valid_character_positions}"
+            )
 
-        if not isinstance(subtitle_position, str) or subtitle_position not in valid_subtitle_positions:
-            raise ValueError(f"Entry {idx} 'subtitle_position' must be one of {valid_subtitle_positions}")
+        if (
+            not isinstance(subtitle_position, str)
+            or subtitle_position not in valid_subtitle_positions
+        ):
+            raise ValueError(
+                f"Entry {idx} 'subtitle_position' must be one of {valid_subtitle_positions}"
+            )
 
         if not isinstance(subtitle_style, str) or subtitle_style not in valid_subtitle_styles:
             raise ValueError(f"Entry {idx} 'subtitle_style' must be one of {valid_subtitle_styles}")
 
-        validated.append({
-            "character": char,
-            "text": text,
-            "emotion": emotion,  # type: ignore
-            "motion": motion,    # type: ignore
-            "bgm": bgm,
-            "sfx": sfx,
-            "image": image,
-            "character_position": character_position,  # type: ignore
-            "subtitle_position": subtitle_position,  # type: ignore
-            "subtitle_style": subtitle_style  # type: ignore
-        })
+        validated.append(
+            {
+                "character": char,
+                "text": text,
+                "emotion": emotion,  # type: ignore
+                "motion": motion,  # type: ignore
+                "bgm": bgm,
+                "sfx": sfx,
+                "image": image,
+                "character_position": character_position,  # type: ignore
+                "subtitle_position": subtitle_position,  # type: ignore
+                "subtitle_style": subtitle_style,  # type: ignore
+            }
+        )
 
     return validated
 
@@ -197,7 +216,9 @@ def validate_production_script(data: Any) -> List[Dict[str, Any]]:
             continue
 
         if "character" not in entry or "text" not in entry:
-            raise ValueError(f"Entry {idx} must contain 'character' and 'text' fields (or a directive 'type')")
+            raise ValueError(
+                f"Entry {idx} must contain 'character' and 'text' fields (or a directive 'type')"
+            )
 
         char = entry["character"]
         text = entry["text"]
@@ -228,41 +249,136 @@ def validate_production_script(data: Any) -> List[Dict[str, Any]]:
             raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
         if bg is not None and (not isinstance(bg, str) or not bg.strip()):
             raise ValueError(f"Entry {idx} 'bg' must be null or a non-empty string")
-        if not isinstance(character_position, str) or character_position not in VALID_CHARACTER_POSITIONS:
-            raise ValueError(f"Entry {idx} 'character_position' must be one of {VALID_CHARACTER_POSITIONS}")
-        if not isinstance(subtitle_position, str) or subtitle_position not in VALID_SUBTITLE_POSITIONS:
-            raise ValueError(f"Entry {idx} 'subtitle_position' must be one of {VALID_SUBTITLE_POSITIONS}")
+        if (
+            not isinstance(character_position, str)
+            or character_position not in VALID_CHARACTER_POSITIONS
+        ):
+            raise ValueError(
+                f"Entry {idx} 'character_position' must be one of {VALID_CHARACTER_POSITIONS}"
+            )
+        if (
+            not isinstance(subtitle_position, str)
+            or subtitle_position not in VALID_SUBTITLE_POSITIONS
+        ):
+            raise ValueError(
+                f"Entry {idx} 'subtitle_position' must be one of {VALID_SUBTITLE_POSITIONS}"
+            )
         if not isinstance(subtitle_style, str) or subtitle_style not in VALID_SUBTITLE_STYLES:
             raise ValueError(f"Entry {idx} 'subtitle_style' must be one of {VALID_SUBTITLE_STYLES}")
 
         normalized: Dict[str, Any] = dict(entry)
-        normalized.update({
-            "character": char,
-            "text": text,
-            "emotion": emotion,
-            "motion": motion,
-            "bgm": bgm,
-            "sfx": sfx,
-            "image": image,
-            "character_position": character_position,
-            "subtitle_position": subtitle_position,
-            "subtitle_style": subtitle_style,
-        })
+        normalized.update(
+            {
+                "character": char,
+                "text": text,
+                "emotion": emotion,
+                "motion": motion,
+                "bgm": bgm,
+                "sfx": sfx,
+                "image": image,
+                "character_position": character_position,
+                "subtitle_position": subtitle_position,
+                "subtitle_style": subtitle_style,
+            }
+        )
         validated.append(normalized)
 
     return validated
 
 
-def validate_director_against_writer(director_script: List[DirectorScriptEntry], writer_script: List[WriterScriptEntry]) -> None:
+def validate_director_against_writer(
+    director_script: List[DirectorScriptEntry], writer_script: List[WriterScriptEntry]
+) -> None:
     """
     Ensures the director script preserves the exact factual text and character sequence from the writer script.
     """
     if len(director_script) != len(writer_script):
-        raise ValueError(f"Script length mismatch: Director has {len(director_script)} entries, Writer has {len(writer_script)}")
+        raise ValueError(
+            f"Script length mismatch: Director has {len(director_script)} entries, Writer has {len(writer_script)}"
+        )
 
     for idx, (dir_entry, writ_entry) in enumerate(zip(director_script, writer_script)):
         if dir_entry["character"] != writ_entry["character"]:
-            raise ValueError(f"Character mismatch at entry {idx}: Director changed '{writ_entry['character']}' to '{dir_entry['character']}'")
+            raise ValueError(
+                f"Character mismatch at entry {idx}: Director changed '{writ_entry['character']}' to '{dir_entry['character']}'"
+            )
 
         if dir_entry["text"] != writ_entry["text"]:
-            raise ValueError(f"Text mismatch at entry {idx}: Director changed '{writ_entry['text']}' to '{dir_entry['text']}'")
+            raise ValueError(
+                f"Text mismatch at entry {idx}: Director changed '{writ_entry['text']}' to '{dir_entry['text']}'"
+            )
+
+
+def split_long_text(text: str, max_chars: int = 42) -> List[str]:
+    """
+    Splits long compound dialogue text into smaller, well-paced cuts (<= max_chars).
+    Splits along sentence boundaries (。！？!?) first, then comma/clause boundaries if needed.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    parts = [p.strip() for p in re.split(r"(?<=[。！？!?])\s*", text) if p.strip()]
+    if len(parts) > 1:
+        result: List[str] = []
+        cur = ""
+        for p in parts:
+            if not cur:
+                cur = p
+            elif len(cur) + len(p) <= max_chars:
+                cur += p
+            else:
+                result.append(cur)
+                cur = p
+        if cur:
+            result.append(cur)
+        return result
+
+    comma_parts = [p.strip() for p in re.split(r"(?<=[、,])\s*", text) if p.strip()]
+    if len(comma_parts) > 1:
+        result = []
+        cur = ""
+        for p in comma_parts:
+            if not cur:
+                cur = p
+            elif len(cur) + len(p) <= max_chars:
+                cur += p
+            else:
+                result.append(cur)
+                cur = p
+        if cur:
+            result.append(cur)
+        return result
+
+    return [text]
+
+
+def split_long_script_entries(
+    script: List[Dict[str, Any]], max_chars: int = 42
+) -> List[Dict[str, Any]]:
+    """
+    Processes a script array and splits dialogue entries where text exceeds max_chars
+    into multiple sequential cuts preserving speaker, emotion, and layout.
+    B-roll images and SFX remain attached to their respective first cut.
+    """
+    new_script: List[Dict[str, Any]] = []
+    for entry in script:
+        if "text" not in entry or len(entry.get("text", "")) <= max_chars:
+            new_script.append(dict(entry))
+            continue
+
+        text_parts = split_long_text(entry["text"], max_chars=max_chars)
+        if len(text_parts) <= 1:
+            new_script.append(dict(entry))
+            continue
+
+        for i, part in enumerate(text_parts):
+            sub_entry = dict(entry)
+            sub_entry["text"] = part
+            if i > 0:
+                sub_entry.pop("image", None)
+                sub_entry.pop("sfx", None)
+                if sub_entry.get("motion") in ("jump", "shake"):
+                    sub_entry["motion"] = "none"
+            new_script.append(sub_entry)
+
+    return new_script

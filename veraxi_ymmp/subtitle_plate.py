@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple, Union
+from typing import NamedTuple, Union
 
 from .typography import (
     CHAR_COLORS,
@@ -10,7 +10,21 @@ from .typography import (
     wrap_japanese,
 )
 
-__all__ = ["CHAR_COLORS", "DEFAULT_CHAR_COLOR", "wrap_japanese", "create_speech_plate"]
+
+class SpeechPlateResult(NamedTuple):
+    out_path: Path
+    text_h: float
+    box_h: float
+    font_size: float = 44.0
+
+
+__all__ = [
+    "CHAR_COLORS",
+    "DEFAULT_CHAR_COLOR",
+    "wrap_japanese",
+    "create_speech_plate",
+    "SpeechPlateResult",
+]
 
 
 def create_speech_plate(
@@ -20,11 +34,11 @@ def create_speech_plate(
     canvas_w: int = 1920,
     canvas_h: int = 360,
     overwrite: bool = True,
-) -> Tuple[Path, float, float]:
+) -> SpeechPlateResult:
     """
     Renders a clean white speech bubble plate (Zabuton)
     with rounded corners, speaker-themed border, and soft drop shadow.
-    Returns (out_path, text_h, box_h) to allow exact vertical alignment.
+    Returns SpeechPlateResult(out_path, text_h, box_h, font_size) to allow exact vertical alignment.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +50,7 @@ def create_speech_plate(
         canvas_h=canvas_h,
         wrap_width=20,
         spacing=14,
-        auto_scale_down=False,
+        auto_scale_down=True,
     )
 
     if overwrite or not out_path.exists():
@@ -55,4 +69,4 @@ def create_speech_plate(
         )
         img.save(out_path, format="PNG")
 
-    return out_path, float(geom.text_h), float(geom.box_h)
+    return SpeechPlateResult(out_path, float(geom.text_h), float(geom.box_h), float(geom.font_size))

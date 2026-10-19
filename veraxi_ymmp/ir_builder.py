@@ -31,6 +31,7 @@ from .ir import (
     VoiceClip,
 )
 from .logging import logger
+from .phonetics import normalize_tts_text
 from .script import DirectorScriptEntry, WriterScriptEntry
 from .template import get_timeline
 from .utils import normalize_japanese_typography
@@ -93,14 +94,18 @@ class TimelineIRBuilder:
         self.face_templates = face_templates or {}
         self.config = config or CompilerConfig()
         self.tts_backend = tts_backend
-        self.cache = cache or TTSCache(enabled=self.config.use_cache, cache_dir=self.config.cache_dir)
+        self.cache = cache or TTSCache(
+            enabled=self.config.use_cache, cache_dir=self.config.cache_dir
+        )
         self.hatsuon = hatsuon_converter or Hatsuon()
         self.warnings = warnings if warnings is not None else []
         self.errors = errors if errors is not None else []
 
     def get_fps(self) -> int:
         """Returns the frame rate from the template or configuration."""
-        return cast(int, get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps))
+        return cast(
+            int, get_timeline(self.template_data).get("VideoInfo", {}).get("FPS", self.config.fps)
+        )
 
     def convert_hatsuon(self, text: str) -> str:
         """Converts Japanese text into phonetic pronunciation string."""
@@ -137,10 +142,15 @@ class TimelineIRBuilder:
             except Exception as exc:
                 logger.debug(f"Failed to read cached audio query from {query_path}: {exc}")
 
+        tts_text = normalize_tts_text(text)
         if out_path.exists():
-            if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
+            if (
+                audio_query is None
+                and self.tts_backend is not None
+                and hasattr(self.tts_backend, "get_audio_query")
+            ):
                 try:
-                    audio_query = self.tts_backend.get_audio_query(text, speaker_id)
+                    audio_query = self.tts_backend.get_audio_query(tts_text, speaker_id)
                     with open(query_path, "w", encoding="utf-8") as qf:
                         json.dump(audio_query, qf, ensure_ascii=False, indent=2)
                 except Exception as exc:
@@ -153,20 +163,24 @@ class TimelineIRBuilder:
                 logger.debug(f"Failed to read WAV duration from {out_path}: {exc}")
                 return int(3.0 * self.get_fps()), out_path, audio_query
 
-        cached = self.cache.get(text, speaker_id)
+        cached = self.cache.get(tts_text, speaker_id)
         if cached:
             wav_bytes, duration = cached
-            if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
+            if (
+                audio_query is None
+                and self.tts_backend is not None
+                and hasattr(self.tts_backend, "get_audio_query")
+            ):
                 try:
-                    audio_query = self.tts_backend.get_audio_query(text, speaker_id)
+                    audio_query = self.tts_backend.get_audio_query(tts_text, speaker_id)
                 except Exception as exc:
                     logger.debug(f"Failed to fetch audio query for cached entry {idx}: {exc}")
         else:
             if self.tts_backend is None:
                 raise RuntimeError("TTS Backend not initialized")
             try:
-                wav_bytes, duration, audio_query = self.tts_backend.synthesize(text, speaker_id)
-                self.cache.set(text, speaker_id, wav_bytes, duration)
+                wav_bytes, duration, audio_query = self.tts_backend.synthesize(tts_text, speaker_id)
+                self.cache.set(tts_text, speaker_id, wav_bytes, duration)
             except Exception as e:
                 raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
 
@@ -277,13 +291,17 @@ class TimelineIRBuilder:
             if not char_name:
                 continue
 
-            character_positions.setdefault(char_name, str(entry_dict.get("character_position", "center")))
+            character_positions.setdefault(
+                char_name, str(entry_dict.get("character_position", "center"))
+            )
 
             if char_name not in self.character_templates:
                 # Dynamic fallback: clone the first available character template for known characters
                 if char_name in self.config.speaker_map or char_name in KNOWN_CHARACTERS:
                     if not self.character_templates:
-                        raise ValueError(f"No character templates available to clone for: {char_name}")
+                        raise ValueError(
+                            f"No character templates available to clone for: {char_name}"
+                        )
                     base_char = list(self.character_templates.keys())[0]
                     self.character_templates[char_name] = copy.deepcopy(
                         self.character_templates[base_char]
@@ -339,7 +357,9 @@ class TimelineIRBuilder:
                             char_name, self.config.default_speaker_id
                         )
                         if hasattr(self.tts_backend, "get_audio_query"):
-                            audio_query = self.tts_backend.get_audio_query(text, spk_id)
+                            audio_query = self.tts_backend.get_audio_query(
+                                normalize_tts_text(text), spk_id
+                            )
                             query_path = (
                                 audio_dir / f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
                             )

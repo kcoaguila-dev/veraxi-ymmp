@@ -151,3 +151,19 @@ def test_resolve_lipsync_intervals_fallback_without_query(sample_wav: Path) -> N
 def test_reexported_get_audio_reactive_intervals_in_premiere_exporter() -> None:
     # Ensure re-export matches identical function
     assert reexported_get_audio_reactive_intervals is get_audio_reactive_intervals
+
+
+def test_normalize_tts_text() -> None:
+    from veraxi_ymmp.phonetics import normalize_tts_text
+
+    # Affirmative ええ at start of sentence/clause
+    assert normalize_tts_text("ええ、極めて重要ですわね。") == "えー、極めて重要ですわね。"
+    assert normalize_tts_text("ええ。そうですわね。") == "えー。そうですわね。"
+    assert normalize_tts_text("はい。ええ、そうです。") == "はい。えー、そうです。"
+    assert normalize_tts_text("エエ、その通り！") == "えー、その通り！"
+    assert normalize_tts_text("ええ") == "えー"
+
+    # Non-affirmative words containing ええ are preserved
+    assert normalize_tts_text("ええと、これは") == "ええと、これは"
+    assert normalize_tts_text("永遠の愛") == "永遠の愛"
+    assert normalize_tts_text("") == ""

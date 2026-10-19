@@ -7,6 +7,7 @@ animation lip-sync standards (YMM4 / PSDToolKit / KuchiPaku).
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -234,7 +235,9 @@ def get_audio_reactive_intervals(
                 if state == current_state:
                     current_len += 1
                 else:
-                    if (current_state and current_len >= 3) or (not current_state and current_len >= 2):
+                    if (current_state and current_len >= 3) or (
+                        not current_state and current_len >= 2
+                    ):
                         smoothed.extend([current_state] * current_len)
                         current_state = state
                         current_len = 1
@@ -331,3 +334,23 @@ def resolve_lipsync_intervals(
         total_expected_frames=total_expected_frames,
         fps=fps,
     )
+
+
+def normalize_tts_text(text: str) -> str:
+    """
+    Normalizes text for TTS speech synthesis (VOICEVOX / OpenJTalk).
+
+    Fixes known pronunciation and pitch accent anomalies without modifying
+    the original verbatim display subtitle:
+    - Conversational affirmative 'ええ、' / 'ええ' (which OpenJTalk parses with
+      an unnatural Atamadaka drop ['エ', 'エ'] accent=1, sounding like 'Eh? What?!')
+      is normalized to 'えー、' (accent=2, smooth affirmative rising/flat mora).
+    """
+    if not text:
+        return ""
+    # Replace sentence-initial or clause-initial 'ええ' / 'エエ' with 'えー'
+    # e.g. "ええ、" -> "えー、", "ええ。" -> "えー。", "ええ " -> "えー "
+    normalized = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", text)
+    # Also after sentence-ending punctuation (e.g. "はい。ええ、そうです")
+    normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
+    return normalized

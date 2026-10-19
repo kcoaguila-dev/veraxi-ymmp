@@ -24,6 +24,7 @@ from pykakasi import kakasi
 
 class HatsuonError(Exception):
     """Exception raised when phonetic conversion fails."""
+
     pass
 
 
@@ -81,6 +82,8 @@ class Hatsuon:
         Returns:
             Processed sentence with phonetic particle replacement and alkana conversions.
         """
+        sentence = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", sentence)
+        sentence = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", sentence)
         sentence = sentence.replace("は", "わ")
         words = sentence.split()
 
@@ -130,7 +133,12 @@ class Hatsuon:
                     or (pos[0] == "動詞" and "サ変接続" in pos_detail)
                     or "非自立" in pos_detail
                     or after_prepos
-                    or (after_sahen_noun and pos[0] == "動詞" and len(pos) > 4 and pos[4] == "サ変・スル")
+                    or (
+                        after_sahen_noun
+                        and pos[0] == "動詞"
+                        and len(pos) > 4
+                        and pos[4] == "サ変・スル"
+                    )
                 )
 
                 if not no_break:
@@ -207,7 +215,6 @@ class Hatsuon:
             raise
         except Exception as e:
             warnings.warn(
-                f"Failed to derive Hatsuon for '{sentence}': {e}. "
-                "Falling back to verbatim string."
+                f"Failed to derive Hatsuon for '{sentence}': {e}. Falling back to verbatim string."
             )
             return sentence

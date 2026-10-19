@@ -22,7 +22,9 @@ def test_validate_output_path_unsafe(tmp_path: Path):
     base_dir.mkdir()
     unsafe_path = base_dir / ".." / "outside.ymmp"
 
-    with pytest.raises((ValueError, ValidationError), match="escapes base directory|Path traversal detected"):
+    with pytest.raises(
+        (ValueError, ValidationError), match="escapes base directory|Path traversal detected"
+    ):
         validate_output_path(unsafe_path, base_dir)
 
 
@@ -31,7 +33,10 @@ def test_validate_output_path_unsafe_absolute_outside_base_dir(tmp_path: Path):
     base_dir.mkdir()
     outside_abs = (tmp_path / "other_folder" / "evil.ymmp").resolve()
 
-    with pytest.raises((ValueError, ValidationError), match="escapes base directory|Path traversal detected|outside"):
+    with pytest.raises(
+        (ValueError, ValidationError),
+        match="escapes base directory|Path traversal detected|outside",
+    ):
         validate_output_path(outside_abs, base_dir)
 
 
@@ -77,4 +82,33 @@ def test_validate_ymmp_schema_invalid_enum():
         }
     }
     with pytest.raises(ValueError, match="YMM4 Enum Validation Failure"):
+        validate_ymmp_schema(bad_data)
+
+
+def test_validate_ymmp_schema_basepoint_center():
+    valid_data = {
+        "Timeline": {
+            "Items": [
+                {
+                    "BasePoint": "Center",
+                }
+            ]
+        }
+    }
+    validate_ymmp_schema(valid_data)
+
+
+def test_validate_ymmp_schema_rejects_center_center():
+    bad_data = {
+        "Timeline": {
+            "Items": [
+                {
+                    "BasePoint": "CenterCenter",
+                }
+            ]
+        }
+    }
+    with pytest.raises(
+        ValueError, match="Value 'CenterCenter' is not a valid enum member for 'BasePoint'"
+    ):
         validate_ymmp_schema(bad_data)
