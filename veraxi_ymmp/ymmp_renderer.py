@@ -241,7 +241,7 @@ class YMMPRenderer:
             "JimakuVisibility": "UseCharacterSetting",
             "X": _anim_val(0.0),
             "Y": _anim_val(418.0),
-            "BasePoint": "Center",
+            "BasePoint": "CenterCenter",
             "Font": "メイリオ",
             "FontSize": _anim_val(font_size),
             "FontColor": reg.get_font_color(char),

@@ -85,21 +85,8 @@ def test_validate_ymmp_schema_invalid_enum():
         validate_ymmp_schema(bad_data)
 
 
-def test_validate_ymmp_schema_basepoint_center():
+def test_validate_ymmp_schema_basepoint_center_center():
     valid_data = {
-        "Timeline": {
-            "Items": [
-                {
-                    "BasePoint": "Center",
-                }
-            ]
-        }
-    }
-    validate_ymmp_schema(valid_data)
-
-
-def test_validate_ymmp_schema_rejects_center_center():
-    bad_data = {
         "Timeline": {
             "Items": [
                 {
@@ -108,7 +95,20 @@ def test_validate_ymmp_schema_rejects_center_center():
             ]
         }
     }
+    validate_ymmp_schema(valid_data)
+
+
+def test_validate_ymmp_schema_rejects_invalid_basepoint():
+    bad_data = {
+        "Timeline": {
+            "Items": [
+                {
+                    "BasePoint": "Center",
+                }
+            ]
+        }
+    }
     with pytest.raises(
-        ValueError, match="Value 'CenterCenter' is not a valid enum member for 'BasePoint'"
+        ValueError, match="Value 'Center' is not a valid enum member for 'BasePoint'"
     ):
         validate_ymmp_schema(bad_data)

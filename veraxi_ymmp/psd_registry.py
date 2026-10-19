@@ -573,7 +573,7 @@ class CharacterPSDRegistry:
         c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
         c["FontColor"] = f_color
         c["StyleColor"] = s_color
-        c["BasePoint"] = "Center"
+        c["BasePoint"] = "CenterCenter"
         c["X"] = {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"}
         c["Y"] = {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"}
         c["Bold"] = True
