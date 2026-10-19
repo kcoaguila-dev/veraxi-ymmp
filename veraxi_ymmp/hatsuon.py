@@ -85,6 +85,7 @@ class Hatsuon:
         sentence = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", sentence)
         sentence = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", sentence)
         sentence = sentence.replace("は", "わ")
+        sentence = sentence.replace("何でも", "なんでも")
         words = sentence.split()
 
         for word in words:

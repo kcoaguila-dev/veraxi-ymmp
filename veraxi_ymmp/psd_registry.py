@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .constants import DEFAULT_TEMPLATE_PATH
+from .constants import DEFAULT_SUBTITLE_CENTER_Y, DEFAULT_TEMPLATE_PATH
 
 
 @dataclass
@@ -570,12 +570,12 @@ class CharacterPSDRegistry:
             "MouthAnimation": "VolumeLipSyncPriority",
         }
         c["Font"] = "メイリオ"
-        c["FontSize"] = {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"}
+        c["FontSize"] = {"Values": [{"Value": 40.0}], "Span": 0.0, "AnimationType": "なし"}
         c["FontColor"] = f_color
         c["StyleColor"] = s_color
         c["BasePoint"] = "CenterCenter"
         c["X"] = {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"}
-        c["Y"] = {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"}
+        c["Y"] = {"Values": [{"Value": DEFAULT_SUBTITLE_CENTER_Y}], "Span": 0.0, "AnimationType": "なし"}
         c["Bold"] = True
         c["IsJimakuVisible"] = True
         c["WordWrap"] = "NoWrap"

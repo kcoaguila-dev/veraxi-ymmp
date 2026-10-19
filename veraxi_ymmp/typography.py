@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+from .constants import DEFAULT_SUBTITLE_CENTER_Y
+
 FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
 
 _budoux_parser: Any = None
@@ -54,8 +56,16 @@ def wrap_japanese(text: str, width: int = 20) -> str:
         import re
 
         # Fallback regex that treats alphanumeric/numbers + units as atomic tokens
-        pattern = r"[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*|[a-zA-Z]+|[一-龥ぁ-んァ-ヶー]+|[、。！？!?…]+|\s+|."
-        raw_chunks = [m.group(0) for m in re.finditer(pattern, text)]
+        # and segments Japanese text at natural particle/clausal boundaries
+        pattern = (
+            r"[0-9０-９]+(?:[.,．][0-9０-９]+)*[%％ドル円バレル万億兆人個点]*"
+            r"|[a-zA-Z]+"
+            r"|[一-龥ぁ-んァ-ヶー]*?(?:は|が|を|に|で|と|の|も|へ|から|より|まで|など|て|ば)"
+            r"|[一-龥ぁ-んァ-ヶー]+"
+            r"|[、。！？!?…]+"
+            r"|\s+|."
+        )
+        raw_chunks = [m.group(0) for m in re.finditer(pattern, text) if m.group(0)]
 
     if not raw_chunks:
         return text
@@ -156,15 +166,28 @@ class SpeechPlateGeometry:
     font: FontType
     wrapped_text: str
     font_size: float = 44.0
+    line_count: int = 1
+    voice_y_offset: float = 0.0
+
+
+def calculate_ymm4_voice_y_offset(line_count: int = 1, font_size: float = 44.0) -> float:
+    """
+    Calculate the YMM4 VoiceItem Y-coordinate offset relative to the speech plate center.
+
+    With BasePoint='CenterCenter' and JimakuVisibility='Custom', the text block is already
+    concentric with the speech plate ImageItem, yielding equal top and bottom margins (offset=0.0).
+    """
+    return 0.0
+
 
 
 def calculate_speech_plate_geometry(
     text: str,
-    font_size: int = 44,
+    font_size: int = 40,
     canvas_w: int = 1920,
     canvas_h: int = 360,
     wrap_width: int = 20,
-    spacing: int = 14,
+    spacing: int = 10,
     auto_scale_down: bool = True,
     bottom_margin: Optional[int] = None,
     pad_x: int = 72,
@@ -176,33 +199,37 @@ def calculate_speech_plate_geometry(
     """Calculate speech bubble plate bounding box and text positioning."""
     wrapped_text = wrap_japanese(text, width=wrap_width)
     effective_font_size = float(font_size)
+    effective_spacing = spacing
     font = get_speech_font(font_size)
 
     dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=spacing)
+    bbox = dummy_draw.multiline_textbbox((0, 0), wrapped_text, font=font, spacing=effective_spacing)
     text_w = float(bbox[2] - bbox[0])
     text_h = float(bbox[3] - bbox[1])
     line_count = len(wrapped_text.splitlines())
 
-    if auto_scale_down and (text_w > 1500 or line_count >= 3 or text_h > 140):
-        scaled_size = max(font_size - 6, 36)
+    if auto_scale_down and text_w > 1500:
+        scaled_size = max(font_size - 4, 36) if line_count < 5 else max(font_size - 8, 32)
         effective_font_size = float(scaled_size)
+        effective_spacing = 8 if line_count >= 4 else spacing
         font = get_speech_font(scaled_size)
-        scaled_spacing = max(spacing - 2, 8)
         bbox = dummy_draw.multiline_textbbox(
-            (0, 0), wrapped_text, font=font, spacing=scaled_spacing
+            (0, 0), wrapped_text, font=font, spacing=effective_spacing
         )
         text_w = float(bbox[2] - bbox[0])
         text_h = float(bbox[3] - bbox[1])
 
+    effective_layout_h = text_h
     box_w = min(max(text_w + pad_x * 2, min_box_w), max_box_w)
-    box_h = max(text_h + pad_y * 2, min_box_h)
+    box_h = min(max(effective_layout_h + pad_y * 2, min_box_h), 288.0)
 
     box_x = (canvas_w - box_w) / 2
     if bottom_margin is not None:
         box_y = canvas_h - box_h - bottom_margin
     else:
         box_y = (canvas_h - box_h) / 2
+
+    voice_y_offset = calculate_ymm4_voice_y_offset(line_count, effective_font_size)
 
     return SpeechPlateGeometry(
         box_x=box_x,
@@ -215,7 +242,26 @@ def calculate_speech_plate_geometry(
         font=font,
         wrapped_text=wrapped_text,
         font_size=effective_font_size,
+        line_count=line_count,
+        voice_y_offset=voice_y_offset,
     )
+
+
+def calculate_ymm4_subtitle_y(
+    box_h: float = 0.0,
+    canvas_h: int = 1080,
+    bottom_safe_margin: float = 50.0,
+) -> float:
+    """Calculate the YMM4 Y coordinate (centered space) for concentric speech bubble & subtitle text.
+
+    With concentric layout, both the subtitle text (Character.Y) and the speech plate (ImageItem.Y)
+    share the center coordinate DEFAULT_SUBTITLE_CENTER_Y (345.0).
+    Guarantees >= 50px safe margin from the bottom of the canvas (+540.0) for all text lengths.
+    """
+    if box_h > 0.0:
+        max_allowed_center_y = (canvas_h / 2.0) - bottom_safe_margin - (box_h / 2.0)
+        return float(min(DEFAULT_SUBTITLE_CENTER_Y, max_allowed_center_y))
+    return float(DEFAULT_SUBTITLE_CENTER_Y)
 
 
 def draw_rounded_speech_bubble(

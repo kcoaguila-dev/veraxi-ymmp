@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
+
+if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if ffmpeg_bin:
+        os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
+
 from moviepy import (
     AudioFileClip,
     CompositeAudioClip,
@@ -52,8 +58,19 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
         spacing=12,
         auto_scale_down=True,
     )
+    effective_canvas_h = max(360, int(geom.box_h) + 80)
+    if effective_canvas_h != 360:
+        geom = calculate_speech_plate_geometry(
+            text=text,
+            font_size=52,
+            canvas_w=1920,
+            canvas_h=effective_canvas_h,
+            wrap_width=20,
+            spacing=12,
+            auto_scale_down=True,
+        )
     img = draw_rounded_speech_bubble(
-        canvas_size=(1920, 360),
+        canvas_size=(1920, effective_canvas_h),
         geometry=geom,
         border_color=border_color,
         fill_color=(255, 255, 255, 248),
@@ -75,6 +92,9 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
             return 0.8 + (t / 0.15) * 0.2
         return 1.0
 
+    layout_y = int(round(1030.0 - geom.box_y - geom.box_h))
+    setattr(clip, "layout_y", layout_y)
+    setattr(clip, "geom", geom)
     return clip.with_effects([Resize(pop_in)])
 
 
@@ -131,7 +151,9 @@ class MoviePyRenderer:
 
             border_color = get_char_color(vc.character)
 
-            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 725))
+            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time)
+            bubble_y = getattr(bubble, "layout_y", 725)
+            bubble = bubble.with_position(("center", bubble_y))
             bubbles_list.append(bubble)
 
             current_time += dur

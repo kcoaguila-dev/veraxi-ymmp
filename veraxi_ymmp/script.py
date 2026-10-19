@@ -2,8 +2,11 @@
 Models and validation logic for the two-stage script pipeline.
 """
 
+import logging
 import re
 from typing import Any, Dict, List, Literal, Optional, TypedDict
+
+logger = logging.getLogger(__name__)
 
 Emotion = Literal[
     "normal",
@@ -226,6 +229,11 @@ def validate_production_script(data: Any) -> List[Dict[str, Any]]:
             raise ValueError(f"Entry {idx} 'character' must be a non-empty string")
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"Entry {idx} 'text' must be a non-empty string")
+        if len(text) > 45:
+            logger.warning(
+                f"Entry {idx} ({char}): text length {len(text)} exceeds recommended ceiling (<= 40 chars). "
+                "Consider splitting into shorter cuts to prevent speech bubble crowding and reading fatigue."
+            )
 
         emotion = entry.get("emotion", "neutral")
         motion = entry.get("motion", "none")

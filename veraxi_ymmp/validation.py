@@ -73,6 +73,7 @@ YMM4_ENUM_REGISTRY = {
         "加速移動",
         "減速移動",
     },
+    "JimakuVisibility": {"UseCharacterSetting", "Custom", "Visible", "Hidden"},
 }
 
 ALLOWED_MOUTH_ANIMATIONS: Set[str] = {
@@ -460,6 +461,57 @@ def validate_ymmp_timeline(
                 f"Background image '{fp}' was placed on Layer 1 (B-Roll layer) at frame {frame}! "
                 "Backgrounds must strictly belong to Layer 0 with 16:9 full-canvas zoom (187.5)."
             )
+
+    # Check 8: Speech Plate & Subtitle Bottom Margin Safe Zone
+    for i, it in enumerate(plate_items_layer7):
+        y_obj = it.get("Y")
+        y_val = (
+            y_obj.get("Values", [{}])[0].get("Value", 0.0)
+            if isinstance(y_obj, dict)
+            else (y_obj if isinstance(y_obj, (int, float)) else 0.0)
+        )
+        if y_val > 445.0:
+            raise ValidationError(
+                f"Plate ImageItem[{i}] at frame {it.get('Frame')} has Y={y_val} > 445.0. "
+                "Speech bubble plate must maintain at least 45-50px safe distance from bottom canvas edge (+540.0)!"
+            )
+
+    # Check 9: Concentric Subtitle Alignment
+    char_y_map: Dict[str, float] = {}
+    for c in characters:
+        c_name = c.get("Name", "")
+        c_y_obj = c.get("Y")
+        c_y = (
+            c_y_obj.get("Values", [{}])[0].get("Value", 0.0)
+            if isinstance(c_y_obj, dict)
+            else (c_y_obj if isinstance(c_y_obj, (int, float)) else 0.0)
+        )
+        char_y_map[c_name] = c_y
+
+    if plate_items_layer7 and voice_items:
+        plates_by_frame = {it.get("Frame"): it for it in plate_items_layer7}
+        for i, v in enumerate(voice_items):
+            v_frame = v.get("Frame")
+            matching_plate = plates_by_frame.get(v_frame)
+            if matching_plate:
+                j_vis = v.get("JimakuVisibility")
+                if j_vis != "UseCharacterSetting":
+                    raise ValidationError(
+                        f"VoiceItem[{i}] at frame {v_frame} has JimakuVisibility='{j_vis}'. "
+                        "Must be 'UseCharacterSetting' to prevent YMM4 from detaching subtitles onto the chalkboard!"
+                    )
+                p_y = (
+                    matching_plate.get("Y", {}).get("Values", [{}])[0].get("Value", 0.0)
+                    if isinstance(matching_plate.get("Y"), dict)
+                    else matching_plate.get("Y", 0.0)
+                )
+                char_name = v.get("CharacterName", "")
+                char_y = char_y_map.get(char_name, p_y)
+                if abs(char_y - p_y) > 2.0:
+                    raise ValidationError(
+                        f"VoiceItem[{i}] ({char_name}) uses Character Y={char_y} but Plate has Y={p_y} (diff={abs(char_y - p_y):.1f}px). "
+                        "Character and speech bubble plate must be concentric (abs(char_y - p_y) <= 2px) to ensure equal top and bottom padding!"
+                    )
 
     return {
         "status": "PASS",

@@ -64,6 +64,8 @@ tests/scratch_audio.wav
 audio/
 artifacts/
 projects/
+scratch/
+verification_frames/
 
 # OS files
 .DS_Store

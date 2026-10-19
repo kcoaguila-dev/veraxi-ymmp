@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union, cast
 
 import brotli
 
-from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES
+from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_SUBTITLE_CENTER_Y
 from .ir import TimelineIR
 from .phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
 from .ports import ExportResult
@@ -182,7 +182,8 @@ class YMMPRenderer:
         face_layers: List[str],
         face_paths: List[str],
         fps: int,
-        font_size: float = 44.0,
+        font_size: float = 40.0,
+        y: float = DEFAULT_SUBTITLE_CENTER_Y,
     ) -> Dict[str, Any]:
         """Build a PSD-backed VoiceItem with Brotli VoiceCache and native LipSyncFrames."""
         char, a_path = clip.character, clip.audio_path
@@ -240,7 +241,9 @@ class YMMPRenderer:
             "Length": clip.length,
             "JimakuVisibility": "UseCharacterSetting",
             "X": _anim_val(0.0),
-            "Y": _anim_val(418.0),
+            "Y": _anim_val(y),
+            "JimakuX": _anim_val(0.0),
+            "JimakuY": _anim_val(y),
             "BasePoint": "CenterCenter",
             "Font": "メイリオ",
             "FontSize": _anim_val(font_size),
@@ -329,9 +332,11 @@ class YMMPRenderer:
 
             plate_file = plates_dir / f"plate_{frm}_{char}.png"
             plate_res = create_speech_plate(txt, char, plate_file)
+            center_y = getattr(plate_res, "center_y", DEFAULT_SUBTITLE_CENTER_Y)
+            voice_y = getattr(plate_res, "voice_y", center_y)
             items.append(
                 _build_image_item(
-                    plate_file.resolve(), frm, lng, layer=8, y=418.0, animated_opacity_rot=True
+                    plate_file.resolve(), frm, lng, layer=8, y=center_y, animated_opacity_rot=True
                 )
             )
             items.append(
@@ -343,6 +348,7 @@ class YMMPRenderer:
                     face_paths_key,
                     timeline_ir.fps,
                     font_size=plate_res.font_size,
+                    y=voice_y,
                 )
             )
 
