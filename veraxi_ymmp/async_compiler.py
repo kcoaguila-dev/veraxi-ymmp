@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from .compiler import CompilationResult, CompilerError, ScriptEntry, YMMPCompiler
+from .phonetics import normalize_tts_text
 from .validation import sanitize_filename
 
 
@@ -32,13 +33,14 @@ class AsyncYMMPCompiler(YMMPCompiler):
                 continue
             if self.config.use_tts and self.tts_backend:
                 speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
+                tts_text = normalize_tts_text(str(text))
                 if hasattr(self.tts_backend, "synthesize_async"):
-                    task = asyncio.create_task(self.tts_backend.synthesize_async(text, speaker_id))
-                    tts_tasks.append((idx, char_name, text, task))
+                    task = asyncio.create_task(self.tts_backend.synthesize_async(tts_text, speaker_id))
+                    tts_tasks.append((idx, char_name, text, tts_text, task))
 
         if tts_tasks:
-            results = await asyncio.gather(*(t for _, _, _, t in tts_tasks), return_exceptions=True)
-            for (idx, char_name, text, _), result in zip(tts_tasks, results):
+            results = await asyncio.gather(*(t for _, _, _, _, t in tts_tasks), return_exceptions=True)
+            for (idx, char_name, text, tts_text, _), result in zip(tts_tasks, results):
                 if isinstance(result, BaseException):
                     self.errors.append(f"Async synthesis failed for {char_name}: {result}")
                 else:
@@ -48,7 +50,7 @@ class AsyncYMMPCompiler(YMMPCompiler):
                         wav_bytes, duration = result
                         audio_query = None
                     speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
-                    self.cache.set(text, speaker_id, wav_bytes, duration)
+                    self.cache.set(tts_text, speaker_id, wav_bytes, duration)
                     if isinstance(audio_query, dict) and audio_query and audio_dir is not None:
                         audio_dir.mkdir(parents=True, exist_ok=True)
                         safe_char_name = sanitize_filename(str(char_name))

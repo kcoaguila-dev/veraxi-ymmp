@@ -82,10 +82,13 @@ class Hatsuon:
         Returns:
             Processed sentence with phonetic particle replacement and alkana conversions.
         """
+        from .phonetics import normalize_kaname_reading
+
         sentence = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", sentence)
         sentence = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", sentence)
         sentence = sentence.replace("は", "わ")
         sentence = sentence.replace("何でも", "なんでも")
+        sentence = normalize_kaname_reading(sentence)
         words = sentence.split()
 
         for word in words:

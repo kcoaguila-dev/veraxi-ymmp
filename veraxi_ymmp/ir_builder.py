@@ -342,55 +342,36 @@ class TimelineIRBuilder:
             audio_path = None
             audio_query = None
 
-            # Check for existing audio file in audio_dir to get accurate length and query
-            audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
-            query_filename = f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
-            candidate_audio = audio_dir / audio_filename
-            candidate_query = audio_dir / query_filename
-
-            if candidate_query.exists():
-                try:
-                    with open(candidate_query, "r", encoding="utf-8") as qf:
-                        audio_query = json.load(qf)
-                except Exception as e:
-                    logger.warning(f"Failed to read query json for {audio_filename}: {e}")
-
-            if candidate_audio.exists():
-                audio_path = candidate_audio
-                try:
-                    with wave.open(str(audio_path), "rb") as wav:
-                        frames = wav.getnframes()
-                        rate = wav.getframerate()
-                        actual_duration = frames / float(rate)
-                        length = int((actual_duration + 0.3) * fps)  # Add 0.3s padding
-                except Exception as e:
-                    logger.warning(f"Could not read wav length for {audio_filename}: {e}")
-
             if self.config.use_tts and self.tts_backend:
                 if not self.tts_backend.is_available():
                     raise RuntimeError("TTS Backend not reachable")
-                if not audio_path or not audio_path.exists():
-                    length, audio_path, audio_query = self.synthesize_audio(
-                        idx, char_name, text, audio_dir
-                    )
-                elif audio_query is None:
+                length, audio_path, audio_query = self.synthesize_audio(
+                    idx, char_name, text, audio_dir
+                )
+            else:
+                # Check for existing audio file in audio_dir to get accurate length and query
+                audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
+                query_filename = f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
+                candidate_audio = audio_dir / audio_filename
+                candidate_query = audio_dir / query_filename
+
+                if candidate_query.exists():
                     try:
-                        spk_id = self.config.speaker_map.get(
-                            char_name, self.config.default_speaker_id
-                        )
-                        if hasattr(self.tts_backend, "get_audio_query"):
-                            audio_query = self.tts_backend.get_audio_query(
-                                normalize_tts_text(text), spk_id
-                            )
-                            query_path = (
-                                audio_dir / f"{idx:03d}_{sanitize_filename(char_name)}.query.json"
-                            )
-                            with open(query_path, "w", encoding="utf-8") as qf:
-                                json.dump(audio_query, qf, ensure_ascii=False, indent=2)
+                        with open(candidate_query, "r", encoding="utf-8") as qf:
+                            audio_query = json.load(qf)
                     except Exception as e:
-                        logger.warning(
-                            f"Failed to fetch audio query for existing audio {audio_filename}: {e}"
-                        )
+                        logger.warning(f"Failed to read query json for {audio_filename}: {e}")
+
+                if candidate_audio.exists():
+                    audio_path = candidate_audio
+                    try:
+                        with wave.open(str(audio_path), "rb") as wav:
+                            frames = wav.getnframes()
+                            rate = wav.getframerate()
+                            actual_duration = frames / float(rate)
+                            length = int((actual_duration + 0.3) * fps)  # Add 0.3s padding
+                    except Exception as e:
+                        logger.warning(f"Could not read wav length for {audio_filename}: {e}")
 
             if audio_path and audio_path.exists():
                 if audio_path not in audio_files:
