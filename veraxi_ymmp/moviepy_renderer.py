@@ -1,14 +1,11 @@
+import math
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+
 import numpy as np
-
-if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
-    _ffmpeg_bin = shutil.which("ffmpeg")
-    if _ffmpeg_bin:
-        os.environ["IMAGEIO_FFMPEG_EXE"] = _ffmpeg_bin
-
 from moviepy import (
     AudioFileClip,
     CompositeAudioClip,
@@ -16,7 +13,6 @@ from moviepy import (
     ImageClip,
     VideoClip,
 )
-import math
 
 from .ir import TimelineIR
 from .logging import logger
@@ -25,7 +21,24 @@ from .ports import ExportResult
 from .typography import (
     calculate_speech_plate_geometry,
     draw_rounded_speech_bubble,
+    get_char_color,
 )
+
+
+def _ensure_ffmpeg_env() -> None:
+    """Configure IMAGEIO_FFMPEG_EXE from system PATH if not already set."""
+    if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if ffmpeg_bin:
+            os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
+
+
+def _is_background_clip(ic: Any) -> bool:
+    """Return True if the dynamic image clip represents a background rather than B-roll."""
+    return bool(
+        getattr(ic, "is_bg", False)
+        or any(k in str(ic.image_path).lower() for k in ("bg", "room", "classroom"))
+    )
 
 
 def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
@@ -64,10 +77,17 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
 
     return clip.with_effects([Resize(pop_in)])
 
+
 class MoviePyRenderer:
-    def __init__(self, timeline_ir: Optional[TimelineIR] = None) -> None:
+    def __init__(
+        self,
+        timeline_ir: Optional[TimelineIR] = None,
+        fast_qa_duration: Optional[float] = None,
+    ) -> None:
+        _ensure_ffmpeg_env()
         self.ir = timeline_ir
-        self.fast_qa_duration: Optional[float] = None
+        self.fast_qa_duration: Optional[float] = fast_qa_duration
+        self.final_video: Optional[Any] = None
 
     def render(self, output_path: str) -> None:
         if self.ir is None:
@@ -109,12 +129,7 @@ class MoviePyRenderer:
                 if is_open:
                     char_open_intervals[vc.character].append((start_time + b_s, start_time + b_e))
 
-            char_colors = {
-                "ずんだもん": (34, 197, 94, 255),    # Vibrant Green
-                "四国めたん": (236, 72, 153, 255),   # Vibrant Pink
-                "春日部つむぎ": (249, 115, 22, 255), # Vibrant Orange
-            }
-            border_color = char_colors.get(vc.character, (120, 130, 150, 255))
+            border_color = get_char_color(vc.character)
 
             bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time).with_position(("center", 725))
             bubbles_list.append(bubble)
@@ -150,7 +165,7 @@ class MoviePyRenderer:
         bgs = []
         brolls = []
         for d_clip in self.ir.dynamic_image_clips:
-            is_bg = "bg" in str(d_clip.image_path).lower() or "room" in str(d_clip.image_path).lower() or "classroom" in str(d_clip.image_path).lower()
+            is_bg = _is_background_clip(d_clip)
 
             # Use real time mapping instead of raw frames!
             start_t = frame_to_time.get(d_clip.start_frame, d_clip.start_frame / fps)
@@ -212,7 +227,7 @@ class MoviePyRenderer:
 
         broll_ranges = []
         for d_clip in self.ir.dynamic_image_clips:
-            is_bg = "bg" in str(d_clip.image_path).lower() or "room" in str(d_clip.image_path).lower() or "classroom" in str(d_clip.image_path).lower()
+            is_bg = _is_background_clip(d_clip)
             if not is_bg:
                 s_t = frame_to_time.get(d_clip.start_frame, d_clip.start_frame / fps)
                 e_fr = d_clip.start_frame + d_clip.length
@@ -375,8 +390,10 @@ class MoviePyRenderer:
         )
 
     def save_frame_at(self, t: float, output_path: str) -> None:
-        if not hasattr(self, 'final_video'):
-            self.render("temp_dummy.mp4")
+        if getattr(self, "final_video", None) is None:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                self.render(str(Path(tmp_dir) / "preview_dummy.mp4"))
+        assert self.final_video is not None
         self.final_video.save_frame(str(output_path), t=t)
 
     def export(

@@ -6,7 +6,14 @@ import re
 import base64
 import brotli
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
+
+from .logging import logger
+
+
+class ValidationError(ValueError):
+    """Exception raised when YMMP project validation fails."""
+    pass
 
 
 def validate_output_path(output_path: Path, base_dir: Optional[Path] = None) -> Path:
@@ -14,6 +21,7 @@ def validate_output_path(output_path: Path, base_dir: Optional[Path] = None) -> 
     Ensure output path doesn't escape base directory.
     If base_dir is None, it uses the current working directory.
     """
+    explicit_base = base_dir is not None
     if base_dir is None:
         base_dir = Path.cwd()
 
@@ -24,12 +32,8 @@ def validate_output_path(output_path: Path, base_dir: Optional[Path] = None) -> 
     try:
         resolved_out.relative_to(resolved_base)
     except ValueError:
-        # In a test environment or when writing outside CWD by design, we might want to allow this.
-        # But to prevent directory traversal from a relative path attack, we can ensure
-        # that if it was given as a relative path, it doesn't escape the expected base.
-        # However, for testing, we just check if it contains '..' in its string representation.
-        if ".." in str(output_path):
-            raise ValueError(f"Output path {output_path} escapes base directory {base_dir}")
+        if explicit_base or ".." in str(output_path):
+            raise ValidationError(f"Path traversal detected: {output_path} is outside {base_dir}")
 
     return resolved_out
 
@@ -52,7 +56,21 @@ YMM4_ENUM_REGISTRY = {
     "AnimationType": {"なし", "加減速移動", "直線移動", "曲線移動", "反発移動", "加速移動", "減速移動"},
 }
 
-def validate_ymmp_schema(data: dict) -> None:
+ALLOWED_MOUTH_ANIMATIONS: Set[str] = {
+    "VolumeLipSyncPriority",
+    "VowelLipSyncPriority",
+    "AlwaysOpen",
+    "AlwaysClose",
+}
+
+FORBIDDEN_2STATE_VOWEL_LAYERS: Dict[str, Set[str]] = {
+    "ずんだもん": {"n104", "n110", "n111", "n112", "n113"},
+    "Zundamon": {"n104", "n110", "n111", "n112", "n113"},
+    "四国めたん": {"n39", "n41", "n42", "n43", "n46"},
+}
+
+
+def validate_ymmp_schema(data: Dict[str, Any]) -> None:
     """
     Recursively scans generated YMMP structure to ensure all known YMM4
     C# enum properties match legitimate YMM4 deserializer definitions.
@@ -78,12 +96,7 @@ def validate_ymmp_schema(data: dict) -> None:
     _scan(data)
 
 
-class ValidationError(Exception):
-    """Exception raised when YMMP project validation fails."""
-    pass
-
-
-def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
+def get_psd_mouth_animation_layers(psd_path_str: str) -> Set[str]:
     """
     Finds the registered MouthAnimations layer IDs ('n...') for a given PSD.
     Looks for <psd_path>-ymm.json or known character defaults.
@@ -102,7 +115,7 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
             try:
                 with open(c, 'r', encoding='utf-8-sig') as f:
                     d = json.load(f)
-                    layers = set()
+                    layers: Set[str] = set()
                     for ma in d.get("MouthAnimations", []):
                         layers.update(ma.get("Layers", []))
                     for mva in d.get("MouthVowelAnimations", []):
@@ -111,17 +124,15 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> set:
                                 layers.add(mva[k])
                     if layers:
                         return layers
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to read PSD mouth animation layers from %s: %s", c, exc)
     # Known defaults for standard characters (strictly 1 open + 1 closed mouth, rival standard)
     from .psd_registry import CharacterPSDRegistry
     return CharacterPSDRegistry.get_mouth_layers(p.name)
 
 
-
-
 def validate_ymmp_timeline(
-    data: dict,
+    data: Dict[str, Any],
     expected_voice_count: Optional[int] = None,
     require_audio: bool = True
 ) -> Dict[str, Any]:
@@ -317,14 +328,18 @@ def validate_ymmp_timeline(
                     f"Character '{c_name}' TachieDefaultFaceParameter does not contain any registered mouth animation layers {mouth_layers} in EnableLayers! Found: {el}"
                 )
             ma = tdfp.get("MouthAnimation")
-            if ma == "Default":
+            if ma == "Default" or (ma is not None and ma not in ALLOWED_MOUTH_ANIMATIONS):
                 raise ValidationError(
-                    f"Character '{c_name}' TachieDefaultFaceParameter MouthAnimation is 'Default'. "
-                    "Must be 'VolumeLipSyncPriority' (or 'VowelLipSyncPriority') so YMM4 activates lip sync animation during speech!"
+                    f"Character '{c_name}' TachieDefaultFaceParameter MouthAnimation is '{ma}'. "
+                    f"Must be one of {sorted(ALLOWED_MOUTH_ANIMATIONS)} so YMM4 activates lip sync animation during speech!"
                 )
 
     # Check 5: TachieFaceItems (facial expressions)
     face_items = [it for it in items if "TachieFaceItem" in it.get("$type", "")]
+    uses_2state_lip_sync = any(
+        it.get("TachieFaceParameter", {}).get("MouthAnimation") in ("AlwaysOpen", "AlwaysClose")
+        for it in face_items
+    )
     for i, f_it in enumerate(face_items):
         char = f_it.get("CharacterName", "unknown")
         tfp = f_it.get("TachieFaceParameter", {})
@@ -338,16 +353,72 @@ def validate_ymmp_timeline(
                 f"YMM4's GetActiveMouthAnimations will return empty and the mouth will not move during speech. Found: {el}"
             )
         ma = tfp.get("MouthAnimation")
-        if ma == "Default":
+        if ma == "Default" or (ma is not None and ma not in ALLOWED_MOUTH_ANIMATIONS):
             raise ValidationError(
-                f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} MouthAnimation is 'Default'. "
-                "Must be 'VolumeLipSyncPriority' (or 'VowelLipSyncPriority') so YMM4 animates mouth movements during speech!"
+                f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} MouthAnimation is '{ma}'. "
+                f"Must be one of {sorted(ALLOWED_MOUTH_ANIMATIONS)} so YMM4 animates mouth movements during speech!"
             )
+        if uses_2state_lip_sync or ma in ("AlwaysOpen", "AlwaysClose"):
+            forbidden = FORBIDDEN_2STATE_VOWEL_LAYERS.get(char, set())
+            forbidden_found = set(el) & forbidden
+            if forbidden_found:
+                raise ValidationError(
+                    f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} uses 2-state lip-sync mode "
+                    f"but EnableLayers contains forbidden 6-vowel mouth layers: {sorted(forbidden_found)}"
+                )
+
+    if uses_2state_lip_sync:
+        for i, t in enumerate(tachie_items):
+            char = t.get("CharacterName", "unknown")
+            el = t.get("TachieItemParameter", {}).get("EnableLayers", [])
+            forbidden = FORBIDDEN_2STATE_VOWEL_LAYERS.get(char, set())
+            forbidden_found = set(el) & forbidden
+            if forbidden_found:
+                raise ValidationError(
+                    f"TachieItem[{i}] ({char}) uses 2-state lip-sync mode "
+                    f"but EnableLayers contains forbidden 6-vowel mouth layers: {sorted(forbidden_found)}"
+                )
+        for c in characters:
+            c_name = c.get("Name", "unknown")
+            el = c.get("TachieDefaultFaceParameter", {}).get("EnableLayers", [])
+            forbidden = FORBIDDEN_2STATE_VOWEL_LAYERS.get(c_name, set())
+            forbidden_found = set(el) & forbidden
+            if forbidden_found:
+                raise ValidationError(
+                    f"Character '{c_name}' TachieDefaultFaceParameter uses 2-state lip-sync mode "
+                    f"but EnableLayers contains forbidden 6-vowel mouth layers: {sorted(forbidden_found)}"
+                )
 
     # Check 6: MaxLayer
     max_layer = timeline.get("MaxLayer", 0)
     if max_layer < 10:
         raise ValidationError(f"Timeline MaxLayer is {max_layer}, expected at least 10.")
+
+    # Check 7: Layer 1 B-Roll Hygiene & Layer 0 Background Isolation
+    broll_items_layer1 = [it for it in items if it.get("Layer") == 1]
+    for i, it in enumerate(broll_items_layer1):
+        fp = str(it.get("FilePath", "")).lower()
+        frame = it.get("Frame", 0)
+        length = it.get("Length", 0)
+        if length <= 0:
+            raise ValidationError(
+                f"B-Roll item on Layer 1 at frame {frame} has invalid length {length} (must be > 0). File: {fp}"
+            )
+        if any(
+            k in fp
+            for k in (
+                "assets/bg",
+                "assets\\bg",
+                "clean_classroom",
+                "classroom.jpg",
+                "living_room",
+                "washitsu",
+            )
+        ):
+            raise ValidationError(
+                f"Background image '{fp}' was placed on Layer 1 (B-Roll layer) at frame {frame}! "
+                "Backgrounds must strictly belong to Layer 0 with 16:9 full-canvas zoom (187.5)."
+            )
 
     return {
         "status": "PASS",
@@ -355,5 +426,6 @@ def validate_ymmp_timeline(
         "tachie_items": len(tachie_items),
         "plate_items_layer7": len(plate_items_layer7),
         "bgm_items": len(bgm_items_layer3),
-        "max_layer": max_layer
+        "max_layer": max_layer,
+        "broll_items": len(broll_items_layer1),
     }

@@ -48,7 +48,7 @@ Script (Writer/Director) ──> VoiceVox TTS ──> TimelineIR ──┬──
 - **Module Size Ceilings:** Strict 900-line limit per module preventing monolithic God objects.
 - **Privacy & Local Path Scanner:** Automated scanner ([`scripts/check_no_local_paths.py`](file:///c:/dev/workspace/active/veraxi-ymmp/scripts/check_no_local_paths.py)) guarantees zero hardcoded developer usernames or local machine paths in repository source code.
 - **Secret Detection:** Gitleaks and Yelp detect-secrets guard commit history and staging against credential leakage.
-- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`normalize_audio.py`](file:///c:/dev/workspace/active/veraxi-ymmp/normalize_audio.py)).
+- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`veraxi_ymmp/audio_normalizer.py`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/audio_normalizer.py)).
 
 ---
 
@@ -57,7 +57,8 @@ Script (Writer/Director) ──> VoiceVox TTS ──> TimelineIR ──┬──
 ### 1. Unified Project Runner (Recommended)
 Synthesizes speech, compiles `TimelineIR`, exports Premiere Pro FCPXML, compiles YMM4 project, renders MoviePy preview video, and auto-generates the YouTube thumbnail:
 ```bash
-python run_project.py projects/01_costco_business_model/
+veraxi-ymmp run projects/01_costco_business_model/
+# or: python -m veraxi_ymmp.cli run projects/01_costco_business_model/
 ```
 
 Generated project directory artifacts:
@@ -67,23 +68,26 @@ Generated project directory artifacts:
 - `qa_test.mp4` - Full fast-preview video
 - `thumbnail.png` - Publication-ready 1920x1080 YouTube thumbnail
 
-### 2. Standalone Thumbnail Generation
+### 2. Standalone Thumbnail & B-Roll Generation
 ```bash
-# Auto-derive from project directory
-python -m veraxi_ymmp.thumbnail projects/01_costco_business_model/
+# Auto-derive thumbnail from project directory
+veraxi-ymmp thumbnail projects/01_costco_business_model/
+
+# Render B-roll slides from declarative JSON manifest
+veraxi-ymmp broll projects/02_market_analysis_2026/broll_manifest.json
 
 # Or specify custom thumbnail output in compiler CLI
-python -m veraxi_ymmp examples/full_template.ymmp artifacts/script.json artifacts/output.ymmp --thumbnail artifacts/thumbnail.png
+veraxi-ymmp examples/full_template.ymmp artifacts/script.json artifacts/output.ymmp --thumbnail artifacts/thumbnail.png
 ```
 
 ### 3. Audio Loudness Normalization
 Normalize exported video audio to social media platform standards:
 ```bash
 # Normalize for YouTube (-14 LUFS)
-python normalize_audio.py output.mp4 --platform youtube
+veraxi-ymmp normalize output.mp4 -p youtube
 
 # Generate normalized videos for all platforms
-python normalize_audio.py output.mp4 --all
+veraxi-ymmp normalize output.mp4 --all
 ```
 
 ### 4. Optional YMM4 Hardware Rendering

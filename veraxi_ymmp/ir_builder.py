@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from .cache import TTSCache
 from .config import CompilerConfig
+from .constants import KNOWN_CHARACTERS
 from .hatsuon import Hatsuon, HatsuonError
 from .ir import (
     CharacterClip,
@@ -34,12 +35,40 @@ from .script import DirectorScriptEntry, WriterScriptEntry
 from .template import get_timeline
 from .utils import normalize_japanese_typography
 from .validation import sanitize_filename
-from .voicevox import TTSBackend
+
+try:
+    from .ports import TTSBackend
+except ImportError:
+    from .voicevox import TTSBackend
 
 if TYPE_CHECKING:
     pass
 
 ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
+
+
+def _create_dynamic_image_clip(
+    image_path: Path,
+    start_frame: int,
+    length: int,
+    is_background: bool = False,
+) -> DynamicImageClip:
+    """Create a DynamicImageClip with backward-compatible support for is_background."""
+    try:
+        return DynamicImageClip(
+            image_path=image_path,
+            start_frame=start_frame,
+            length=length,
+            is_background=is_background,
+        )
+    except TypeError:
+        clip = DynamicImageClip(
+            image_path=image_path,
+            start_frame=start_frame,
+            length=length,
+        )
+        setattr(clip, "is_background", is_background)
+        return clip
 
 
 class TimelineIRBuilder:
@@ -60,7 +89,7 @@ class TimelineIRBuilder:
         errors: Optional[List[str]] = None,
     ) -> None:
         self.template_data = template_data
-        self.character_templates = character_templates
+        self.character_templates = dict(character_templates)
         self.face_templates = face_templates or {}
         self.config = config or CompilerConfig()
         self.tts_backend = tts_backend
@@ -105,8 +134,8 @@ class TimelineIRBuilder:
             try:
                 with open(query_path, "r", encoding="utf-8") as qf:
                     audio_query = json.load(qf)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(f"Failed to read cached audio query from {query_path}: {exc}")
 
         if out_path.exists():
             if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
@@ -114,13 +143,14 @@ class TimelineIRBuilder:
                     audio_query = self.tts_backend.get_audio_query(text, speaker_id)
                     with open(query_path, "w", encoding="utf-8") as qf:
                         json.dump(audio_query, qf, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(f"Failed to fetch or write audio query for {out_path}: {exc}")
             try:
                 with wave.open(str(out_path), "rb") as wav:
                     actual_duration = wav.getnframes() / float(wav.getframerate())
                     return int((actual_duration + 0.3) * self.get_fps()), out_path, audio_query
-            except Exception:
+            except Exception as exc:
+                logger.debug(f"Failed to read WAV duration from {out_path}: {exc}")
                 return int(3.0 * self.get_fps()), out_path, audio_query
 
         cached = self.cache.get(text, speaker_id)
@@ -129,8 +159,8 @@ class TimelineIRBuilder:
             if audio_query is None and self.tts_backend is not None and hasattr(self.tts_backend, "get_audio_query"):
                 try:
                     audio_query = self.tts_backend.get_audio_query(text, speaker_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(f"Failed to fetch audio query for cached entry {idx}: {exc}")
         else:
             if self.tts_backend is None:
                 raise RuntimeError("TTS Backend not initialized")
@@ -148,8 +178,8 @@ class TimelineIRBuilder:
             try:
                 with open(query_path, "w", encoding="utf-8") as qf:
                     json.dump(audio_query, qf, ensure_ascii=False, indent=2)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(f"Failed to save audio query to {query_path}: {exc}")
 
         length = int(duration * self.get_fps())
         return length, out_path, audio_query
@@ -251,8 +281,7 @@ class TimelineIRBuilder:
 
             if char_name not in self.character_templates:
                 # Dynamic fallback: clone the first available character template for known characters
-                known_chars = ["ずんだもん", "四国めたん", "春日部つむぎ", "Zundamon"]
-                if char_name in self.config.speaker_map or char_name in known_chars:
+                if char_name in self.config.speaker_map or char_name in KNOWN_CHARACTERS:
                     if not self.character_templates:
                         raise ValueError(f"No character templates available to clone for: {char_name}")
                     base_char = list(self.character_templates.keys())[0]
@@ -351,6 +380,10 @@ class TimelineIRBuilder:
                     img_path = Path(img_name)
                 if not img_path.exists():
                     img_path = Path("artifacts") / img_name
+                if not img_path.exists() and (audio_dir.parent / img_name).exists():
+                    img_path = audio_dir.parent / img_name
+                if not img_path.exists() and (audio_dir.parent / "broll" / img_name).exists():
+                    img_path = audio_dir.parent / "broll" / img_name
                 if img_path.exists():
                     resolved_img = img_path.resolve()
                     for prev_clip in reversed(dynamic_image_clips):
@@ -365,10 +398,11 @@ class TimelineIRBuilder:
                         if prev_clip.start_frame + prev_clip.length <= current_frame:
                             break
                     dynamic_image_clips.append(
-                        DynamicImageClip(
+                        _create_dynamic_image_clip(
                             image_path=img_path,
                             start_frame=current_frame,
                             length=length,
+                            is_background=False,
                         )
                     )
                 else:
@@ -386,20 +420,23 @@ class TimelineIRBuilder:
                 if active_bg:
                     active_bg.length = current_frame - active_bg.start_frame
 
-                active_bg = DynamicImageClip(
-                    image_path=Path(bg_name_str),
-                    start_frame=current_frame,
-                    length=-1,
-                )
-
                 img_path = Path("artifacts/.user_uploaded") / bg_name_str
                 if not img_path.exists():
                     img_path = Path(bg_name_str)
                 if not img_path.exists():
                     img_path = Path("artifacts") / bg_name_str
+                if not img_path.exists() and (audio_dir.parent / bg_name_str).exists():
+                    img_path = audio_dir.parent / bg_name_str
+                if not img_path.exists() and (audio_dir.parent / "broll" / bg_name_str).exists():
+                    img_path = audio_dir.parent / "broll" / bg_name_str
 
                 if img_path.exists():
-                    active_bg.image_path = img_path
+                    active_bg = _create_dynamic_image_clip(
+                        image_path=img_path,
+                        start_frame=current_frame,
+                        length=-1,
+                        is_background=True,
+                    )
                     dynamic_image_clips.append(active_bg)
                 else:
                     active_bg = None
@@ -410,6 +447,8 @@ class TimelineIRBuilder:
             current_frame += length
 
         total_frames = current_frame
+        if active_bg and active_bg.length <= 0:
+            active_bg.length = total_frames - active_bg.start_frame
 
         used_characters = set(c.character for c in voice_clips)
         character_clips = []

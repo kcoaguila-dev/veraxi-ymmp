@@ -5,9 +5,14 @@ from veraxi_ymmp.broll import (
     MAX_SLIDE_CHARS,
     MAX_SLIDE_ELEMENTS,
     render_metric_slide,
+    render_vs_slide,
+    render_overview_slide,
+    render_from_manifest,
     ACCENT_BLUE,
+    ACCENT_GREEN,
     ACCENT_RED,
 )
+
 
 def test_cognitive_load_rejection_on_excessive_chars():
     """Ensures slides exceeding MAX_SLIDE_CHARS are strictly rejected."""
@@ -16,8 +21,9 @@ def test_cognitive_load_rejection_on_excessive_chars():
         check_cognitive_load(
             slide_title="認知負荷テスト",
             text_elements=["タイトル", long_text],
-            max_chars=MAX_SLIDE_CHARS
+            max_chars=MAX_SLIDE_CHARS,
         )
+
 
 def test_cognitive_load_rejection_on_excessive_elements():
     """Ensures slides with too many fragmented text boxes are rejected."""
@@ -26,10 +32,11 @@ def test_cognitive_load_rejection_on_excessive_elements():
         check_cognitive_load(
             slide_title="要素過多テスト",
             text_elements=elements,
-            max_elements=MAX_SLIDE_ELEMENTS
+            max_elements=MAX_SLIDE_ELEMENTS,
         )
 
-def test_render_metric_slide_passes_clean_content(tmp_path):
+
+def test_render_metric_slide_passes_clean_content(tmp_path: Path):
     """Ensures clean 1-Slide-1-Impact metric slide passes check and renders."""
     out_file = tmp_path / "test_metric.png"
     render_metric_slide(
@@ -40,6 +47,55 @@ def test_render_metric_slide_passes_clean_content(tmp_path):
         status_pill="自前資金で成長投資を継続",
         impact_tag="",
         impact_text="不況期でも強気の投資を維持",
-        theme_color=ACCENT_BLUE
+        theme_color=ACCENT_BLUE,
     )
     assert out_file.exists()
+
+
+def test_render_vs_slide_passes_clean_content(tmp_path: Path):
+    """Ensures clean VS comparison slide renders properly within cognitive load ceiling."""
+    out_file = tmp_path / "test_vs.png"
+    render_vs_slide(
+        out_path=out_file,
+        title="新旧モデルの比較",
+        step_tag="",
+        hero_title="収益構造の転換",
+        hero_status="",
+        left_box=("旧来", "薄利多売", []),
+        right_box=("新型", "会員制モデル", []),
+        bottom_tag="",
+        bottom_text="",
+        theme_color=ACCENT_BLUE,
+    )
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0
+
+
+def test_render_overview_slide_passes_clean_content(tmp_path: Path):
+    """Ensures clean overview agenda slide renders properly."""
+    out_file = tmp_path / "test_overview.png"
+    cards = [
+        ("01", "米金利 4.0%の高止まり", ACCENT_RED),
+        ("02", "原油 100ドル突破の再燃", ACCENT_BLUE),
+        ("03", "日銀 30年ぶりの金利復活", ACCENT_GREEN),
+    ]
+    render_overview_slide(
+        out_path=out_file,
+        title="2026年 株式市場の現在地と3大変化",
+        cards=cards,
+        theme_color=ACCENT_BLUE,
+    )
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0
+
+
+def test_render_from_manifest_and_market_analysis_manifest(tmp_path: Path):
+    """Ensures render_from_manifest renders all slides in projects/02_market_analysis_2026/broll_manifest.json."""
+    manifest_path = Path("projects/02_market_analysis_2026/broll_manifest.json")
+    assert manifest_path.exists(), f"Missing manifest: {manifest_path}"
+
+    generated = render_from_manifest(manifest_path, tmp_path)
+    assert len(generated) >= 10
+    for slide_path in generated:
+        assert slide_path.exists()
+        assert slide_path.stat().st_size > 0

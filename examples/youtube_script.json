@@ -5,7 +5,8 @@
     "emotion": "happy",
     "motion": "jump",
     "bgm": "bgm1",
-    "sfx": "none"
+    "sfx": "none",
+    "image": null
   },
   {
     "character": "Zundamon",
@@ -13,7 +14,8 @@
     "emotion": "smug",
     "motion": "none",
     "bgm": "none",
-    "sfx": "none"
+    "sfx": "none",
+    "image": null
   },
   {
     "character": "Zundamon",
@@ -21,7 +23,8 @@
     "emotion": "excited",
     "motion": "shake",
     "bgm": "none",
-    "sfx": "none"
+    "sfx": "none",
+    "image": null
   },
   {
     "character": "Zundamon",
@@ -29,6 +32,7 @@
     "emotion": "happy",
     "motion": "jump",
     "bgm": "none",
-    "sfx": "none"
+    "sfx": "none",
+    "image": null
   }
 ]

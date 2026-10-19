@@ -3,7 +3,6 @@ Automated QA tests for YMMP Timeline validation.
 Guarantees that broken YMMP files (missing speech audio, invisible tachie, invalid layers,
 empty VoiceCache, or unlinked lip-sync) are caught immediately and never passed to the user.
 """
-import copy
 import base64
 import brotli
 import pytest
@@ -13,10 +12,9 @@ from veraxi_ymmp.psd_registry import CharacterPSDRegistry
 
 
 @pytest.fixture
-def base_valid_ymmp():
+def base_valid_ymmp(tmp_path: Path):
     """Minimal valid YMMP timeline fixture."""
-    test_wav = Path("tests/scratch_audio.wav").resolve()
-    test_wav.parent.mkdir(parents=True, exist_ok=True)
+    test_wav = (tmp_path / "scratch_audio.wav").resolve()
     wav_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
     test_wav.write_bytes(wav_bytes)
 
@@ -219,3 +217,27 @@ def test_validation_fails_on_missing_enable_layer_paths(base_valid_ymmp):
         validate_ymmp_timeline(base_valid_ymmp)
 
 
+def test_validation_fails_on_background_on_layer1(base_valid_ymmp):
+    # Ensures background images are never placed on Layer 1 (floating background bug)
+    base_valid_ymmp["Timeline"]["Items"].append({
+        "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+        "FilePath": "assets/bg/clean_classroom.jpg",
+        "Layer": 1,
+        "Frame": 0,
+        "Length": 90,
+    })
+    with pytest.raises(ValidationError, match="Background image .* was placed on Layer 1"):
+        validate_ymmp_timeline(base_valid_ymmp)
+
+
+def test_validation_fails_on_invalid_broll_length_on_layer1(base_valid_ymmp):
+    # Ensures negative or 0 length items on Layer 1 are rejected
+    base_valid_ymmp["Timeline"]["Items"].append({
+        "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+        "FilePath": "projects/test/broll/slide.png",
+        "Layer": 1,
+        "Frame": 0,
+        "Length": -1,
+    })
+    with pytest.raises(ValidationError, match="invalid length -1"):
+        validate_ymmp_timeline(base_valid_ymmp)

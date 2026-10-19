@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Union
 
 from .logging import logger
 
@@ -83,7 +83,42 @@ def normalize_video_audio(
         raise RuntimeError(f"FFmpeg normalization failed: {e.stderr}") from e
 
 
+def normalize_all_platforms(
+    input_path: Union[Path, str],
+    output_dir: Optional[Union[Path, str]] = None,
+) -> Dict[str, Path]:
+    """Normalize a video's audio track across all configured social/broadcast platforms.
+
+    Args:
+        input_path: Path to the source video file.
+        output_dir: Optional target directory for normalized files (defaults to input's parent).
+
+    Returns:
+        Dictionary mapping platform name to the normalized output Path.
+    """
+    src = Path(input_path).resolve()
+    if not src.exists():
+        logger.error(f"Could not find input file {src}")
+        raise FileNotFoundError(f"Input file not found: {src}")
+
+    target_dir = Path(output_dir).resolve() if output_dir is not None else src.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    outputs: Dict[str, Path] = {}
+    for platform, target in PLATFORM_TARGETS.items():
+        out_file = target_dir / f"{src.stem}_{platform}{src.suffix}"
+        outputs[platform] = normalize_video_audio(
+            input_video=src,
+            output_video=out_file,
+            target_i=target["I"],
+            target_tp=target["TP"],
+            target_lra=target["LRA"],
+        )
+    return outputs
+
+
 __all__ = [
     "PLATFORM_TARGETS",
+    "normalize_all_platforms",
     "normalize_video_audio",
 ]

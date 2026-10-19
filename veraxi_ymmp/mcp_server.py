@@ -6,16 +6,21 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except ModuleNotFoundError:
+    from mcp.server.mcpserver import MCPServer as FastMCP  # type: ignore[no-redef]
 
 from .compiler import YMMPCompiler
 from .config import CompilerConfig
+from .pipeline import ProjectPipeline
 from .script import (
     validate_director_against_writer,
     validate_director_script,
     validate_writer_script,
 )
 from .template import extract_character_templates, get_timeline, load_template
+from .thumbnail import generate_project_thumbnail
 from .voicevox import NullTTSBackend, VoicevoxClient
 
 mcp = FastMCP("veraxi-ymmp")
@@ -126,6 +131,34 @@ def compile_project(
         "audio_files": [str(path) for path in result.audio_files],
         "warnings": result.warnings,
     }
+
+
+@mcp.tool()
+def run_pipeline(project_dir: str, use_tts: bool = True) -> str:
+    """Execute the end-to-end ProjectPipeline for a workspace project directory."""
+    proj_path = workspace_path(project_dir)
+    pipeline = ProjectPipeline(use_tts=use_tts)
+    res = pipeline.run(proj_path)
+    return json.dumps(
+        {
+            "success": res.success,
+            "project_dir": str(res.project_dir),
+            "ymmp_path": str(res.ymmp_path) if res.ymmp_path else None,
+            "premiere_xml": str(res.premiere_xml) if res.premiere_xml else None,
+            "qa_video_path": str(res.qa_video_path) if res.qa_video_path else None,
+            "thumbnail_path": str(res.thumbnail_path) if res.thumbnail_path else None,
+            "errors": res.errors,
+        },
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool()
+def generate_thumbnail_tool(project_dir: str) -> str:
+    """Generate a publication-ready YouTube thumbnail for a workspace project directory."""
+    proj_path = workspace_path(project_dir)
+    out_path = generate_project_thumbnail(proj_path, out_path=proj_path / "thumbnail.png")
+    return str(out_path)
 
 
 if __name__ == "__main__":

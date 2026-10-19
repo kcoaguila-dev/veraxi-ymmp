@@ -41,12 +41,14 @@ def test_no_hardcoded_user_paths_or_os_username() -> None:
     all_targets: List[Path] = []
     for d in directories_to_scan:
         if d.is_dir():
-            for p in d.rglob("*.py"):
-                all_targets.append(p)
+            for ext in ("*.py", "*.jsx"):
+                for p in d.rglob(ext):
+                    all_targets.append(p)
 
-    # Root .py files
-    for p in REPO_ROOT.glob("*.py"):
-        all_targets.append(p)
+    # Root .py and .jsx files
+    for ext in ("*.py", "*.jsx"):
+        for p in REPO_ROOT.glob(ext):
+            all_targets.append(p)
 
     all_violations: List[str] = []
     for file_path in all_targets:
@@ -254,11 +256,14 @@ def test_scanner_skips_binary_files(tmp_path: Path) -> None:
 
 def test_mypy_strict_clean() -> None:
     """Ensure veraxi_ymmp has zero type errors under mypy."""
+    import pytest
+    pytest.importorskip("mypy")
     res = subprocess.run(
         [sys.executable, "-m", "mypy", "veraxi_ymmp"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        stdin=subprocess.DEVNULL,
     )
     assert res.returncode == 0, f"mypy checks failed with output:\n{res.stdout}\n{res.stderr}"
 
@@ -363,3 +368,66 @@ def test_domain_layer_purity() -> None:
     assert not violations, (
         f"Domain layer purity violations found ({len(violations)}):\n" + "\n".join(violations)
     )
+
+
+def test_ports_layer_purity() -> None:
+    """Ensure veraxi_ymmp/ports.py only imports domain modules or standard library and never concrete adapters."""
+    ports_file = REPO_ROOT / "veraxi_ymmp" / "ports.py"
+    assert ports_file.is_file(), f"Ports file not found: {ports_file}"
+
+    tree = ast.parse(ports_file.read_text(encoding="utf-8"), filename=str(ports_file))
+    allowed_roots = {
+        "__future__",
+        "typing",
+        "dataclasses",
+        "pathlib",
+        "ir",
+        "script",
+        "constants",
+        "director",
+        "veraxi_ymmp.ir",
+        "veraxi_ymmp.script",
+        "veraxi_ymmp.constants",
+        "veraxi_ymmp.director",
+    }
+    forbidden_adapters = {
+        "voicevox",
+        "ymmp_renderer",
+        "premiere_exporter",
+        "moviepy_renderer",
+        "ae_renderer",
+        "srt_generator",
+        "thumbnail",
+        "broll",
+        "cli",
+        "mcp_server",
+        "pipeline",
+    }
+
+    violations: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root_mod = alias.name.split(".")[0]
+                if root_mod not in allowed_roots or any(
+                    _matches_module(alias.name, f) for f in forbidden_adapters
+                ):
+                    violations.append(f"ports.py:{node.lineno} disallowed import '{alias.name}'")
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if any(_matches_module(mod, f) for f in forbidden_adapters):
+                violations.append(f"ports.py:{node.lineno} forbidden adapter import '{mod}'")
+            elif mod and mod not in allowed_roots:
+                violations.append(f"ports.py:{node.lineno} disallowed import from '{mod}'")
+
+    assert not violations, (
+        f"Ports layer purity violations found ({len(violations)}):\n" + "\n".join(violations)
+    )
+
+
+def test_no_loose_scripts_in_repo_root() -> None:
+    """Ensure repository root contains zero loose .py or .jsx scripts."""
+    loose_py = [p.name for p in REPO_ROOT.glob("*.py")]
+    loose_jsx = [p.name for p in REPO_ROOT.glob("*.jsx")]
+    loose = sorted(loose_py + loose_jsx)
+    assert not loose, f"Loose scripts found in repository root (move to veraxi_ymmp/cli.py or scripts/): {loose}"

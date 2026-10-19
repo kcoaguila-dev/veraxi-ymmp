@@ -40,6 +40,60 @@ if TYPE_CHECKING:
 ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
 
 
+def _anim_val(val: float, span: float = 0.0, anim_type: str = "なし") -> Dict[str, Any]:
+    """Create a standard YMM4 animated property dictionary."""
+    return {"Values": [{"Value": val}], "Span": span, "AnimationType": anim_type}
+
+
+def _format_voice_duration(sec: float) -> str:
+    """Format duration in seconds into YMM4 TimeSpan string (HH:MM:SS.fffffff)."""
+    hours = int(sec // 3600)
+    mins = int((sec % 3600) // 60)
+    secs = sec % 60
+    return f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+
+
+def _is_background_clip(ic: Any) -> bool:
+    """Return True if a dynamic image clip is a background rather than B-roll."""
+    if getattr(ic, "is_background", False) or getattr(ic, "is_bg", False):
+        return True
+    p_str = str(getattr(ic, "image_path", "")).lower()
+    return any(
+        k in p_str
+        for k in ("assets/bg", "assets\\bg", "classroom", "room", "living_room", "washitsu", "clean_classroom")
+    )
+
+
+def _build_image_item(
+    file_path: Union[str, Path],
+    frame: int,
+    length: int,
+    layer: int,
+    x: float = 0.0,
+    y: float = 0.0,
+    zoom: Union[float, Dict[str, Any]] = 100.0,
+    animated_opacity_rot: bool = False,
+) -> Dict[str, Any]:
+    """Construct a YMM4 ImageItem dictionary."""
+    zoom_dict = zoom if isinstance(zoom, dict) else _anim_val(zoom)
+    opacity_dict = _anim_val(100.0) if animated_opacity_rot else {"Values": [{"Value": 100.0}]}
+    rot_dict = _anim_val(0.0) if animated_opacity_rot else {"Values": [{"Value": 0.0}]}
+    return {
+        "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
+        "FilePath": str(file_path),
+        "X": _anim_val(x),
+        "Y": _anim_val(y),
+        "Opacity": opacity_dict,
+        "Zoom": zoom_dict,
+        "Rotation": rot_dict,
+        "Blend": "Normal",
+        "Layer": layer,
+        "Frame": frame,
+        "Length": length,
+        "VideoEffects": [],
+    }
+
+
 @dataclass
 class CompilationResult:
     """Result of a compilation process."""
@@ -90,9 +144,7 @@ class YMMPRenderer:
         script_len: Optional[int] = None,
         audio_files: Optional[List[Path]] = None,
     ) -> CompilationResult:
-        """
-        Renders TimelineIR to output_path. Automatically selects PSD vs template rendering.
-        """
+        """Renders TimelineIR to output_path. Automatically selects PSD vs template rendering."""
         output_path = Path(output_path)
         output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
@@ -102,16 +154,8 @@ class YMMPRenderer:
             any("ずんだ" in c.character or "めたん" in c.character for c in timeline_ir.voice_clips)
             or any("Psd" in str(c) for c in output_data.get("Characters", []))
         )
-        if is_psd_project:
-            return self.render_psd(
-                timeline_ir=timeline_ir,
-                output_path=output_path,
-                use_bom=use_bom,
-                script_len=effective_script_len,
-                audio_files=audio_files,
-                output_data=output_data,
-            )
-        return self.render_template(
+        render_fn = self.render_psd if is_psd_project else self.render_template
+        return render_fn(
             timeline_ir=timeline_ir,
             output_path=output_path,
             use_bom=use_bom,
@@ -119,6 +163,78 @@ class YMMPRenderer:
             audio_files=audio_files,
             output_data=output_data,
         )
+
+    def _build_psd_voice_item(
+        self, clip: Any, txt: str, psd_p: Path, face_layers: List[str], face_paths: List[str], fps: int
+    ) -> Dict[str, Any]:
+        """Build a PSD-backed VoiceItem with Brotli VoiceCache and native LipSyncFrames."""
+        char, a_path = clip.character, clip.audio_path
+        clip_dur = clip.length / fps if fps else 1.0
+        voice_cache_b64, voice_len_str = "", "00:00:01.0000000"
+        if a_path and a_path.exists():
+            raw_bytes = a_path.read_bytes()
+            voice_cache_b64 = base64.b64encode(brotli.compress(raw_bytes, quality=4)).decode("ascii")
+            voice_len_str = _format_voice_duration(clip_dur)
+
+        reg = self.psd_registry
+        return {
+            "$type": "YukkuriMovieMaker.Project.Items.VoiceItem, YukkuriMovieMaker",
+            "IsWaveformEnabled": True,
+            "CharacterName": char,
+            "Serif": wrap_japanese(txt, width=20),
+            "Decorations": [],
+            "Hatsuon": clip.hatsuon if clip.hatsuon else txt,
+            "Pronounce": None,
+            "LipSyncFrames": build_ymm4_lipsync_frames(clip.audio_query, clip_dur),
+            "FilePath": str(a_path.resolve()) if a_path else "",
+            "VoiceLength": voice_len_str,
+            "VoiceCache": voice_cache_b64,
+            "VoiceParameter": {
+                "$type": "YukkuriMovieMaker.Voice.VOICEVOXVoiceParameter, YukkuriMovieMaker",
+                "StyleID": reg.get_style_id(char),
+                "MorphingStyleID": -1,
+                "MorphingRate": 50.0,
+                "Speed": 100,
+                "Pitch": 100.0,
+                "Intonation": 100.0,
+                "PrePhonemeLength": 0.1,
+                "PostPhonemeLength": 0.1,
+                "PauseLengthScale": 100.0,
+            },
+            "TachieFaceParameter": {
+                "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
+                "IsEnabled": True,
+                "FilePath": str(psd_p),
+                "EnableLayers": face_layers,
+                "EnableLayerPaths": face_paths,
+                "EyeAnimation": "Default",
+                "MouthAnimation": "VowelLipSyncPriority",
+            },
+            "TachieFaceEffects": [],
+            "Volume": _anim_val(100.0),
+            "Pan": _anim_val(0.0),
+            "PlaybackRate": 100.0,
+            "PlaybackRate2": _anim_val(100.0),
+            "ContentOffset": "00:00:00",
+            "Layer": 9,
+            "Frame": clip.start_frame,
+            "Length": clip.length,
+            "JimakuVisibility": "UseCharacterSetting",
+            "X": _anim_val(0.0),
+            "Y": _anim_val(418.0),
+            "BasePoint": "CenterCenter",
+            "Font": "メイリオ",
+            "FontSize": _anim_val(44.0),
+            "FontColor": reg.get_font_color(char),
+            "Style": "Normal",
+            "StyleColor": reg.get_style_color(char),
+            "Bold": True,
+            "LineHeight2": _anim_val(100.0),
+            "LetterSpacing2": _anim_val(0.0),
+            "WordWrap": "NoWrap",
+            "MaxWidth": _anim_val(1600.0),
+            "VideoEffects": [],
+        }
 
     def render_psd(
         self,
@@ -129,16 +245,13 @@ class YMMPRenderer:
         audio_files: Optional[List[Path]] = None,
         output_data: Optional[Dict[str, Any]] = None,
     ) -> CompilationResult:
-        """
-        Renders a PSD-based project using CharacterPSDRegistry.
-        """
+        """Renders a PSD-based project using CharacterPSDRegistry."""
         output_path = Path(output_path)
         if output_data is None:
             output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
         registry = self.psd_registry
 
-        # Setup characters
         output_data["Characters"] = [
             registry.create_character_definition("ずんだもん"),
             registry.create_character_definition("四国めたん"),
@@ -146,38 +259,28 @@ class YMMPRenderer:
 
         plates_dir = output_path.parent / "plates"
         plates_dir.mkdir(parents=True, exist_ok=True)
-
         items: List[Dict[str, Any]] = []
 
         # 1. Spoken Lines: Face, Plate, Voice
         for clip in timeline_ir.voice_clips:
-            char = clip.character
-            frm = clip.start_frame
-            lng = clip.length
+            char, frm, lng, emo = clip.character, clip.start_frame, clip.length, clip.emotion
             txt = normalize_japanese_typography(clip.text)
-            emo = clip.emotion
-            a_path = clip.audio_path
             face_layer = registry.get_face_layer(char)
             psd_p = registry.get_psd_path(char)
+            face_layers_key, face_paths_key = registry.get_face_layers_and_paths(char, emo, is_open=True)
 
-            face_layers_key, face_paths_key = registry.get_face_layers_and_paths(
-                char, emo, is_open=True
-            )
-
-            # Face items sliced by 2-state phonetic blocks
             clip_dur = lng / timeline_ir.fps if timeline_ir.fps else 1.0
             phonetic_blocks = extract_phonetic_blocks(clip.audio_query, clip_dur, fps=timeline_ir.fps)
             cur_f = frm
-            for b_idx, (b_s, b_e, is_open) in enumerate(phonetic_blocks):
-                if b_idx == len(phonetic_blocks) - 1:
-                    b_end_f = frm + lng
-                else:
-                    b_end_f = min(frm + lng, frm + int(round(b_e * timeline_ir.fps)))
+            for b_idx, (_, b_e, is_open) in enumerate(phonetic_blocks):
+                b_end_f = (
+                    frm + lng
+                    if b_idx == len(phonetic_blocks) - 1
+                    else min(frm + lng, frm + int(round(b_e * timeline_ir.fps)))
+                )
                 b_len = b_end_f - cur_f
                 if b_len > 0:
-                    f_layers, f_paths = registry.get_face_layers_and_paths(
-                        char, emo, is_open=is_open
-                    )
+                    f_layers, f_paths = registry.get_face_layers_and_paths(char, emo, is_open=is_open)
                     items.append({
                         "$type": "YukkuriMovieMaker.Project.Items.TachieFaceItem, YukkuriMovieMaker",
                         "CharacterName": char,
@@ -197,116 +300,22 @@ class YMMPRenderer:
                     })
                     cur_f = b_end_f
 
-            # Plate item (L8)
             plate_file = plates_dir / f"plate_{frm}_{char}.png"
             create_speech_plate(txt, char, plate_file)
-            items.append({
-                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-                "FilePath": str(plate_file.resolve()),
-                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Y": {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Zoom": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Blend": "Normal",
-                "Layer": 8,
-                "Frame": frm,
-                "Length": lng,
-                "VideoEffects": [],
-            })
-
-            # VoiceItem (L9) with Brotli VoiceCache and native LipSyncFrames
-            voice_cache_b64 = ""
-            voice_len_str = "00:00:01.0000000"
-            if a_path and a_path.exists():
-                raw_bytes = a_path.read_bytes()
-                voice_cache_b64 = base64.b64encode(brotli.compress(raw_bytes, quality=4)).decode("ascii")
-                sec = lng / timeline_ir.fps if timeline_ir.fps else 1.0
-                hours = int(sec // 3600)
-                mins = int((sec % 3600) // 60)
-                secs = sec % 60
-                voice_len_str = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
-
-            lipsync_frames = build_ymm4_lipsync_frames(clip.audio_query, clip_dur)
-
-            items.append({
-                "$type": "YukkuriMovieMaker.Project.Items.VoiceItem, YukkuriMovieMaker",
-                "IsWaveformEnabled": True,
-                "CharacterName": char,
-                "Serif": wrap_japanese(txt, width=20),
-                "Decorations": [],
-                "Hatsuon": clip.hatsuon if clip.hatsuon else txt,
-                "Pronounce": None,
-                "LipSyncFrames": lipsync_frames,
-                "FilePath": str(a_path.resolve()) if a_path else "",
-                "VoiceLength": voice_len_str,
-                "VoiceCache": voice_cache_b64,
-                "VoiceParameter": {
-                    "$type": "YukkuriMovieMaker.Voice.VOICEVOXVoiceParameter, YukkuriMovieMaker",
-                    "StyleID": registry.get_style_id(char),
-                    "MorphingStyleID": -1,
-                    "MorphingRate": 50.0,
-                    "Speed": 100,
-                    "Pitch": 100.0,
-                    "Intonation": 100.0,
-                    "PrePhonemeLength": 0.1,
-                    "PostPhonemeLength": 0.1,
-                    "PauseLengthScale": 100.0,
-                },
-                "TachieFaceParameter": {
-                    "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieFaceParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                    "IsEnabled": True,
-                    "FilePath": str(psd_p),
-                    "EnableLayers": face_layers_key,
-                    "EnableLayerPaths": face_paths_key,
-                    "EyeAnimation": "Default",
-                    "MouthAnimation": "VowelLipSyncPriority",
-                },
-                "TachieFaceEffects": [],
-                "Volume": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Pan": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "PlaybackRate": 100.0,
-                "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "ContentOffset": "00:00:00",
-                "Layer": 9,
-                "Frame": frm,
-                "Length": lng,
-                "JimakuVisibility": "UseCharacterSetting",
-                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Y": {"Values": [{"Value": 418.0}], "Span": 0.0, "AnimationType": "なし"},
-                "BasePoint": "CenterCenter",
-                "Font": "メイリオ",
-                "FontSize": {"Values": [{"Value": 44.0}], "Span": 0.0, "AnimationType": "なし"},
-                "FontColor": registry.get_font_color(char),
-                "Style": "Normal",
-                "StyleColor": registry.get_style_color(char),
-                "Bold": True,
-                "LineHeight2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "LetterSpacing2": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "WordWrap": "NoWrap",
-                "MaxWidth": {"Values": [{"Value": 1600.0}], "Span": 0.0, "AnimationType": "なし"},
-                "VideoEffects": [],
-            })
+            items.append(_build_image_item(plate_file.resolve(), frm, lng, layer=8, y=418.0, animated_opacity_rot=True))
+            items.append(self._build_psd_voice_item(clip, txt, psd_p, face_layers_key, face_paths_key, timeline_ir.fps))
 
         # 2. Tachie Characters (L4 & L6) - Coalesce contiguous spans with identical spatial layout
         broll_intervals = [
             (img.start_frame, img.start_frame + img.length)
             for img in timeline_ir.dynamic_image_clips
+            if not _is_background_clip(img) and img.length > 0
         ]
         active_tachie_by_layer: Dict[int, Dict[str, Any]] = {}
 
-        def add_or_coalesce_tachie(
-            char_name: str,
-            t_layer: int,
-            t_psd: Path,
-            t_layers: List[str],
-            t_paths: List[str],
-            x_val: float,
-            y_val: float,
-            zoom_val: float,
-            frm: int,
-            lng: int,
-        ) -> None:
+        def add_or_coalesce_tachie(char_name: str, has_broll: bool, frm: int, lng: int) -> None:
+            layout = registry.get_spatial_layout(char_name, has_broll=has_broll)
+            t_layer, x_val, y_val, zoom_val = layout["layer"], layout["x"], layout["y"], layout["zoom"]
             prev = active_tachie_by_layer.get(t_layer)
             if (
                 prev is not None
@@ -324,18 +333,18 @@ class YMMPRenderer:
                 "CharacterName": char_name,
                 "TachieItemParameter": {
                     "$type": "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieItemParameter, YukkuriMovieMaker.Plugin.Tachie.Psd",
-                    "FilePath": str(t_psd),
-                    "EnableLayers": t_layers,
-                    "EnableLayerPaths": t_paths,
+                    "FilePath": str(registry.get_psd_path(char_name)),
+                    "EnableLayers": registry.get_base_layers(char_name),
+                    "EnableLayerPaths": registry.get_base_paths(char_name),
                     "IsHiddenWhenNoSpeech": False,
                 },
-                "X": {"Values": [{"Value": x_val}], "Span": 0.0, "AnimationType": "なし"},
-                "Y": {"Values": [{"Value": y_val}], "Span": 0.0, "AnimationType": "なし"},
-                "Zoom": {"Values": [{"Value": zoom_val}], "Span": 0.0, "AnimationType": "なし"},
-                "Opacity": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Rotation": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
+                "X": _anim_val(x_val),
+                "Y": _anim_val(y_val),
+                "Zoom": _anim_val(zoom_val),
+                "Opacity": _anim_val(100.0),
+                "Rotation": _anim_val(0.0),
                 "Blend": "Normal",
-                "PlaybackRate2": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
+                "PlaybackRate2": _anim_val(100.0),
                 "FadeIn": 0.0,
                 "FadeOut": 0.0,
                 "Group": 0,
@@ -351,94 +360,31 @@ class YMMPRenderer:
             active_tachie_by_layer[t_layer] = new_tachie
 
         for clip in timeline_ir.voice_clips:
-            char = clip.character
-            frm = clip.start_frame
-            lng = clip.length
+            frm, lng = clip.start_frame, clip.length
             has_broll = any(s <= frm < e or s < frm + lng <= e for s, e in broll_intervals)
-            if has_broll:
-                layout = registry.get_spatial_layout(char, has_broll=True)
-                add_or_coalesce_tachie(
-                    char_name=char,
-                    t_layer=layout["layer"],
-                    t_psd=registry.get_psd_path(char),
-                    t_layers=registry.get_base_layers(char),
-                    t_paths=registry.get_base_paths(char),
-                    x_val=layout["x"],
-                    y_val=layout["y"],
-                    zoom_val=layout["zoom"],
-                    frm=frm,
-                    lng=lng,
-                )
-            else:
-                metan_layout = registry.get_spatial_layout("四国めたん", has_broll=False)
-                add_or_coalesce_tachie(
-                    char_name="四国めたん",
-                    t_layer=metan_layout["layer"],
-                    t_psd=registry.get_psd_path("四国めたん"),
-                    t_layers=registry.get_base_layers("四国めたん"),
-                    t_paths=registry.get_base_paths("四国めたん"),
-                    x_val=metan_layout["x"],
-                    y_val=metan_layout["y"],
-                    zoom_val=metan_layout["zoom"],
-                    frm=frm,
-                    lng=lng,
-                )
-                zunda_layout = registry.get_spatial_layout("ずんだもん", has_broll=False)
-                add_or_coalesce_tachie(
-                    char_name="ずんだもん",
-                    t_layer=zunda_layout["layer"],
-                    t_psd=registry.get_psd_path("ずんだもん"),
-                    t_layers=registry.get_base_layers("ずんだもん"),
-                    t_paths=registry.get_base_paths("ずんだもん"),
-                    x_val=zunda_layout["x"],
-                    y_val=zunda_layout["y"],
-                    zoom_val=zunda_layout["zoom"],
-                    frm=frm,
-                    lng=lng,
-                )
+            for c_name in ([clip.character] if has_broll else ["四国めたん", "ずんだもん"]):
+                add_or_coalesce_tachie(c_name, has_broll, frm, lng)
 
         # 3. Layer 0: Background ImageItem
-        bg_candidate = Path(DEFAULT_BG_IMAGE_PATH).resolve()
-        for gc in timeline_ir.global_clips:
-            ti = gc.template_item or {}
-            file_p = gc.file_path or ti.get("FilePath")
-            if file_p and (
-                "bg" in file_p.lower()
-                or "room" in file_p.lower()
-                or "classroom" in file_p.lower()
-            ):
-                bg_candidate = Path(file_p).resolve()
-        items.append({
-            "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-            "FilePath": str(bg_candidate),
-            "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-            "Y": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-            "Opacity": {"Values": [{"Value": 100.0}]},
-            "Zoom": {"Values": [{"Value": 187.5}], "Span": 0.0, "AnimationType": "なし"},
-            "Rotation": {"Values": [{"Value": 0.0}]},
-            "Blend": "Normal",
-            "Layer": 0,
-            "Frame": 0,
-            "Length": timeline_ir.total_frames,
-            "VideoEffects": [],
-        })
+        bg_clips = [img for img in timeline_ir.dynamic_image_clips if _is_background_clip(img)]
+        if bg_clips:
+            for bg_clip in bg_clips:
+                bg_len = timeline_ir.total_frames - bg_clip.start_frame if bg_clip.length <= 0 else bg_clip.length
+                items.append(_build_image_item(bg_clip.image_path.resolve(), bg_clip.start_frame, bg_len, layer=0, zoom=187.5))
+        else:
+            bg_candidate = Path(DEFAULT_BG_IMAGE_PATH).resolve()
+            for gc in timeline_ir.global_clips:
+                ti = gc.template_item or {}
+                file_p = gc.file_path or ti.get("FilePath")
+                if file_p and any(k in file_p.lower() for k in ("bg", "room", "classroom")):
+                    bg_candidate = Path(file_p).resolve()
+            items.append(_build_image_item(bg_candidate, 0, timeline_ir.total_frames, layer=0, zoom=187.5))
 
-        # 4. Layer 1: B-Roll Images
+        # 4. Layer 1: B-Roll Images (Strictly exclude background clips and non-positive lengths)
         for d_img_clip in timeline_ir.dynamic_image_clips:
-            items.append({
-                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-                "FilePath": str(d_img_clip.image_path.resolve()),
-                "X": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Y": {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Opacity": {"Values": [{"Value": 100.0}]},
-                "Zoom": {"Values": [{"Value": 100.0}], "Span": 0.0, "AnimationType": "なし"},
-                "Rotation": {"Values": [{"Value": 0.0}]},
-                "Blend": "Normal",
-                "Layer": 1,
-                "Frame": d_img_clip.start_frame,
-                "Length": d_img_clip.length,
-                "VideoEffects": [],
-            })
+            if _is_background_clip(d_img_clip) or d_img_clip.length <= 0:
+                continue
+            items.append(_build_image_item(d_img_clip.image_path.resolve(), d_img_clip.start_frame, d_img_clip.length, layer=1))
 
         # 5. Layer 3: BGM AudioItem
         bgm_path = Path(DEFAULT_BGM_CANDIDATES[0]).resolve()
@@ -453,7 +399,7 @@ class YMMPRenderer:
         items.append({
             "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
             "FilePath": str(bgm_path),
-            "Volume": {"Values": [{"Value": 3.0}], "Span": 0.0, "AnimationType": "なし"},
+            "Volume": _anim_val(3.0),
             "Pan": {"Values": [{"Value": 0.0}]},
             "PlaybackRate": 100.0,
             "Layer": 3,
@@ -462,24 +408,18 @@ class YMMPRenderer:
             "IsLooped": True,
         })
 
-        # Assemble and write
         tl = get_timeline(output_data)
-        tl["Items"] = items
-        tl["Length"] = timeline_ir.total_frames
-        tl["MaxLayer"] = 12
-
+        tl["Items"], tl["Length"], tl["MaxLayer"] = items, timeline_ir.total_frames, 12
         self._write_output(output_data, output_path, use_bom)
 
-        tachie_count = len([i for i in items if "TachieItem" in i.get("$type", "")])
+        tachie_count = sum(1 for i in items if "TachieItem" in i.get("$type", ""))
         return CompilationResult(
             output_path=output_path,
             item_count=len(items),
             voice_item_count=len(timeline_ir.voice_clips),
             tachie_item_count=tachie_count,
             total_frames=timeline_ir.total_frames,
-            total_duration_seconds=(
-                timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0
-            ),
+            total_duration_seconds=timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0,
             audio_files=audio_files,
             warnings=self.warnings,
             errors=self.errors,
@@ -494,9 +434,7 @@ class YMMPRenderer:
         audio_files: Optional[List[Path]] = None,
         output_data: Optional[Dict[str, Any]] = None,
     ) -> CompilationResult:
-        """
-        Renders a non-PSD template project using character template cloning.
-        """
+        """Renders a non-PSD template project using character template cloning."""
         output_path = Path(output_path)
         if output_data is None:
             output_data = copy.deepcopy(self.template_data)
@@ -505,32 +443,23 @@ class YMMPRenderer:
 
         timeline = get_timeline(output_data)
         video_info = timeline.get("VideoInfo", {})
-        width = video_info.get("Width", 1920)
-        height = video_info.get("Height", 1080)
-        is_vertical = height > width
-
-        if is_vertical:
-            sub_y = 300.0
-            sub_size = 100.0
+        if video_info.get("Height", 1080) > video_info.get("Width", 1920):
+            sub_y, sub_size = 300.0, 100.0
             tachie_cfg = {"X": 0.0, "Y": 650.0, "Zoom": 80.0}
             broll_cfg = {"X": 0.0, "Y": -300.0, "Zoom": 120.0}
         else:
-            sub_y = 450.0
-            sub_size = 80.0
+            sub_y, sub_size = 450.0, 80.0
             tachie_cfg = {"X": -650.0, "Y": 250.0, "Zoom": 65.0}
             broll_cfg = {"X": 350.0, "Y": -50.0, "Zoom": 80.0}
 
         for char in output_data.get("Characters", []):
-            char["FontSize"] = sub_size
-            char["Y"] = sub_y
+            char["FontSize"], char["Y"] = sub_size, sub_y
 
         self.layout_cfg = {"tachie": tachie_cfg, "broll": broll_cfg}
-
         items: List[Dict[str, Any]] = []
 
         for clip in timeline_ir.voice_clips:
-            template_item = self.character_templates[clip.character]["voice"]
-            new_item = copy.deepcopy(template_item)
+            new_item = copy.deepcopy(self.character_templates[clip.character]["voice"])
             new_item["Layer"] = 2
             new_item["Serif"] = wrap_japanese(clip.text, width=20)
             new_item["Hatsuon"] = clip.hatsuon
@@ -544,10 +473,7 @@ class YMMPRenderer:
 
             if clip.audio_path:
                 sec = clip.length / timeline_ir.fps if timeline_ir.fps else 1.0
-                hours = int(sec // 3600)
-                mins = int((sec % 3600) // 60)
-                secs = sec % 60
-                new_item["VoiceLength"] = f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
+                new_item["VoiceLength"] = _format_voice_duration(sec)
                 new_item["FilePath"] = str(clip.audio_path.resolve())
                 self._mute_voice_item(new_item)
                 new_item["IsHidden"] = False
@@ -567,11 +493,9 @@ class YMMPRenderer:
                 })
             new_item["VideoEffects"] = effects
 
+            items.append(new_item)
             if clip.audio_path:
-                items.append(new_item)
                 items.append(self._make_audio_item(new_item, clip.audio_path))
-            else:
-                items.append(new_item)
 
             pseudo_line = {
                 "subtitle_position": clip.subtitle_position,
@@ -579,7 +503,6 @@ class YMMPRenderer:
                 "emotion": clip.emotion,
                 "character": clip.character,
             }
-
             face_item = self._make_face_item(pseudo_line, clip.start_frame, clip.length)
             if face_item is not None:
                 items.append(face_item)
@@ -592,49 +515,26 @@ class YMMPRenderer:
         items.extend(tachie_items)
 
         for d_img_clip in timeline_ir.dynamic_image_clips:
-            is_bg = (
-                "bg" in str(d_img_clip.image_path).lower()
-                or "room" in str(d_img_clip.image_path).lower()
-                or "classroom" in str(d_img_clip.image_path).lower()
+            is_bg = _is_background_clip(d_img_clip)
+            if not is_bg and d_img_clip.length <= 0:
+                continue
+            clip_len = timeline_ir.total_frames - d_img_clip.start_frame if d_img_clip.length <= 0 else d_img_clip.length
+            zoom_prop: Union[float, Dict[str, Any]] = (
+                187.5
+                if is_bg
+                else {"Values": [{"Value": 0.0}, {"Value": broll_cfg["Zoom"]}], "Span": 0.2, "AnimationType": "加減速移動"}
             )
-
-            if not is_bg:
-                zoom_val = broll_cfg["Zoom"]
-                zoom_prop = {
-                    "Values": [{"Value": 0.0}, {"Value": zoom_val}],
-                    "Span": 0.2,
-                    "AnimationType": "加減速移動",
-                }
-            else:
-                zoom_prop = {
-                    "Values": [{"Value": 100.0}],
-                    "Span": 0.0,
-                    "AnimationType": "なし",
-                }
-
-            image_item: Dict[str, Any] = {
-                "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-                "FilePath": str(d_img_clip.image_path.resolve()),
-                "X": {
-                    "Values": [{"Value": 0.0 if is_bg else broll_cfg["X"]}],
-                    "Span": 0.0,
-                    "AnimationType": "なし",
-                },
-                "Y": {
-                    "Values": [{"Value": 0.0 if is_bg else broll_cfg["Y"]}],
-                    "Span": 0.0,
-                    "AnimationType": "なし",
-                },
-                "Opacity": {"Values": [{"Value": 100.0}]},
-                "Zoom": zoom_prop,
-                "Rotation": {"Values": [{"Value": 0.0}]},
-                "Blend": "Normal",
-                "Layer": 0 if is_bg else 1,
-                "Frame": d_img_clip.start_frame,
-                "Length": d_img_clip.length,
-                "VideoEffects": [],
-            }
-            items.append(image_item)
+            items.append(
+                _build_image_item(
+                    d_img_clip.image_path.resolve(),
+                    d_img_clip.start_frame,
+                    clip_len,
+                    layer=0 if is_bg else 1,
+                    x=0.0 if is_bg else broll_cfg["X"],
+                    y=0.0 if is_bg else broll_cfg["Y"],
+                    zoom=zoom_prop,
+                )
+            )
 
             if not is_bg:
                 pon_path = str(Path(__file__).parent.parent / "assets" / "sfx" / "pon.wav")
@@ -653,33 +553,20 @@ class YMMPRenderer:
                 })
 
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
-            if d_audio_clip.length == -1:
-                volume = 3.0  # ducking
-            else:
-                volume = 50.0
-
-            length = (
-                timeline_ir.total_frames - d_audio_clip.start_frame
-                if d_audio_clip.length == -1
-                else d_audio_clip.length
-            )
-
-            audio_item = {
+            is_looped = d_audio_clip.length == -1
+            volume = 3.0 if is_looped else 50.0
+            length = timeline_ir.total_frames - d_audio_clip.start_frame if is_looped else d_audio_clip.length
+            items.append({
                 "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
                 "FilePath": str(d_audio_clip.audio_path.resolve()),
-                "Volume": {
-                    "Values": [{"Value": volume}],
-                    "Span": 0.0,
-                    "AnimationType": "なし",
-                },
+                "Volume": _anim_val(volume),
                 "Pan": {"Values": [{"Value": 0.0}]},
                 "PlaybackRate": 100.0,
                 "Layer": 5,
                 "Frame": d_audio_clip.start_frame,
                 "Length": length,
-                "IsLooped": d_audio_clip.length == -1,
-            }
-            items.append(audio_item)
+                "IsLooped": is_looped,
+            })
 
         for gc in timeline_ir.global_clips:
             preserved_item = copy.deepcopy(gc.template_item)
@@ -688,10 +575,8 @@ class YMMPRenderer:
             items.append(preserved_item)
 
         timeline = get_timeline(output_data)
-        timeline["Items"] = items
-        timeline["Length"] = timeline_ir.total_frames
+        timeline["Items"], timeline["Length"] = items, timeline_ir.total_frames
 
-        # Deep replace anonymized PSD path if environment variable is set
         psd_path = os.environ.get("ZUNDAMON_PSD_PATH") or os.environ.get("VERAXI_ZUNDA_PSD")
         if psd_path:
             def _replace_psd(obj: Any) -> None:
@@ -718,9 +603,7 @@ class YMMPRenderer:
             voice_item_count=effective_script_len,
             tachie_item_count=len(tachie_items),
             total_frames=timeline_ir.total_frames,
-            total_duration_seconds=(
-                timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0
-            ),
+            total_duration_seconds=timeline_ir.total_frames / timeline_ir.fps if timeline_ir.fps else 0.0,
             audio_files=audio_files,
             warnings=self.warnings,
             errors=self.errors,
@@ -753,20 +636,12 @@ class YMMPRenderer:
             "PlaybackRateAudioProcessingMode": "Resampling",
         }
 
-    def _make_text_item(
-        self,
-        text: str,
-        frame: int,
-        length: int,
-        line: ScriptEntry,
-    ) -> Optional[Dict[str, Any]]:
+    def _make_text_item(self, text: str, frame: int, length: int, line: ScriptEntry) -> Optional[Dict[str, Any]]:
         """Creates a subtitle TextItem from the text template."""
         if self.text_template is None:
             return None
         text_item = copy.deepcopy(self.text_template)
-        text_item["Text"] = text
-        text_item["Frame"] = frame
-        text_item["Length"] = length
+        text_item["Text"], text_item["Frame"], text_item["Length"] = text, frame, length
         text_item["Layer"] = self._get_subtitle_layer()
         sub_pos = str(line.get("subtitle_position", "bottom_center"))
         x_map: Dict[str, float] = {"top_center": -480.0, "center": -480.0, "bottom_center": -480.0}
@@ -777,25 +652,17 @@ class YMMPRenderer:
             self._set_animated_value(text_item, "FontSize", 56.0)
         return text_item
 
-    def _make_face_item(
-        self,
-        line: ScriptEntry,
-        frame: int,
-        length: int,
-    ) -> Optional[Dict[str, Any]]:
+    def _make_face_item(self, line: ScriptEntry, frame: int, length: int) -> Optional[Dict[str, Any]]:
         """Creates a facial expression item from face templates."""
         emotion = line.get("emotion", "neutral")
         char_name = line.get("character")
         if not char_name:
             return None
-        char_faces = self.face_templates.get(char_name, {})
-        template = char_faces.get(emotion)
+        template = self.face_templates.get(char_name, {}).get(emotion)
         if template is None:
             return None
         face_item = cast(Dict[str, Any], copy.deepcopy(template))
-        face_item["Layer"] = 1
-        face_item["Frame"] = frame
-        face_item["Length"] = length
+        face_item["Layer"], face_item["Frame"], face_item["Length"] = 1, frame, length
         return face_item
 
     @staticmethod
@@ -817,30 +684,20 @@ class YMMPRenderer:
         return max(tachie_layers, default=default_layer) + 1
 
     def _add_tachie_items(
-        self,
-        used_characters: Set[str],
-        total_length: int,
-        character_positions: Dict[str, str],
+        self, used_characters: Set[str], total_length: int, character_positions: Dict[str, str]
     ) -> List[Dict[str, Any]]:
         """Adds template-based tachie items for all speaking characters."""
         result: List[Dict[str, Any]] = []
-
         for char_name, templates in self.character_templates.items():
             if char_name in used_characters and templates["tachie"] is not None:
                 tachie_item = copy.deepcopy(templates["tachie"])
-                tachie_item["Layer"] = 1
-                tachie_item["Frame"] = 0
-                tachie_item["Length"] = total_length
-
-                default_x = self.layout_cfg["tachie"]["X"]
+                tachie_item["Layer"], tachie_item["Frame"], tachie_item["Length"] = 1, 0, total_length
                 pos = character_positions.get(char_name, "left")
-                final_x = 0.0 if pos == "center" else default_x
-
+                final_x = 0.0 if pos == "center" else self.layout_cfg["tachie"]["X"]
                 self._set_animated_value(tachie_item, "X", final_x)
                 self._set_animated_value(tachie_item, "Y", self.layout_cfg["tachie"]["Y"])
                 self._set_animated_value(tachie_item, "Zoom", self.layout_cfg["tachie"]["Zoom"])
                 result.append(tachie_item)
-
         return result
 
     @staticmethod
@@ -851,27 +708,19 @@ class YMMPRenderer:
             json.dump(output_data, f, ensure_ascii=False, indent=4)
 
     def export(
-        self,
-        ir: TimelineIR,
-        output_path: Path,
-        options: Optional[Dict[str, Any]] = None,
+        self, ir: TimelineIR, output_path: Path, options: Optional[Dict[str, Any]] = None
     ) -> ExportResult:
         """Export TimelineIR to YMM4 .ymmp project format."""
         opts = options or {}
-        use_bom = opts.get("use_bom", False)
-        script_len = opts.get("script_len", None)
-        audio_files = opts.get("audio_files", None)
         out_p = Path(output_path)
         comp_res = self.render(
             timeline_ir=ir,
             output_path=out_p,
-            use_bom=use_bom,
-            script_len=script_len,
-            audio_files=audio_files,
+            use_bom=opts.get("use_bom", False),
+            script_len=opts.get("script_len", None),
+            audio_files=opts.get("audio_files", None),
         )
-        artifacts = [out_p]
-        if comp_res.audio_files:
-            artifacts.extend(comp_res.audio_files)
+        artifacts = [out_p] + (comp_res.audio_files if comp_res.audio_files else [])
         return ExportResult(
             target_format="ymmp",
             output_path=out_p,

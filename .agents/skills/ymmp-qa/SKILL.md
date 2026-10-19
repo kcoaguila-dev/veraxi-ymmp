@@ -26,20 +26,23 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
     - Maintain visual symmetry across related sequences (e.g. Condition 01, 02, 03 must share the same clean `render_metric_slide` structure).
   - Use `veraxi_ymmp.broll` (`render_metric_slide`, `render_vs_slide`, `render_overview_slide`) to generate all slide assets.
 
-### 2. Internal MP4 Render
-- Use the compiler to build the TimelineIR and render an internal `.mp4` video.
-- Example script you can run:
+### 2. Internal MP4 Render & Unified Project Pipeline
+- Run the end-to-end project pipeline via CLI (`veraxi-ymmp run <project_dir>`) or `ProjectPipeline`:
+  ```bash
+  veraxi-ymmp run projects/01_costco_business_model/
+  ```
+- Or use the compiler directly to build `TimelineIR` via public `compiler.build_ir` and render an internal `.mp4` video:
   ```python
   from veraxi_ymmp.compiler import YMMPCompiler
   from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
   import json
   from pathlib import Path
-  
-  script = json.load(open('artifacts/script.json', encoding='utf-8-sig'))
-  compiler = YMMPCompiler('examples/full_template.ymmp')
-  timeline_ir, _ = compiler._build_ir(script, Path('artifacts/audio'))
+
+  script = json.loads(Path("artifacts/script.json").read_text(encoding="utf-8-sig"))
+  compiler = YMMPCompiler("examples/full_template.ymmp")
+  timeline_ir, _ = compiler.build_ir(script, Path("artifacts/audio"))
   renderer = MoviePyRenderer(timeline_ir)
-  renderer.render('artifacts/qa_test.mp4')
+  renderer.render("artifacts/qa_test.mp4")
   ```
 
 ### 3. Audio & Visual QA (AI Multimodal Inspection)
@@ -76,4 +79,3 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - `final_video.ymmp`
   - `thumbnail.png`
   - `qa_test.mp4` / Premiere XML
-
