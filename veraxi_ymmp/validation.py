@@ -13,6 +13,7 @@ from .logging import logger
 
 class ValidationError(ValueError):
     """Exception raised when YMMP project validation fails."""
+
     pass
 
 
@@ -43,17 +44,35 @@ def sanitize_filename(name: str) -> str:
     Remove dangerous characters from filenames.
     """
     # Remove any path separators and null bytes
-    sanitized = re.sub(r'[/\\:\*\?"<>\|]', '', name)
-    sanitized = sanitized.replace('\0', '')
+    sanitized = re.sub(r'[/\\:\*\?"<>\|]', "", name)
+    sanitized = sanitized.replace("\0", "")
     return sanitized.strip()
 
 
 YMM4_ENUM_REGISTRY = {
     "Style": {"Normal", "Border", "Shadow"},
     "WordWrap": {"NoWrap", "Wrap"},
-    "BasePoint": {"CenterBottom", "CenterTop", "Center", "LeftTop", "RightTop", "LeftBottom", "RightBottom", "LeftCenter", "RightCenter"},
+    "BasePoint": {
+        "CenterBottom",
+        "CenterTop",
+        "Center",
+        "LeftTop",
+        "RightTop",
+        "LeftBottom",
+        "RightBottom",
+        "LeftCenter",
+        "RightCenter",
+    },
     "Blend": {"Normal", "Add", "Subtract", "Multiply", "Screen", "Overlay"},
-    "AnimationType": {"なし", "加減速移動", "直線移動", "曲線移動", "反発移動", "加速移動", "減速移動"},
+    "AnimationType": {
+        "なし",
+        "加減速移動",
+        "直線移動",
+        "曲線移動",
+        "反発移動",
+        "加速移動",
+        "減速移動",
+    },
 }
 
 ALLOWED_MOUTH_ANIMATIONS: Set[str] = {
@@ -76,6 +95,7 @@ def validate_ymmp_schema(data: Dict[str, Any]) -> None:
     C# enum properties match legitimate YMM4 deserializer definitions.
     Prevents desktop YMM4 startup crashes due to enum conversion errors.
     """
+
     def _scan(obj: Any, path: str = "") -> None:
         if isinstance(obj, dict):
             for k, v in obj.items():
@@ -104,16 +124,14 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> Set[str]:
     if not psd_path_str:
         return set()
     import json
+
     p = Path(psd_path_str)
     # Check .psd-ymm.json
-    candidates = [
-        Path(str(p) + "-ymm.json"),
-        p.with_name(p.name + "-ymm.json")
-    ]
+    candidates = [Path(str(p) + "-ymm.json"), p.with_name(p.name + "-ymm.json")]
     for c in candidates:
         if c.exists():
             try:
-                with open(c, 'r', encoding='utf-8-sig') as f:
+                with open(c, "r", encoding="utf-8-sig") as f:
                     d = json.load(f)
                     layers: Set[str] = set()
                     for ma in d.get("MouthAnimations", []):
@@ -128,13 +146,12 @@ def get_psd_mouth_animation_layers(psd_path_str: str) -> Set[str]:
                 logger.debug("Failed to read PSD mouth animation layers from %s: %s", c, exc)
     # Known defaults for standard characters (strictly 1 open + 1 closed mouth, rival standard)
     from .psd_registry import CharacterPSDRegistry
+
     return CharacterPSDRegistry.get_mouth_layers(p.name)
 
 
 def validate_ymmp_timeline(
-    data: Dict[str, Any],
-    expected_voice_count: Optional[int] = None,
-    require_audio: bool = True
+    data: Dict[str, Any], expected_voice_count: Optional[int] = None, require_audio: bool = True
 ) -> Dict[str, Any]:
     """
     Strictly validates the timeline structure of a compiled YMMP project.
@@ -177,7 +194,9 @@ def validate_ymmp_timeline(
                 f"found {len(voice_items)}."
             )
     elif require_audio and len(voice_items) == 0:
-        raise ValidationError("No VoiceItems found in timeline! Characters will have no voice or subtitles in YMM4.")
+        raise ValidationError(
+            "No VoiceItems found in timeline! Characters will have no voice or subtitles in YMM4."
+        )
 
     for i, v in enumerate(voice_items):
         v_len = v.get("VoiceLength", "00:00:00")
@@ -200,6 +219,14 @@ def validate_ymmp_timeline(
         if val is None or val <= 0:
             raise ValidationError(f"VoiceItem[{i}] has invalid volume: {val}")
 
+        bp = v.get("BasePoint")
+        if bp is not None and bp not in YMM4_ENUM_REGISTRY["BasePoint"]:
+            raise ValidationError(
+                f"VoiceItem[{i}] has invalid BasePoint '{bp}'. "
+                f"Must be one of {sorted(YMM4_ENUM_REGISTRY['BasePoint'])}. "
+                "Invalid BasePoint causes YMM4 to default to CenterTop, pushing text down and causing cutoff!"
+            )
+
         hatsuon = v.get("Hatsuon", "")
         if not hatsuon or not isinstance(hatsuon, str):
             raise ValidationError(
@@ -221,7 +248,11 @@ def validate_ymmp_timeline(
                 )
             try:
                 decompressed = brotli.decompress(base64.b64decode(vc))
-                if len(decompressed) < 12 or decompressed[:4] != b"RIFF" or decompressed[8:12] != b"WAVE":
+                if (
+                    len(decompressed) < 12
+                    or decompressed[:4] != b"RIFF"
+                    or decompressed[8:12] != b"WAVE"
+                ):
                     raise ValidationError(
                         f"VoiceItem[{i}] VoiceCache decompressed data is not a valid RIFF/WAVE file (size={len(decompressed)})."
                     )
@@ -237,7 +268,9 @@ def validate_ymmp_timeline(
 
     # Check 3: TachieItem & non-empty EnableLayers
     if not tachie_items:
-        raise ValidationError("No TachieItems found in timeline! Characters will not appear on screen.")
+        raise ValidationError(
+            "No TachieItems found in timeline! Characters will not appear on screen."
+        )
 
     for i, t in enumerate(tachie_items):
         char = t.get("CharacterName", "unknown")
@@ -281,7 +314,11 @@ def validate_ymmp_timeline(
                 )
 
         # Verify X, Y coordinates are within screen
-        x_val = t.get("X", {}).get("Values", [{}])[0].get("Value", 0.0) if isinstance(t.get("X"), dict) else t.get("X")
+        x_val = (
+            t.get("X", {}).get("Values", [{}])[0].get("Value", 0.0)
+            if isinstance(t.get("X"), dict)
+            else t.get("X")
+        )
         if abs(x_val) > 1200:
             raise ValidationError(f"TachieItem[{i}] ({char}) has off-screen X position: {x_val}")
 
@@ -295,7 +332,9 @@ def validate_ymmp_timeline(
         tcp = c.get("TachieCharacterParameter", {})
         c_fp = tcp.get("FilePath")
         if c_fp and not Path(c_fp).exists():
-            raise ValidationError(f"Character '{c_name}' TachieCharacterParameter FilePath does not exist: {c_fp}")
+            raise ValidationError(
+                f"Character '{c_name}' TachieCharacterParameter FilePath does not exist: {c_fp}"
+            )
 
         if c_fp and str(c_fp).endswith(".psd"):
             ttype = c.get("TachieType", "")
@@ -345,7 +384,9 @@ def validate_ymmp_timeline(
         tfp = f_it.get("TachieFaceParameter", {})
         el = tfp.get("EnableLayers", [])
         if not el or not isinstance(el, list) or len(el) == 0:
-            raise ValidationError(f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} has empty EnableLayers.")
+            raise ValidationError(
+                f"TachieFaceItem[{i}] ({char}) at frame {f_it.get('Frame')} has empty EnableLayers."
+            )
         mouth_layers = get_psd_mouth_animation_layers(tfp.get("FilePath", ""))
         if mouth_layers and not (set(el) & mouth_layers):
             raise ValidationError(
