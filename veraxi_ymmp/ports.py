@@ -6,16 +6,35 @@ Defines the formal boundaries and interfaces (Ports) according to Clean Architec
 - ExportResult: Data transfer object describing exported artifacts.
 - TTSBackend: Unified port for text-to-speech synthesis backends.
 - DirectorProvider: Unified port for script directing engines.
+- VideoPublisher: Unified port for video uploading and thumbnail binding adapters.
+- VideoAnalyticsProvider: Unified port for video performance and audience retention telemetry.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    runtime_checkable,
+)
 
 from .director import DirectorProvider
-from .ir import TimelineIR
+from .ir import (
+    CutRetentionMetric,
+    RetentionDropoffPoint,
+    RetentionPoint,
+    TimelineIR,
+    UploadResult,
+    VideoPublishMetadata,
+    VideoRetentionReport,
+)
 
 
 @runtime_checkable
@@ -72,10 +91,69 @@ class TimelineExporter(Protocol):
         ...
 
 
+# Progress callback signature: (progress_ratio: float, bytes_uploaded: int, total_bytes: int) -> None
+ProgressCallback = Callable[[float, int, int], None]
+
+
+@runtime_checkable
+class VideoPublisher(Protocol):
+    """Protocol for video publishing adapters."""
+
+    def upload_video(
+        self,
+        video_path: Path,
+        metadata: VideoPublishMetadata,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> UploadResult:
+        """Upload a video file with chunked resumable streaming and retry backoff."""
+        ...
+
+    def upload_thumbnail(
+        self,
+        video_id: str,
+        thumbnail_path: Path,
+    ) -> bool:
+        """Upload and bind a custom thumbnail image to a video."""
+        ...
+
+    def upload_caption(
+        self,
+        video_id: str,
+        caption_path: Path,
+        language: str = "ja",
+        name: str = "Japanese",
+    ) -> bool:
+        """Upload and bind a caption/subtitle track (e.g. SRT) to a video."""
+        ...
+
+
+@runtime_checkable
+class VideoAnalyticsProvider(Protocol):
+    """Protocol defining the interface for video analytics providers (e.g. YouTube Analytics API)."""
+
+    def fetch_retention_curve(
+        self,
+        video_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Tuple[float, float]]:
+        """Fetch audience retention curve as list of (elapsed_time_ratio, audience_watch_ratio) tuples."""
+        ...
+
+
 __all__ = [
     "ExportResult",
     "TimelineExporter",
     "TTSBackend",
     "NullTTSBackend",
     "DirectorProvider",
+    "RetentionPoint",
+    "RetentionDropoffPoint",
+    "CutRetentionMetric",
+    "VideoRetentionReport",
+    "VideoPublishMetadata",
+    "UploadResult",
+    "ProgressCallback",
+    "VideoPublisher",
+    "VideoAnalyticsProvider",
 ]

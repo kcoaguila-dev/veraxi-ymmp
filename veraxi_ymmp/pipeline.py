@@ -18,10 +18,12 @@ from typing import Any, Dict, List, Optional, Union
 
 from .broll import render_from_manifest
 from .compiler import YMMPCompiler
-from .ir import TimelineIR
+from .ir import TimelineIR, UploadResult, VideoPublishMetadata
 from .logging import logger
 from .moviepy_renderer import MoviePyRenderer
+from .ports import VideoPublisher
 from .premiere_exporter import PremiereExporter, export_to_premiere as export_to_premiere
+from .srt_generator import generate_srt
 from .thumbnail import generate_project_thumbnail
 from .validation import validate_ymmp_timeline
 from .voicevox import VoicevoxClient
@@ -53,6 +55,8 @@ class PipelineResult:
     ymmp_validation: Optional[Dict[str, Any]] = None
     qa_video_path: Optional[Path] = None
     thumbnail_path: Optional[Path] = None
+    srt_path: Optional[Path] = None
+    upload_result: Optional[UploadResult] = None
     success: bool = True
     errors: List[str] = field(default_factory=list)
 
@@ -88,6 +92,16 @@ class ProjectPipeline:
         do_qa: bool = True,
         qa_duration: Optional[float] = None,
         do_thumbnail: bool = True,
+        upload_to_youtube: bool = False,
+        mock_upload: bool = False,
+        publish_at: Optional[str] = None,
+        privacy_status: str = "private",
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        language: str = "ja",
+        normalize_loudness: bool = False,
+        publisher: Optional[VideoPublisher] = None,
     ) -> PipelineResult:
         """Execute the end-to-end video synthesis pipeline for a project directory."""
         proj_dir = Path(project_path).resolve()
@@ -294,6 +308,107 @@ class ProjectPipeline:
                 logger.error(err_msg)
                 result.errors.append(err_msg)
 
+        # 6. YouTube Publishing Automation
+        if upload_to_youtube:
+            logger.info("--- [5/5] YouTube Publishing Automation ---")
+            target_video: Optional[Path] = None
+            final_video_candidate = proj_dir / "final_video.mp4"
+            if final_video_candidate.exists():
+                target_video = final_video_candidate
+            elif result.qa_video_path and result.qa_video_path.exists():
+                target_video = result.qa_video_path
+
+            if target_video is None:
+                err_msg = "No video artifact found for YouTube upload (checked final_video.mp4 and qa_test.mp4)."
+                logger.error(err_msg)
+                result.errors.append(err_msg)
+                result.success = False
+                return result
+
+            if result.thumbnail_path is None:
+                default_thumb = proj_dir / "thumbnail.png"
+                if default_thumb.exists():
+                    result.thumbnail_path = default_thumb
+
+            video_to_upload = target_video
+            if normalize_loudness:
+                logger.info("Normalizing video audio loudness for YouTube (-14.0 LUFS)...")
+                from .audio_normalizer import normalize_video_audio
+
+                norm_out = proj_dir / f"{target_video.stem}_normalized{target_video.suffix}"
+                try:
+                    video_to_upload = normalize_video_audio(target_video, norm_out, target_i=-14.0)
+                    logger.info(f"Loudness normalized video ready: {video_to_upload}")
+                except Exception as e:
+                    logger.warning(f"Loudness normalization failed, using original video: {e}")
+                    video_to_upload = target_video
+
+            if result.timeline_ir is not None:
+                logger.info("Auto-generating SRT captions from TimelineIR...")
+                srt_out = proj_dir / f"{proj_dir.name}.srt"
+                try:
+                    generate_srt(result.timeline_ir, srt_out)
+                    result.srt_path = srt_out
+                    logger.info(f"SRT captions generated at: {srt_out}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate SRT captions: {e}")
+
+            pub: VideoPublisher
+            if publisher is not None:
+                pub = publisher
+            elif mock_upload:
+                from .youtube_adapter import MockYouTubeAdapter
+
+                pub = MockYouTubeAdapter()
+            else:
+                from .youtube_adapter import YouTubeAdapter
+
+                pub = YouTubeAdapter()
+
+            try:
+                meta = VideoPublishMetadata(
+                    title=title or proj_dir.name,
+                    description=description or "",
+                    tags=tags or [],
+                    category_id="22",
+                    privacy_status=privacy_status,
+                    publish_at=publish_at,
+                    language=language,
+                    thumbnail_path=result.thumbnail_path,
+                )
+                upload_res = pub.upload_video(video_path=video_to_upload, metadata=meta)
+                result.upload_result = upload_res
+
+                if upload_res.status in ("completed", "uploaded"):
+                    if result.thumbnail_path and result.thumbnail_path.exists() and not upload_res.thumbnail_uploaded:
+                        try:
+                            pub.upload_thumbnail(upload_res.video_id, result.thumbnail_path)
+                            upload_res.thumbnail_uploaded = True
+                            logger.info(f"Thumbnail uploaded for video {upload_res.video_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to upload thumbnail: {e}")
+                    if result.srt_path and result.srt_path.exists():
+                        try:
+                            pub.upload_caption(
+                                upload_res.video_id,
+                                result.srt_path,
+                                language=language,
+                                name="Japanese",
+                            )
+                            logger.info(f"Captions uploaded for video {upload_res.video_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to upload captions: {e}")
+                else:
+                    err_msg = f"YouTube upload failed: {upload_res.error_message or upload_res.status}"
+                    logger.error(err_msg)
+                    result.errors.append(err_msg)
+                    result.success = False
+            except Exception as e:
+                err_msg = f"Failed during YouTube upload: {e}"
+                logger.error(err_msg)
+                result.errors.append(err_msg)
+                result.success = False
+
         if result.errors:
             result.success = False
 
@@ -308,6 +423,16 @@ def run_project(
     do_qa: bool = True,
     qa_duration: Optional[float] = None,
     do_thumbnail: bool = True,
+    upload_to_youtube: bool = False,
+    mock_upload: bool = False,
+    publish_at: Optional[str] = None,
+    privacy_status: str = "private",
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    language: str = "ja",
+    normalize_loudness: bool = False,
+    publisher: Optional[VideoPublisher] = None,
 ) -> PipelineResult:
     """Convenience function running ProjectPipeline for a project directory."""
     pipeline = ProjectPipeline()
@@ -318,6 +443,16 @@ def run_project(
         do_qa=do_qa,
         qa_duration=qa_duration,
         do_thumbnail=do_thumbnail,
+        upload_to_youtube=upload_to_youtube,
+        mock_upload=mock_upload,
+        publish_at=publish_at,
+        privacy_status=privacy_status,
+        title=title,
+        description=description,
+        tags=tags,
+        language=language,
+        normalize_loudness=normalize_loudness,
+        publisher=publisher,
     )
 
 

@@ -71,5 +71,8 @@ verification_frames/
 .DS_Store
 Thumbs.db
 
+# Agent Teamwork internal run logs
+.agents/teamwork/
+
 # Ruff cache
 .ruff_cache/
