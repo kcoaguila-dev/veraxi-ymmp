@@ -30,10 +30,15 @@ from .ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
     RetentionPoint,
+    RotationEvent,
+    ThumbnailExperiment,
+    ThumbnailVariant,
     TimelineIR,
     UploadResult,
+    VariantMetrics,
     VideoPublishMetadata,
     VideoRetentionReport,
+    WinnerDecision,
 )
 
 
@@ -140,6 +145,15 @@ class VideoAnalyticsProvider(Protocol):
         """Fetch audience retention curve as list of (elapsed_time_ratio, audience_watch_ratio) tuples."""
         ...
 
+    def fetch_variant_metrics(
+        self,
+        video_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> VariantMetrics:
+        """Fetch impression, CTR, and watch metrics for a video over a time window."""
+        ...
+
 
 __all__ = [
     "ExportResult",
@@ -153,6 +167,11 @@ __all__ = [
     "VideoRetentionReport",
     "VideoPublishMetadata",
     "UploadResult",
+    "VariantMetrics",
+    "ThumbnailVariant",
+    "RotationEvent",
+    "WinnerDecision",
+    "ThumbnailExperiment",
     "ProgressCallback",
     "VideoPublisher",
     "VideoAnalyticsProvider",
