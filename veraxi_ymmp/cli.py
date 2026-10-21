@@ -361,6 +361,68 @@ def _cmd_youtube_qa(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _cmd_youtube_ab(args: argparse.Namespace) -> None:
+    """Handle the 'youtube ab' subcommand (A/B thumbnail variant switching)."""
+    from . import thumbnail_ab as ab
+
+    project = Path(args.project)
+    if not project.exists():
+        logger.error(f"Project directory not found: {project}")
+        sys.exit(1)
+
+    adapter: Any = None
+    if args.action != "status":
+        if args.mock:
+            from .youtube_adapter import MockYouTubeAdapter
+
+            adapter = MockYouTubeAdapter()
+        else:
+            from .youtube_adapter import YouTubeAdapter
+
+            try:
+                adapter = YouTubeAdapter()
+            except Exception as e:
+                logger.error(f"Failed to initialize YouTube adapter: {e}")
+                sys.exit(1)
+
+    try:
+        if args.action == "start":
+            exp = ab.initialize_experiment(
+                project, args.video_id, publisher=adapter,
+                min_impressions=args.min_impressions,
+                min_observation_hours=args.min_hours,
+            )
+            print(ab.render_ab_report(exp))
+        elif args.action == "rotate":
+            ev = ab.rotate_thumbnail(
+                project, args.video_id, target_variant_id=args.variant,
+                publisher=adapter, reason="manual_cli_rotation" if args.variant else "scheduled_rotation",
+            )
+            print(f"Rotated thumbnail: {ev.from_variant_id} -> {ev.to_variant_id}")
+        elif args.action == "evaluate":
+            d = ab.evaluate_performance(
+                project, args.video_id, analytics_provider=adapter,
+                confidence_level=args.confidence,
+            )
+            p = f"{d.p_value:.4f}" if d.p_value is not None else "n/a"
+            print(f"Leader: {d.winner_variant_id} | significant={d.is_significant} | p={p}")
+            print(d.rationale)
+        elif args.action == "commit":
+            exp = ab.commit_winner(
+                project, args.video_id, winner_id=args.variant,
+                publisher=adapter, analytics_provider=adapter,
+            )
+            print(ab.render_ab_report(exp))
+        else:  # status
+            print(ab.render_ab_report(ab.get_status(project)))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception as e:
+        logger.error(f"A/B thumbnail '{args.action}' failed: {e}")
+        sys.exit(1)
+
+
 def _cmd_youtube(argv: List[str]) -> None:
     """YouTube Automation & Retention QA Telemetry subcommands dispatcher."""
     parser = argparse.ArgumentParser(
@@ -411,13 +473,32 @@ def _cmd_youtube(argv: List[str]) -> None:
     parser_qa.add_argument("--threshold", type=float, default=0.05, help="Retention drop-off detection threshold (default: 0.05 / 5%%)")
     parser_qa.add_argument("--mock", action="store_true", help="Run with MockYouTubeAdapter synthetic retention curve")
 
+    # Subcommand: ab (A/B thumbnail variant switching)
+    parser_ab = subparsers.add_parser(
+        "ab",
+        help="A/B test thumbnail variants: start, rotate, evaluate, commit, status",
+        description="Generate thumbnail variants, rotate them on YouTube, evaluate CTR, and lock in the winner.",
+    )
+    parser_ab.add_argument("action", choices=["start", "rotate", "evaluate", "commit", "status"])
+    parser_ab.add_argument("--project", required=True, type=str, help="Project directory")
+    parser_ab.add_argument("--video-id", type=str, default="", help="YouTube video ID (required except for status)")
+    parser_ab.add_argument("--variant", type=str, default=None, help="Target variant ID for rotate/commit")
+    parser_ab.add_argument("--min-impressions", type=int, default=500, help="Min impressions per variant (start)")
+    parser_ab.add_argument("--min-hours", type=float, default=24.0, help="Min observation hours (start)")
+    parser_ab.add_argument("--confidence", type=float, default=0.95, help="Confidence level for evaluation")
+    parser_ab.add_argument("--mock", action="store_true", help="Run with MockYouTubeAdapter in offline mode")
+
     if not argv:
         parser.print_help()
         sys.exit(2)
 
     args = parser.parse_args(argv)
 
-    if args.subcommand == "upload":
+    if args.subcommand == "ab":
+        if args.action != "status" and not args.video_id:
+            parser_ab.error("--video-id is required for this action")
+        _cmd_youtube_ab(args)
+    elif args.subcommand == "upload":
         _cmd_youtube_upload(args)
     elif args.subcommand == "status":
         _cmd_youtube_status(args)

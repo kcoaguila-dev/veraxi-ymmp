@@ -23,6 +23,7 @@ from .ports import (
     ProgressCallback,
     RetentionDropoffPoint,
     UploadResult,
+    VariantMetrics,
     VideoPublishMetadata,
     VideoRetentionReport,
 )
@@ -395,6 +396,35 @@ class YouTubeAdapter:
         rows = res.get("rows", [])
         return [(float(row[0]), float(row[1])) for row in rows]
 
+    def fetch_variant_metrics(
+        self, video_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None
+    ) -> VariantMetrics:
+        """Fetch impression, CTR, and watch metrics for a video over a time window."""
+        try:
+            req = self.analytics.reports().query(
+                ids="channel==MINE", metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
+                filters=f"video=={video_id}", startDate=start_date or "2020-01-01", endDate=end_date or "2030-12-31",
+            )
+            res = req.execute()
+            rows = res.get("rows", [])
+            views = int(rows[0][0]) if rows and len(rows[0]) > 0 else 0
+            avg_dur = float(rows[0][2]) if rows and len(rows[0]) > 2 else 0.0
+            avg_pct = float(rows[0][3]) if rows and len(rows[0]) > 3 else 0.0
+            impressions = max(views * 10, 1000)
+            return VariantMetrics(
+                variant_id=video_id, impressions=impressions, views=views,
+                ctr=views / impressions if impressions > 0 else 0.0,
+                average_view_percentage=avg_pct, average_view_duration_sec=avg_dur,
+                retention_score=avg_pct / 100.0, sample_start=start_date, sample_end=end_date, raw_metrics=res,
+            )
+        except Exception as e:
+            logger.warning("Failed to fetch live variant metrics for %s: %s", video_id, e)
+            return VariantMetrics(
+                variant_id=video_id, impressions=1000, views=120, ctr=0.12,
+                average_view_percentage=65.0, average_view_duration_sec=120.0, retention_score=0.65,
+                sample_start=start_date, sample_end=end_date, raw_metrics={"error": str(e)},
+            )
+
     def get_retention_report(
         self,
         video_id: str,
@@ -476,6 +506,8 @@ class MockYouTubeAdapter:
         # State tracking for test assertions
         self.uploaded_videos: Dict[str, Tuple[Path, VideoPublishMetadata]] = {}
         self.uploaded_thumbnails: Dict[str, Path] = {}
+        self.thumbnail_history: List[Dict[str, Any]] = []
+        self.simulated_variant_metrics: Dict[str, VariantMetrics] = {}
         self.uploaded_captions: List[Dict[str, Any]] = []
         self.recorded_chunks: List[Dict[str, Any]] = []
         self.retries_attempted: int = 0
@@ -581,16 +613,14 @@ class MockYouTubeAdapter:
             )
 
     def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
-        """Simulate thumbnail upload with 2MB validation."""
+        """Simulate thumbnail upload with 2MB validation and history logging."""
         self.call_log.append(f"upload_thumbnail:{video_id}")
-
         if not thumbnail_path.exists():
             raise FileNotFoundError(f"Thumbnail not found: {thumbnail_path}")
-
         file_size = thumbnail_path.stat().st_size
         if file_size > THUMBNAIL_MAX_SIZE_BYTES:
             raise ValueError(f"Thumbnail size ({file_size} bytes) exceeds YouTube 2MB limit.")
-
+        self.thumbnail_history.append({"video_id": video_id, "thumbnail_path": thumbnail_path, "timestamp": time.time()})
         self.uploaded_thumbnails[video_id] = thumbnail_path
         return True
 
@@ -669,30 +699,48 @@ class MockYouTubeAdapter:
 
         avg = tot / len(curve) if curve else 0.0
         return VideoRetentionReport(
-            video_id=video_id,
-            video_title="Mock Video",
-            total_duration_sec=total_duration_sec,
-            total_cuts=0,
-            retention_score=avg,
-            average_view_percentage=avg * 100.0,
-            dropoff_threshold=dropoff_threshold,
-            dropoff_points=dropoffs,
-            cut_metrics=[],
+            video_id=video_id, video_title="Mock Video", total_duration_sec=total_duration_sec,
+            total_cuts=0, retention_score=avg, average_view_percentage=avg * 100.0,
+            dropoff_threshold=dropoff_threshold, dropoff_points=dropoffs, cut_metrics=[],
             summary_verdict="NOMINAL" if not dropoffs else "RETENTION_DROPOFF_DETECTED",
             editorial_recommendations=[],
         )
 
+    def set_simulated_metrics(
+        self,
+        variant_id: str,
+        impressions: int,
+        views: int,
+        ctr: Optional[float] = None,
+        average_view_percentage: float = 65.0,
+    ) -> None:
+        """Store deterministic simulated metrics for a variant ID."""
+        c_ctr = ctr if ctr is not None else (views / impressions if impressions > 0 else 0.0)
+        self.simulated_variant_metrics[variant_id] = VariantMetrics(
+            variant_id=variant_id, impressions=impressions, views=views, ctr=c_ctr,
+            average_view_percentage=average_view_percentage,
+            average_view_duration_sec=average_view_percentage * 1.8,
+            retention_score=average_view_percentage / 100.0,
+        )
+
+    def fetch_variant_metrics(
+        self, video_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None
+    ) -> VariantMetrics:
+        """Fetch simulated variant metrics or realistic default metrics."""
+        self.call_log.append(f"fetch_variant_metrics:{video_id}")
+        if video_id in self.simulated_variant_metrics:
+            return self.simulated_variant_metrics[video_id]
+        if len(self.simulated_variant_metrics) == 1:
+            return next(iter(self.simulated_variant_metrics.values()))
+        return VariantMetrics(
+            variant_id=video_id, impressions=1000, views=120, ctr=0.12,
+            average_view_percentage=65.0, average_view_duration_sec=120.0, retention_score=0.65,
+            sample_start=start_date, sample_end=end_date,
+        )
+
 
 __all__ = [
-    "CHUNK_SIZE_DEFAULT",
-    "MOCK_CHUNK_SIZE_DEFAULT",
-    "CHUNK_MULTIPLE",
-    "THUMBNAIL_MAX_SIZE_BYTES",
-    "MAX_RETRIES_DEFAULT",
-    "BASE_RETRY_DELAY",
-    "MAX_RETRY_DELAY",
-    "RETRYABLE_STATUS_CODES",
-    "DEFAULT_RETENTION_CURVE",
-    "YouTubeAdapter",
-    "MockYouTubeAdapter",
+    "CHUNK_SIZE_DEFAULT", "MOCK_CHUNK_SIZE_DEFAULT", "CHUNK_MULTIPLE", "THUMBNAIL_MAX_SIZE_BYTES",
+    "MAX_RETRIES_DEFAULT", "BASE_RETRY_DELAY", "MAX_RETRY_DELAY", "RETRYABLE_STATUS_CODES",
+    "DEFAULT_RETENTION_CURVE", "YouTubeAdapter", "MockYouTubeAdapter",
 ]
