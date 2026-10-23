@@ -347,6 +347,7 @@ def test_domain_layer_purity() -> None:
         "thumbnail",
         "broll",
         "cli",
+        "cli_youtube",
         "mcp_server",
     ]
     lib_dir = REPO_ROOT / "veraxi_ymmp"
@@ -400,6 +401,7 @@ def test_ports_layer_purity() -> None:
         "thumbnail",
         "broll",
         "cli",
+        "cli_youtube",
         "mcp_server",
         "pipeline",
     }

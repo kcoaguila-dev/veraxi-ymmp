@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+pytest.importorskip("mcp")
 
 from veraxi_ymmp.mcp_server import (
     compile_project,

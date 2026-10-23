@@ -722,3 +722,61 @@ class TestScheduledPublishingInAdapter:
         with pytest.raises(ValueError) as mock_exc_info:
             mock_adapter.upload_video(small_video_file, meta)
         assert "privacy_status='private'" in str(mock_exc_info.value)
+
+class TestYouTubeAdapterErrorHandling:
+    """Test 403 quota error handling and 429/5xx retry logic."""
+
+    @patch("veraxi_ymmp.youtube_adapter.time.sleep")
+    def test_http_403_quota_exceeded_not_retried(self, mock_sleep, small_video_file: Path) -> None:
+        adapter = YouTubeAdapter()
+        mock_yt = MagicMock()
+        mock_request = MagicMock()
+
+        class FakeHttpError(Exception):
+            def __init__(self, status):
+                self.status = status
+
+        mock_request.next_chunk.side_effect = FakeHttpError(403)
+        mock_yt.videos().insert.return_value = mock_request
+        adapter._youtube = mock_yt
+
+        meta = VideoPublishMetadata(title="Title")
+
+        with pytest.raises(FakeHttpError):
+            adapter.upload_video(small_video_file, meta)
+
+        # Ensure it didn't retry
+        assert mock_request.next_chunk.call_count == 1
+        assert mock_sleep.call_count == 0
+
+    @patch("veraxi_ymmp.youtube_adapter.time.sleep")
+    def test_http_429_5xx_retried(self, mock_sleep, small_video_file: Path) -> None:
+        adapter = YouTubeAdapter(max_retries=2, base_retry_delay=0.1)
+        mock_yt = MagicMock()
+        mock_request = MagicMock()
+
+        class FakeHttpError(Exception):
+            def __init__(self, status):
+                self.status = status
+
+        # 429 then 503 then success
+        mock_status = MagicMock()
+        mock_status.progress.return_value = 1.0
+        mock_status.resumable_progress = small_video_file.stat().st_size
+
+        mock_request.next_chunk.side_effect = [
+            FakeHttpError(429),
+            FakeHttpError(503),
+            (mock_status, {"id": "success_123"}),
+        ]
+
+        mock_yt.videos().insert.return_value = mock_request
+        adapter._youtube = mock_yt
+
+        meta = VideoPublishMetadata(title="Title")
+
+        res = adapter.upload_video(small_video_file, meta)
+
+        assert res.video_id == "success_123"
+        assert mock_request.next_chunk.call_count == 3
+        assert mock_sleep.call_count == 2

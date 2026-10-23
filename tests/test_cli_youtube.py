@@ -711,3 +711,33 @@ class TestCLIRunYouTubeIntegration:
         video_id = list(real_mock.uploaded_videos.keys())[0]
         uploaded_path, _ = real_mock.uploaded_videos[video_id]
         assert uploaded_path.name == "final_video_normalized.mp4"
+
+def test_youtube_auth_cli_parsing(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--client-secrets", "secrets.json", "--monetary"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.client_secrets == "secrets.json"
+            assert args.monetary is True
+            assert args.no_browser is False
+
+def test_youtube_stats_cli_parsing_json_csv_output(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "stats", "--video-id", "vid1", "--video-id", "vid2", "--format", "json"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_stats") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.video_id == ["vid1", "vid2"]
+            assert args.format == "json"
+
+def test_youtube_channel_cli_parsing(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "channel", "--mock"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_channel") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.mock is True
