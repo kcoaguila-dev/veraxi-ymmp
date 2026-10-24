@@ -388,5 +388,189 @@ def launch_ymm4_desktop(project_dir: str) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to launch YMM4: {e}")
 
 
+
+@mcp.tool()
+def list_projects() -> Dict[str, Any]:
+    """Scans projects/ directory and returns available project folders with artifact flags."""
+    projects_dir = Path.cwd() / "projects"
+    if not projects_dir.exists():
+        return {"projects": []}
+
+    projects = []
+    for proj_path in projects_dir.iterdir():
+        if proj_path.is_dir():
+            has_script = (proj_path / "script.json").exists()
+            has_broll_manifest = (proj_path / "broll_manifest.json").exists()
+            has_qa_video = (proj_path / "qa_test.mp4").exists()
+            has_thumbnail = (proj_path / "thumbnail.png").exists()
+            projects.append({
+                "name": proj_path.name,
+                "path": str(proj_path.relative_to(Path.cwd())),
+                "has_script": has_script,
+                "has_broll_manifest": has_broll_manifest,
+                "has_qa_video": has_qa_video,
+                "has_thumbnail": has_thumbnail
+            })
+    return {"projects": projects}
+
+@mcp.tool()
+def load_project(project_dir: str) -> Dict[str, Any]:
+    """Resolves project_dir and returns parsed script, broll_manifest, and artifact paths."""
+    proj_path = workspace_path(project_dir)
+
+    script = []
+    script_path = proj_path / "script.json"
+    if script_path.exists():
+        try:
+            with open(script_path, "r", encoding="utf-8") as f:
+                script = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read script.json in {project_dir}: {e}")
+
+    broll_manifest = []
+    broll_path = proj_path / "broll_manifest.json"
+    if broll_path.exists():
+        try:
+            with open(broll_path, "r", encoding="utf-8") as f:
+                broll_manifest = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read broll_manifest.json in {project_dir}: {e}")
+
+    qa_video_path = proj_path / "qa_test.mp4"
+    thumbnail_path = proj_path / "thumbnail.png"
+    ymmp_path = proj_path / "ymmp" / "final_video.ymmp"
+    if not ymmp_path.exists():
+        # Fallback to loose ymmp if it exists
+        ymmps = list(proj_path.glob("*.ymmp"))
+        if ymmps:
+            ymmp_path = ymmps[0]
+
+    premiere_xml = proj_path / "premiere" / f"{proj_path.name}.xml"
+    if not premiere_xml.exists():
+        # Fallback to final_video.xml
+        alt_xml = proj_path / "premiere" / "final_video.xml"
+        if alt_xml.exists():
+            premiere_xml = alt_xml
+
+    return {
+        "script": script,
+        "broll_manifest": broll_manifest,
+        "qa_video_path": str(qa_video_path) if qa_video_path.exists() else None,
+        "thumbnail_path": str(thumbnail_path) if thumbnail_path.exists() else None,
+        "ymmp_path": str(ymmp_path) if ymmp_path.exists() else None,
+        "premiere_xml": str(premiere_xml) if premiere_xml.exists() else None,
+    }
+
+
+
+@mcp.tool()
+def save_project_script(project_dir: str, script_json: str, broll_manifest_json: Optional[str] = None) -> Dict[str, Any]:
+    """Validates and writes script.json and optionally broll_manifest.json to project_dir."""
+    proj_path = workspace_path(project_dir)
+    proj_path.mkdir(parents=True, exist_ok=True)
+
+    validation = validate_script(script_json)
+
+    warnings = []
+    for i, entry in enumerate(validation.get("entries", [])):
+        text = entry.get("text", "")
+        if len(text) > 35:
+            warnings.append(f"Cut {i} ({entry.get('character')}) exceeds 35 characters ({len(text)}). Consider splitting.")
+
+    with open(proj_path / "script.json", "w", encoding="utf-8") as f:
+        f.write(script_json)
+
+    if broll_manifest_json:
+        try:
+            # just basic validation
+            parsed_broll = json.loads(broll_manifest_json)
+            with open(proj_path / "broll_manifest.json", "w", encoding="utf-8") as f:
+                json.dump(parsed_broll, f, ensure_ascii=False, indent=2)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid broll_manifest_json: {e}")
+
+    return {
+        "success": True,
+        "warnings": warnings
+    }
+
+@mcp.tool()
+def upload_project_to_youtube(
+    project_dir: str,
+    title: str,
+    privacy_status: str = "private",
+    description: str = "",
+    tags: Optional[List[str]] = None,
+    publish_at: Optional[str] = None,
+    mock_upload: bool = False
+) -> Dict[str, Any]:
+    """Uploads the project's video, thumbnail, and captions to YouTube."""
+    proj_path = workspace_path(project_dir)
+
+    candidates = ["final_video_youtube.mp4", "final_video.mp4", "qa_test.mp4"]
+    target_video = None
+    for cand in candidates:
+        cand_path = proj_path / cand
+        if cand_path.exists():
+            target_video = cand_path
+            break
+
+    if not target_video:
+        raise FileNotFoundError(f"No video artifact found in {proj_path} to upload.")
+
+    thumbnail_path = proj_path / "thumbnail.png"
+    if not thumbnail_path.exists():
+        thumbnail_path = Path("")
+
+    # Check for SRT captions
+    captions = []
+    for srt in proj_path.glob("*.srt"):
+        captions.append({
+            "path": srt,
+            "language": "ja",
+            "name": "日本語"
+        })
+        break # Just grab the first one for now
+
+    if mock_upload:
+        from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+        publisher: Any = MockYouTubeAdapter(fail_upload=False)
+    else:
+        from veraxi_ymmp.youtube_adapter import YouTubeAdapter
+        try:
+            publisher = YouTubeAdapter()
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize YouTube publisher (maybe needs auth): {e}")
+
+    from veraxi_ymmp.ir import VideoPublishMetadata
+    metadata = VideoPublishMetadata(
+        title=title,
+        description=description,
+        tags=tags or [],
+        privacy_status=privacy_status,
+        publish_at=publish_at,
+        thumbnail_path=thumbnail_path if thumbnail_path.exists() else None
+    )
+
+    result = publisher.upload_video(target_video, metadata)
+
+    caption_uploaded = False
+    if captions and hasattr(publisher, 'upload_caption'):
+        try:
+            publisher.upload_caption(result.video_id, Path(str(captions[0]["path"])), str(captions[0]["language"]), str(captions[0]["name"]))
+            caption_uploaded = True
+        except Exception as e:
+            logger.warning(f"Failed to upload caption: {e}")
+
+    return {
+        "success": True,
+        "video_id": result.video_id,
+        "status": result.status,
+        "thumbnail_uploaded": result.thumbnail_uploaded,
+        "caption_uploaded": caption_uploaded,
+        "bytes_uploaded": result.bytes_uploaded
+    }
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -9,6 +9,13 @@ from unittest.mock import patch
 import pytest
 pytest.importorskip("mcp")
 
+
+from veraxi_ymmp.mcp_server import (
+    list_projects,
+    load_project,
+    save_project_script,
+    upload_project_to_youtube
+)
 from veraxi_ymmp.mcp_server import (
     compile_project,
     generate_thumbnail_tool,
@@ -219,3 +226,65 @@ def test_launch_ymm4_desktop(mock_popen, monkeypatch: pytest.MonkeyPatch, tmp_pa
     res = launch_ymm4_desktop("testproj")
     assert res["launched"] is True
     assert res["executable"] == "fake_path.exe"
+
+
+
+def test_list_projects(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    proj_dir = tmp_path / "projects" / "testproj"
+    proj_dir.mkdir(parents=True)
+    (proj_dir / "script.json").touch()
+
+    res = list_projects()
+    assert len(res["projects"]) == 1
+    assert res["projects"][0]["name"] == "testproj"
+    assert res["projects"][0]["has_script"] is True
+    assert res["projects"][0]["has_broll_manifest"] is False
+
+def test_load_project(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    proj_dir = tmp_path / "projects" / "testproj"
+    proj_dir.mkdir(parents=True)
+
+    script_data = [{"character": "zundamon", "text": "hello"}]
+    (proj_dir / "script.json").write_text(json.dumps(script_data))
+    (proj_dir / "qa_test.mp4").touch()
+
+    res = load_project("projects/testproj")
+    assert res["script"] == script_data
+    assert res["qa_video_path"] is not None
+    assert res["thumbnail_path"] is None
+
+def test_save_project_script(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    proj_dir = tmp_path / "projects" / "testproj"
+    proj_dir.mkdir(parents=True)
+
+    script_data = [{"character": "zundamon", "text": "a" * 40}] # > 35 chars
+    res = save_project_script("projects/testproj", json.dumps(script_data))
+
+    assert res["success"] is True
+    assert len(res["warnings"]) == 1
+    assert (proj_dir / "script.json").exists()
+
+@patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_video")
+@patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_caption")
+def test_upload_project_to_youtube(mock_upload_caption, mock_upload_video, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    proj_dir = tmp_path / "projects" / "testproj"
+    proj_dir.mkdir(parents=True)
+    (proj_dir / "qa_test.mp4").touch()
+    (proj_dir / "test.srt").touch()
+
+    from veraxi_ymmp.ir import UploadResult
+    mock_upload_video.return_value = UploadResult(video_id="fakeid", status="uploaded", thumbnail_uploaded=False, bytes_uploaded=100, url="http://fakeurl")
+
+    res = upload_project_to_youtube(
+        project_dir="projects/testproj",
+        title="test",
+        mock_upload=True
+    )
+
+    assert res["success"] is True
+    assert res["video_id"] == "fakeid"
+    assert res["caption_uploaded"] is True
