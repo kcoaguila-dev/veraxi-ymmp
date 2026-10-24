@@ -1,7 +1,4 @@
 import json
-from pathlib import Path
-from unittest.mock import patch
-import pytest
 
 from veraxi_ymmp.cli import _cmd_export_spec
 

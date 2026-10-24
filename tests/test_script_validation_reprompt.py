@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 import pytest
 from veraxi_ymmp.cli import _cmd_validate
 
