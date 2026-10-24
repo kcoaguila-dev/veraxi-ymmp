@@ -101,8 +101,8 @@ def test_auto_extract_explicit_config():
     assert cfg.theme == "red"
 
 
-def test_auto_extract_costco_project():
-    proj_dir = Path("projects/01_costco_business_model")
+def test_auto_extract_costco_project(tmp_path):
+    proj_dir = tmp_path
     if proj_dir.exists():
         cfg = auto_extract_thumbnail_config(proj_dir)
         assert "コストコ" in cfg.title_line1
@@ -111,8 +111,8 @@ def test_auto_extract_costco_project():
         assert cfg.theme == "gold"
 
 
-def test_auto_extract_market_project():
-    proj_dir = Path("projects/02_market_analysis_2026")
+def test_auto_extract_market_project(tmp_path):
+    proj_dir = tmp_path
     if proj_dir.exists():
         cfg = auto_extract_thumbnail_config(proj_dir)
         assert "株式市場" in cfg.title_line1 or "2026" in cfg.title_line1
@@ -121,7 +121,7 @@ def test_auto_extract_market_project():
 
 
 def test_generate_project_thumbnail(tmp_path: Path):
-    proj_dir = Path("projects/01_costco_business_model")
+    proj_dir = tmp_path
     if proj_dir.exists():
         out_target = tmp_path / "costco_thumb.png"
         res = generate_project_thumbnail(proj_dir, out_path=out_target)

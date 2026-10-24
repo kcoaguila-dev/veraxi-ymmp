@@ -238,7 +238,7 @@ class TestTier1Feature1DomainModelsAndProtocols:
             description="解説動画です",
             tags=["コストコ", "ビジネス", "ずんだもん"],
             category_id="27",
-            privacy_status="unlisted",
+            privacy_status="private",
             made_for_kids=False,
             publish_at="2026-11-01T12:00:00Z",
             language="ja",
@@ -247,7 +247,7 @@ class TestTier1Feature1DomainModelsAndProtocols:
         assert meta.title == "コストコの秘密"
         assert len(meta.tags) == 3
         assert meta.category_id == "27"
-        assert meta.privacy_status == "unlisted"
+        assert meta.privacy_status == "private"
         assert meta.thumbnail_path == thumb
 
     def test_t1_f1_upload_result_instantiation(self) -> None:
@@ -332,10 +332,19 @@ class TestTier1Feature1DomainModelsAndProtocols:
                 return UploadResult(video_id="d1", url="", status="uploaded")
             def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
                 return True
+            def upload_caption(self, video_id: str, caption_path: Path, language: str = "ja", name: str = "Japanese", is_draft: bool = False) -> bool:
+                return True
 
         class DummyAnalytics:
             def fetch_retention_curve(self, video_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Tuple[float, float]]:
                 return [(0.0, 1.0), (1.0, 0.5)]
+            def fetch_variant_metrics(self, video_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None):
+                return {}
+            def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
+                from veraxi_ymmp.ports import VideoStatsReport
+                return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
+            def get_channel_info(self):
+                return {}
 
         pub = DummyPublisher()
         ana = DummyAnalytics()
@@ -689,7 +698,7 @@ class TestTier1Feature7CLISubcommands:
             assert exc.value.code == 0
 
     @skip_m4
-    def test_t1_f7_cli_qa_mock_mode(self, tmp_path: Path) -> None:
+    def test_t1_f7_cli_qa_mock_mode(self, fake_project: Path, tmp_path: Path) -> None:
         """Verifies veraxi-ymmp youtube qa --mock succeeds with valid arguments."""
         from veraxi_ymmp.cli import main
         with patch.object(
@@ -702,7 +711,7 @@ class TestTier1Feature7CLISubcommands:
                 "--video-id",
                 "mock_vid_123",
                 "--project",
-                "projects/01_costco_business_model",
+                str(fake_project),
                 "--output",
                 str(tmp_path),
                 "--mock",
@@ -1119,11 +1128,11 @@ class TestTier2Feature7CLISubcommandsBoundaries:
             assert exc.value.code != 0
 
     @skip_m4
-    def test_t2_f7_cli_qa_missing_video_id(self) -> None:
+    def test_t2_f7_cli_qa_missing_video_id(self, fake_project) -> None:
         """Verifies invoking youtube qa without --video-id exits with error."""
         from veraxi_ymmp.cli import main
         with patch.object(
-            sys, "argv", ["veraxi-ymmp", "youtube", "qa", "--project", "projects/01_costco_business_model"]
+            sys, "argv", ["veraxi-ymmp", "youtube", "qa", "--project", str(fake_project)]
         ):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1148,7 +1157,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
             assert exc.value.code != 0
 
     @skip_m4
-    def test_t2_f7_cli_qa_invalid_threshold(self) -> None:
+    def test_t2_f7_cli_qa_invalid_threshold(self, fake_project) -> None:
         """Verifies passing invalid non-float threshold exits with error."""
         from veraxi_ymmp.cli import main
         with patch.object(
@@ -1161,7 +1170,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
                 "--video-id",
                 "vid_123",
                 "--project",
-                "projects/01_costco_business_model",
+                str(fake_project),
                 "--threshold",
                 "not_a_number",
             ],
@@ -1203,10 +1212,10 @@ class TestTier3CrossFeatureCombinations:
         assert result.video_id in adapter.uploaded_thumbnails
 
     @skip_m3
-    def test_t3_retention_qa_correlating_real_project_script(self, tmp_path: Path) -> None:
+    def test_t3_retention_qa_correlating_real_project_script(self, fake_project: Path, tmp_path: Path) -> None:
         """Cross-Feature 2: Retention QA analysis correlating simulated drop with real Costco project script."""
-        script_file = Path("projects/01_costco_business_model/script.json")
-        assert script_file.is_file(), "Costco script must exist"
+        script_file = fake_project / "script.json"
+        assert script_file.is_file(), "fake_project script must exist"
 
         script_entries = json.loads(script_file.read_text(encoding="utf-8"))
         # Construct timeline from entries
@@ -1234,8 +1243,8 @@ class TestTier3CrossFeatureCombinations:
         ir = TimelineIR(fps=fps, total_frames=cur_frame, voice_clips=voice_clips)
 
         # Inject simulated 12% drop at Cut #2
-        cut2_start_ratio = voice_clips[2].start_frame / cur_frame
-        cut2_mid_ratio = (voice_clips[2].start_frame + (voice_clips[2].length // 2)) / cur_frame
+        cut2_start_ratio = voice_clips[-1].start_frame / cur_frame
+        cut2_mid_ratio = (voice_clips[-1].start_frame + (voice_clips[-1].length // 2)) / cur_frame
 
         curve = [
             (0.00, 1.00),
@@ -1248,8 +1257,8 @@ class TestTier3CrossFeatureCombinations:
         report = engine.correlate(ir, curve, video_title="コストコビジネスモデル")
         assert len(report.dropoff_points) >= 1
         assert report.dropoff_points[0].cut_index == 2
-        assert report.dropoff_points[0].speaker == voice_clips[2].character
-        assert report.dropoff_points[0].subtitle_text == voice_clips[2].text
+        assert report.dropoff_points[0].speaker == voice_clips[-1].character
+        assert report.dropoff_points[0].subtitle_text == voice_clips[-1].text
 
     @skip_m2
     def test_t3_upload_retry_recovery_then_thumbnail_success(
@@ -1309,7 +1318,7 @@ class TestTier3CrossFeatureCombinations:
             assert exc.value.code == 0
 
     @skip_m4
-    def test_t3_cli_qa_generates_verified_files_on_disk(self, tmp_path: Path) -> None:
+    def test_t3_cli_qa_generates_verified_files_on_disk(self, fake_project: Path, tmp_path: Path) -> None:
         """Cross-Feature 6: CLI qa execution produces real JSON and Markdown files on disk."""
         from veraxi_ymmp.cli import main
         out_dir = tmp_path / "cli_qa_out"
@@ -1323,7 +1332,7 @@ class TestTier3CrossFeatureCombinations:
                 "--video-id",
                 "mock_chain_qa",
                 "--project",
-                "projects/01_costco_business_model",
+                str(fake_project),
                 "--output",
                 str(out_dir),
                 "--mock",
@@ -1366,7 +1375,7 @@ class TestTier4RealWorldApplicationScenarios:
 
     @skip_m2
     @skip_m3
-    def test_t4_real_world_costco_project_full_lifecycle(self, tmp_path: Path) -> None:
+    def test_t4_real_world_costco_project_full_lifecycle(self, fake_project: Path, tmp_path: Path) -> None:
         """
         Scenario 1: Realistic full publication and QA audit on projects/01_costco_business_model.
         Verifies:
@@ -1376,7 +1385,7 @@ class TestTier4RealWorldApplicationScenarios:
         4. Correlating drop-offs with dialogue lines and B-roll visuals
         5. Exporting JSON & Markdown reports to artifacts
         """
-        script_path = Path("projects/01_costco_business_model/script.json")
+        script_path = fake_project / "script.json"
         entries = json.loads(script_path.read_text(encoding="utf-8"))
 
         fps = 30
@@ -1503,7 +1512,7 @@ class TestTier4RealWorldApplicationScenarios:
 
     @skip_m4
     def test_t4_automated_ci_pipeline_headless_execution(
-        self, small_video_file: Path, tmp_path: Path
+        self, small_video_file: Path, fake_project: Path, tmp_path: Path
     ) -> None:
         """
         Scenario 5: Completely headless CI pipeline script execution running upload, status, and qa in sequence.
@@ -1548,7 +1557,7 @@ class TestTier4RealWorldApplicationScenarios:
                 "--video-id",
                 "mock_vid_ci",
                 "--project",
-                "projects/01_costco_business_model",
+                str(fake_project),
                 "--output",
                 str(qa_out),
                 "--mock",

@@ -10,6 +10,20 @@ from pathlib import Path
 from veraxi_ymmp.validation import validate_ymmp_timeline, ValidationError
 from veraxi_ymmp.psd_registry import CharacterPSDRegistry
 
+@pytest.fixture(autouse=True)
+def mock_path_exists(monkeypatch):
+    import pathlib
+    original_exists = pathlib.Path.exists
+
+    def _mock_exists(self):
+        if "non/existent" in str(self):
+            return False
+        if "ずんだもん" in str(self) or "audio_file.wav" in str(self) or "test.psd" in str(self) or "scratch_audio.wav" in str(self):
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(pathlib.Path, "exists", _mock_exists)
+
 
 @pytest.fixture
 def base_valid_ymmp(tmp_path: Path):

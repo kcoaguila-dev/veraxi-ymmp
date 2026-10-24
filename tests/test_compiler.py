@@ -2,6 +2,26 @@ import os
 import json
 from pathlib import Path
 import pytest
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
+    YMMPCompiler translation and timeline AST logic are under test here;
+    strict timeline file validation is tested in test_ymmp_validation.py.
+    """
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.validation.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
+
 import copy
 from veraxi_ymmp.compiler import YMMPCompiler
 from veraxi_ymmp.voicevox import VoicevoxClient

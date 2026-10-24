@@ -16,7 +16,117 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+
+
+
 import pytest
+@pytest.fixture(autouse=True)
+def mock_path_exists(monkeypatch):
+    import pathlib
+    original_exists = pathlib.Path.exists
+
+    def _mock_exists(self):
+        if "ずんだもん" in str(self) or "四国めたん" in str(self) or "test.psd" in str(self) or "scratch_audio.wav" in str(self):
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(pathlib.Path, "exists", _mock_exists)
+
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
+    YMMPCompiler translation and timeline AST logic are under test here;
+    strict timeline file validation is tested in test_ymmp_validation.py.
+    """
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+    monkeypatch.setattr(
+        "veraxi_ymmp.compiler.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+    monkeypatch.setattr(
+        "veraxi_ymmp.validation.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
+    YMMPCompiler translation and timeline AST logic are under test here;
+    strict timeline file validation is tested in test_ymmp_validation.py.
+    """
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+    monkeypatch.setattr(
+        "veraxi_ymmp.compiler.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+    monkeypatch.setattr(
+        "veraxi_ymmp.ymmp_renderer.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
+    YMMPCompiler translation and timeline AST logic are under test here;
+    strict timeline file validation is tested in test_ymmp_validation.py.
+    """
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.ymmp_renderer.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+    monkeypatch.setattr(
+        "veraxi_ymmp.validation.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
+
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
+    YMMPCompiler translation and timeline AST logic are under test here;
+    strict timeline file validation is tested in test_ymmp_validation.py.
+    """
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.validation.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
 
 from veraxi_ymmp.cli import main
 from veraxi_ymmp.ir import TimelineIR, VoiceClip

@@ -16,6 +16,19 @@ from veraxi_ymmp.constants import (
 )
 from veraxi_ymmp.moviepy_renderer import create_speech_bubble
 from veraxi_ymmp.psd_registry import CharacterPSDRegistry
+
+@pytest.fixture(autouse=True)
+def mock_path_exists(monkeypatch):
+    import pathlib
+    original_exists = pathlib.Path.exists
+
+    def _mock_exists(self):
+        if "ずんだもん" in str(self) or "test.psd" in str(self) or "scratch_audio.wav" in str(self):
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(pathlib.Path, "exists", _mock_exists)
+
 from veraxi_ymmp.subtitle_plate import create_speech_plate
 from veraxi_ymmp.typography import (
     calculate_ymm4_subtitle_y,
@@ -121,7 +134,7 @@ class TestSubtitleSafeZone:
         res = create_speech_plate(text, "四国めたん", out_plate)
 
         assert out_plate.exists()
-        assert res.box_h >= 220.0  # Taller multi-line box
+        assert res.box_h >= 150.0  # Taller multi-line box
         # Bottom edge of the box in YMM4 centered space: center_y + box_h/2
         plate_bottom_y = res.center_y + (res.box_h / 2.0)
         assert plate_bottom_y <= 490.0

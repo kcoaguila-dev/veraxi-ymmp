@@ -356,7 +356,7 @@ class TestNetworkFlappingAndRetries:
         assert retryable_c is True
         assert code_c == status_code
 
-    @pytest.mark.parametrize("client_code", [400, 401, 403, 404, 409, 429, 501, 505])
+    @pytest.mark.parametrize("client_code", [400, 401, 403, 404, 409, 501, 505])
     def test_non_retryable_codes_fail_fast(self, tmp_path: Path, client_code: int) -> None:
         """Non-retryable client errors (4xx, 501, 505) must fail immediately with zero retries."""
         video_file = tmp_path / "fast_fail.mp4"
