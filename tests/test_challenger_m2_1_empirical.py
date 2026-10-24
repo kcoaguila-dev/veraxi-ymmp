@@ -1,3 +1,19 @@
+from __future__ import annotations
+import json
+from pathlib import Path
+import struct
+import sys
+from typing import Any, Dict, List, Optional
+from unittest.mock import patch
+import pytest
+from veraxi_ymmp.cli import main
+from veraxi_ymmp.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.pipeline import ProjectPipeline
+from veraxi_ymmp.srt_generator import _format_srt_time, generate_srt
+from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+
+
+
 """Empirical and adversarial test suite for Milestone 2 deliverables.
 
 Author: challenger_2_m2_1
@@ -8,132 +24,15 @@ Scope:
 - R4: Error handling, edge cases, and Clean Architecture invariants.
 """
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-import struct
-import sys
-from typing import Any, Dict, List, Optional
-from unittest.mock import patch
 
 
 
 
-import pytest
-@pytest.fixture(autouse=True)
-def mock_path_exists(monkeypatch):
-    import pathlib
-    original_exists = pathlib.Path.exists
-
-    def _mock_exists(self):
-        if "ずんだもん" in str(self) or "四国めたん" in str(self) or "test.psd" in str(self) or "scratch_audio.wav" in str(self):
-            return True
-        return original_exists(self)
-
-    monkeypatch.setattr(pathlib.Path, "exists", _mock_exists)
-
-
-@pytest.fixture(autouse=True)
-def mock_ymmp_timeline_validation(monkeypatch):
-    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
-    YMMPCompiler translation and timeline AST logic are under test here;
-    strict timeline file validation is tested in test_ymmp_validation.py.
-    """
-    dummy_result = {
-        "status": "PASS",
-        "voice_count": 1,
-        "tachie_count": 1,
-        "plate_count": 0,
-        "bgm_count": 0,
-    }
-    monkeypatch.setattr(
-        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-    monkeypatch.setattr(
-        "veraxi_ymmp.compiler.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-    monkeypatch.setattr(
-        "veraxi_ymmp.validation.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-
-@pytest.fixture(autouse=True)
-def mock_ymmp_timeline_validation(monkeypatch):
-    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
-    YMMPCompiler translation and timeline AST logic are under test here;
-    strict timeline file validation is tested in test_ymmp_validation.py.
-    """
-    dummy_result = {
-        "status": "PASS",
-        "voice_count": 1,
-        "tachie_count": 1,
-        "plate_count": 0,
-        "bgm_count": 0,
-    }
-    monkeypatch.setattr(
-        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-    monkeypatch.setattr(
-        "veraxi_ymmp.compiler.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-    monkeypatch.setattr(
-        "veraxi_ymmp.ymmp_renderer.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-
-@pytest.fixture(autouse=True)
-def mock_ymmp_timeline_validation(monkeypatch):
-    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
-    YMMPCompiler translation and timeline AST logic are under test here;
-    strict timeline file validation is tested in test_ymmp_validation.py.
-    """
-    dummy_result = {
-        "status": "PASS",
-        "voice_count": 1,
-        "tachie_count": 1,
-        "plate_count": 0,
-        "bgm_count": 0,
-    }
-    monkeypatch.setattr(
-        "veraxi_ymmp.ymmp_renderer.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
-    monkeypatch.setattr(
-        "veraxi_ymmp.validation.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
 
 
 
-@pytest.fixture(autouse=True)
-def mock_ymmp_timeline_validation(monkeypatch):
-    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
-    YMMPCompiler translation and timeline AST logic are under test here;
-    strict timeline file validation is tested in test_ymmp_validation.py.
-    """
-    dummy_result = {
-        "status": "PASS",
-        "voice_count": 1,
-        "tachie_count": 1,
-        "plate_count": 0,
-        "bgm_count": 0,
-    }
-    monkeypatch.setattr(
-        "veraxi_ymmp.validation.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
 
 
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.srt_generator import _format_srt_time, generate_srt
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
 
 
 def _create_minimal_wav(path: Path) -> Path:
@@ -227,21 +126,6 @@ def project_factory(tmp_path: Path):
 # =============================================================================
 
 
-
-@pytest.fixture(autouse=True)
-def mock_ymmp_timeline_validation(monkeypatch):
-    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests."""
-    dummy_result = {
-        "status": "PASS",
-        "voice_count": 1,
-        "tachie_count": 1,
-        "plate_count": 0,
-        "bgm_count": 0,
-    }
-    monkeypatch.setattr(
-        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
-        lambda *args, **kwargs: dummy_result,
-    )
 
 class TestPipelineRunEmpiricalIntegration:
     """Empirical verification of ProjectPipeline.run coordinating upload, thumbnail, and captions."""
