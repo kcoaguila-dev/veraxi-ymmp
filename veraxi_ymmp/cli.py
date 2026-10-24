@@ -42,13 +42,24 @@ def _cmd_run(argv: List[str]) -> None:
 
     args = parser.parse_args(argv)
 
+    import shutil
+    from datetime import datetime
+
+    target_path = Path(args.project_dir)
+    if target_path.is_file() and target_path.suffix == ".json":
+        # Handle fast-track pipeline ingestion
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        tmp_project_dir = Path("projects") / f"auto_{timestamp}"
+        tmp_project_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(target_path, tmp_project_dir / "script.json")
+        print(f"Auto-generated project directory: {tmp_project_dir}")
+        args.project_dir = str(tmp_project_dir)
+
     if args.publish_at is not None:
         if args.privacy != "private":
             print("YouTube requires privacy_status='private' for scheduled uploads", file=sys.stderr)
             sys.exit(1)
         try:
-            from datetime import datetime
-
             datetime.fromisoformat(args.publish_at.replace("Z", "+00:00"))
         except (ValueError, TypeError) as exc:
             print(f"Error: Invalid ISO-8601 publish_at format: '{args.publish_at}'. {exc}", file=sys.stderr)
@@ -174,13 +185,115 @@ def _cmd_youtube(argv: List[str]) -> None:
     from .cli_youtube import run
     run(argv)
 
+def _cmd_validate(argv: List[str]) -> None:
+    """Validate a JSON script and generate LLM re-prompt on failure."""
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp validate",
+        description="Validate a script JSON file.",
+    )
+    parser.add_argument("script", type=str, help="Path to the script .json file")
+    args = parser.parse_args(argv)
+
+    script_path = Path(args.script)
+    if not script_path.exists():
+        print(f"Error: Script file not found: {script_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with open(script_path, 'r', encoding='utf-8') as f:
+            script_data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in script file: {e}", file=sys.stderr)
+        sys.exit(1)
+    except UnicodeDecodeError as e:
+        print(f"Error: Script file is not UTF-8 encoded: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not isinstance(script_data, list):
+        print("Error: Script must be a JSON array of objects.", file=sys.stderr)
+        sys.exit(1)
+
+    errors: List[str] = []
+
+    # Check heuristics manually for specific cut errors, then rely on validate_director_script for correctness
+    from .script import VALID_EMOTIONS, VALID_MOTIONS
+
+    for idx, entry in enumerate(script_data):
+        if not isinstance(entry, dict):
+            continue
+        if "type" in entry and "character" not in entry:
+            continue
+
+        char = entry.get("character", "unknown")
+        text = entry.get("text", "")
+        if isinstance(text, str) and len(text) > 40:
+            errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({len(text)} chars).")
+
+        emotion = entry.get("emotion")
+        if emotion is not None and emotion not in VALID_EMOTIONS:
+            errors.append(f"Cut #{idx} ({char}): Invalid emotion '{emotion}'. Valid emotions are: [{', '.join(VALID_EMOTIONS)}]")
+
+    try:
+        from .script import validate_director_script
+        validate_director_script(script_data)
+    except ValueError as e:
+        if str(e) not in errors:
+             errors.append(str(e))
+
+    if errors:
+        lines = [
+            "================ LLM RE-PROMPT BLOCK (COPY & PASTE TO AI) ================",
+            "The script you provided failed schema validation with the following errors:"
+        ]
+        for error in errors:
+            lines.append(f"  - {error}")
+        lines.append("Please fix these specific entries while preserving the rest of the script, and return the complete corrected JSON block.")
+        lines.append("==========================================================================")
+        print("\n".join(lines))
+        sys.exit(1)
+    else:
+        print("Script validation passed!")
+
+def _cmd_export_spec(argv: List[str]) -> None:
+    """Export universal prompt markdown or JSON Schema."""
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp export-spec",
+        description="Export Universal AI Prompt Markdown or JSON Schema.",
+    )
+    parser.add_argument("--output", type=str, help="Output file path (default: stdout)")
+    parser.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Export format (markdown or json)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.format == "json":
+        from .schema import get_director_script_schema
+        out_content = json.dumps(get_director_script_schema(), indent=2, ensure_ascii=False)
+    else:
+        # Load markdown
+        md_path = Path(__file__).parent / "templates" / "UNIVERSAL_AI_PROMPT.md"
+        out_content = md_path.read_text(encoding="utf-8")
+        # Replace or append character list if needed
+        from .constants import DEFAULT_SPEAKER_MAP
+        chars = ", ".join(f"`{c}`" for c in DEFAULT_SPEAKER_MAP.keys())
+        out_content += f"\n\n## Available Characters\n{chars}\n"
+
+    if args.output:
+        Path(args.output).write_text(out_content, encoding="utf-8")
+        print(f"Exported to {args.output}")
+    else:
+        print(out_content)
+
 def main() -> None:
     """Main entry point for the CLI."""
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate"}:
         subcmd = sys.argv[1]
         sub_argv = sys.argv[2:]
         if subcmd == "run":
@@ -193,6 +306,10 @@ def main() -> None:
             _cmd_thumbnail(sub_argv)
         elif subcmd == "youtube":
             _cmd_youtube(sub_argv)
+        elif subcmd == "export-spec":
+            _cmd_export_spec(sub_argv)
+        elif subcmd == "validate":
+            _cmd_validate(sub_argv)
         return
 
     parser = argparse.ArgumentParser(
