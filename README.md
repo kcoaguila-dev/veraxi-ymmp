@@ -11,7 +11,7 @@ Clean-architecture multi-target video production engine for YukkuriMovieMaker4 (
 `veraxi-ymmp` implements a clean two-stage authoring pipeline and multi-target compilation engine:
 
 1. **Writer Stage:** Generates a purely factual dialogue script (`WriterScriptEntry`).
-2. **Director Stage:** Enriches the dialogue with staging metadata (`emotion`, `motion`, `bgm`, `sfx`, `image`, `subtitle_position`) without altering factual text (`DirectorScriptEntry`).
+2. **Director Stage:** Enriches dialogue with staging metadata (`emotion`, `motion`, `bgm`, `sfx`, `image`, `subtitle_position`) without altering factual text (`DirectorScriptEntry`).
 3. **Canonical Intermediate Representation (`TimelineIR`):** Synthesizes timing data, VoiceVox phonemes, and visual layout into an engine-agnostic timeline model.
 4. **Target Exporters:** Converts `TimelineIR` into target platform projects through isolated adapters implementing the `TimelineExporter` protocol.
 
@@ -30,95 +30,246 @@ Script (Writer/Director) ──> VoiceVox TTS ──> TimelineIR ──┬──
 
 | Target Format | Implementation | Description |
 |---|---|---|
-| **YMM4 Project (`.ymmp`)** | [`YMMPRenderer`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/ymmp_renderer.py) | Clones template timeline items, embeds Brotli-compressed voice caches, and configures phonetic mouth animations. |
-| **Premiere Pro (`.xml`)** | [`PremiereExporter`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/premiere_exporter.py) | Generates Final Cut Pro XML (xmeml) with 4 video tracks (BG, Tachie, B-Roll, Subtitle speech bubbles) and 3 audio tracks. |
-| **MoviePy Preview (`.mp4`)** | [`MoviePyRenderer`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/moviepy_renderer.py) | High-speed software renderer producing 1080p preview videos with speech bubbles and audio ducking for CI/CD and pre-flight QA. |
-| **After Effects (`.jsx`)** | [`AfterEffectsRenderer`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/ae_renderer.py) | Generates ExtendScript automation files with slider-driven lip-sync and character bounce effects. |
-| **SRT Subtitles (`.srt`)** | [`generate_srt`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/srt_generator.py) | Generates standard SRT subtitle files with millisecond precision for Premiere Pro caption tracks. |
-| **YouTube Thumbnail (`.png`)** | [`ThumbnailGenerator`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/thumbnail.py) | 1920x1080 publication-ready thumbnails using 3-split rule (3分割法), outline typography (袋文字), and timestamp dead-zone protection. |
+| **YMM4 Project (`.ymmp`)** | [`YMMPRenderer`](veraxi_ymmp/ymmp_renderer.py) | Clones template timeline items, embeds Brotli-compressed voice caches, and configures phonetic mouth animations. |
+| **Premiere Pro (`.xml`)** | [`PremiereExporter`](veraxi_ymmp/premiere_exporter.py) | Generates Final Cut Pro XML (xmeml) with 4 video tracks (BG, Tachie, B-Roll, Subtitle speech bubbles) and 3 audio tracks. |
+| **MoviePy Preview (`.mp4`)** | [`MoviePyRenderer`](veraxi_ymmp/moviepy_renderer.py) | High-speed software renderer producing 1080p preview videos with speech bubbles and audio ducking for CI/CD and pre-flight QA. |
+| **After Effects (`.jsx`)** | [`AfterEffectsRenderer`](veraxi_ymmp/ae_renderer.py) | Generates ExtendScript automation files with slider-driven lip-sync and character bounce effects. |
+| **SRT Subtitles (`.srt`)** | [`generate_srt`](veraxi_ymmp/srt_generator.py) | Generates standard SRT subtitle files with millisecond precision for Premiere Pro caption tracks. |
+| **YouTube Thumbnail (`.png`)** | [`ThumbnailGenerator`](veraxi_ymmp/thumbnail.py) | 1920x1080 publication-ready thumbnails using 3-split rule (3分割法), outline typography (袋文字), and timestamp dead-zone protection. |
 
 ---
 
 ## Quality Assurance & Architectural Fitness Guardrails
 
-`veraxi-ymmp` enforces systematic architectural and privacy invariants verified by automated fitness tests in [`tests/test_architectural_fitness.py`](file:///c:/dev/workspace/active/veraxi-ymmp/tests/test_architectural_fitness.py):
+`veraxi-ymmp` enforces systematic architectural and privacy invariants verified by automated fitness tests in [`tests/test_architectural_fitness.py`](tests/test_architectural_fitness.py):
 
 - **Domain Layer Purity:** Domain modules (`ir.py`, `script.py`, `constants.py`) have zero dependencies on infrastructure, rendering, or delivery adapters.
 - **Cross-Adapter Isolation:** Exporter adapters never import directly from peer exporter adapters, preventing coupling and circular dependencies.
 - **Module Size Ceilings:** Strict 900-line limit per module preventing monolithic God objects.
-- **Privacy & Local Path Scanner:** Automated scanner ([`scripts/check_no_local_paths.py`](file:///c:/dev/workspace/active/veraxi-ymmp/scripts/check_no_local_paths.py)) guarantees zero hardcoded developer usernames or local machine paths in repository source code.
+- **Privacy & Local Path Scanner:** Automated scanner ([`scripts/check_no_local_paths.py`](scripts/check_no_local_paths.py)) guarantees zero hardcoded developer usernames or local machine paths in repository source code.
 - **Secret Detection:** Gitleaks and Yelp detect-secrets guard commit history and staging against credential leakage.
-- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`veraxi_ymmp/audio_normalizer.py`](file:///c:/dev/workspace/active/veraxi-ymmp/veraxi_ymmp/audio_normalizer.py)).
+- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`veraxi_ymmp/audio_normalizer.py`](veraxi_ymmp/audio_normalizer.py)).
 
 ---
 
-## Usage
+## Prerequisites & Installation
 
-### 1. Unified Project Runner (Recommended)
-Synthesizes speech, compiles `TimelineIR`, exports Premiere Pro FCPXML, compiles YMM4 project, renders MoviePy preview video, and auto-generates the YouTube thumbnail:
+### 1. System Requirements
+- **Python:** 3.10, 3.11, 3.12, or 3.13
+- **FFmpeg:** Installed and available on system `PATH` (required for MoviePy rendering and audio normalization).
+- **VOICEVOX Engine (Local):** Running on `http://127.0.0.1:50021` (required for speech synthesis). Download free at [voicevox.hiroshiba.jp](https://voicevox.hiroshiba.jp/).
+- **YukkuriMovieMaker4 (Optional):** If rendering final `.ymmp` projects via hardware acceleration on Windows.
+
+### 2. Setup Virtual Environment
 ```bash
-veraxi-ymmp run projects/01_costco_business_model/
-# or: python -m veraxi_ymmp.cli run projects/01_costco_business_model/
+git clone https://github.com/kcoaguila-dev/veraxi-ymmp.git
+cd veraxi-ymmp
+python -m venv venv
+
+# Windows
+.\venv\Scripts\activate
+# Linux / macOS
+source venv/bin/activate
+
+# Install base engine + dev tools + youtube + mcp
+pip install -e ".[dev,mcp,youtube]"
 ```
 
-Generated project directory artifacts:
-- `audio/` - Synthesized VoiceVox audio WAV files & phoneme metadata
-- `premiere/` - Adobe Premiere Pro FCPXML sequence
-- `ymmp/final_video.ymmp` - Ready-to-render YMM4 project
-- `qa_test.mp4` - Full fast-preview video
-- `thumbnail.png` - Publication-ready 1920x1080 YouTube thumbnail
+---
 
-### 2. Standalone Thumbnail & B-Roll Generation
-```bash
-# Auto-derive thumbnail from project directory
-veraxi-ymmp thumbnail projects/01_costco_business_model/
+## End-to-End Workflow (Manual / No AI Required)
 
-# Render B-roll slides from declarative JSON manifest
-veraxi-ymmp broll projects/02_market_analysis_2026/broll_manifest.json
+`veraxi-ymmp` is a deterministic code engine. You do not need any AI agent to produce videos from start to finish. A human creator can execute the complete workflow using standard configuration files:
 
-# Or specify custom thumbnail output in compiler CLI
-veraxi-ymmp examples/full_template.ymmp artifacts/script.json artifacts/output.ymmp --thumbnail artifacts/thumbnail.png
+```
+Step 1: Write script.json (Writer / Director dialogue)
+   │
+Step 2: (Optional) Define broll_manifest.json for visual slides
+   │
+Step 3: Run pipeline: `veraxi-ymmp run projects/my_video/`
+   │    ├── Generates audio via local VoiceVox
+   │    ├── Builds TimelineIR
+   │    ├── Exports Premiere XML + YMM4 (.ymmp)
+   │    ├── Renders fast QA preview video (qa_test.mp4)
+   │    └── Generates high-CTR thumbnail (thumbnail.png)
+   │
+Step 4: Review qa_test.mp4 or polish in YMM4 / Premiere Pro
+   │
+Step 5: Normalize audio loudness (-14.0 LUFS)
+   │
+Step 6: Publish & Schedule to YouTube with synced SRT captions
+   │
+Step 7: Analyze retention telemetry & A/B test thumbnails
 ```
 
-### 3. Audio Loudness Normalization
-Normalize exported video audio to social media platform standards:
-```bash
-# Normalize for YouTube (-14 LUFS)
-veraxi-ymmp normalize output.mp4 -p youtube
+### Step 1: Create Project Directory & `script.json`
+Create a folder under `projects/my_video/` and write your dialogue in `script.json`:
 
-# Generate normalized videos for all platforms
-veraxi-ymmp normalize output.mp4 --all
+```json
+[
+  {
+    "character": "ずんだもん",
+    "text": "こんにちはなのだ！今日はClean Architectureについて解説するのだ！",
+    "emotion": "smile"
+  },
+  {
+    "character": "四国めたん",
+    "text": "よろしくお願いいたしますわ。基礎からしっかり学びましょう。",
+    "emotion": "normal"
+  }
+]
+```
+> Supported characters out-of-the-box: `ずんだもん` (Speaker ID 3), `四国めたん` (Speaker ID 2), `春日部つむぎ` (Speaker ID 8). Run `veraxi-ymmp --help` or inspect `veraxi_ymmp/constants.py` for speaker registries.
+
+### Step 2: (Optional) Create B-Roll Slide Graphics
+If your video contains informative slides or diagrams, define a `broll_manifest.json`:
+
+```json
+[
+  {
+    "slide_index": 1,
+    "headline": "Clean Architectureの4層構造",
+    "points": [
+      "Enterprise Business Rules",
+      "Application Business Rules",
+      "Interface Adapters",
+      "Frameworks & Drivers"
+    ],
+    "theme": "dark_slate"
+  }
+]
+```
+Render slide assets into high-resolution PNGs:
+```bash
+veraxi-ymmp broll projects/my_video/broll_manifest.json -o projects/my_video/broll/
 ```
 
-### 4. Optional YMM4 Hardware Rendering
+### Step 3: Run the Unified Pipeline
+Make sure the VOICEVOX engine is running on `127.0.0.1:50021`, then compile:
+
 ```bash
-# Windows environment variable for headless GPU export
-set YMM4_PATH=C:\Users\YourUser\Documents\YukkuriMovieMaker_v4_Lite\YukkuriMovieMaker.exe
+veraxi-ymmp run projects/my_video/
 ```
 
-### 5. YouTube Integration & Analytics
-To publish videos and retrieve stats, you must set up YouTube API access:
+**Common Flags:**
+- `--no-tts`: Skip VOICEVOX synthesis and use pre-recorded `.wav` files located in `projects/my_video/audio/`.
+- `--no-premiere`: Skip Adobe Premiere Pro XML export.
+- `--no-ymmp`: Skip YMM4 `.ymmp` project compilation.
+- `--no-qa`: Skip software rendering of `qa_test.mp4`.
+- `--qa-duration 15.0`: Render only the first 15 seconds for rapid visual inspection.
+- `--no-thumbnail`: Skip automatic thumbnail generation.
 
-1. **Create a GCP Project:** Go to Google Cloud Console and create a new project.
+**Outputs generated in `projects/my_video/`:**
+- `audio/`: Synthesized `.wav` voice tracks with exact phoneme timing.
+- `premiere/final_video.xml`: Multi-track sequence ready to import into Adobe Premiere Pro.
+- `ymmp/final_video.ymmp`: Fully configured YMM4 project file with lip-sync mouth animations and subtitle plates.
+- `qa_test.mp4`: Rendered preview MP4 with speech bubbles and audio ducking.
+- `thumbnail.png`: 1080p YouTube thumbnail with 3-split layout and high-contrast outline text.
+
+### Step 4: Final Editorial Polish (Optional)
+- **In YMM4:** Double-click `ymmp/final_video.ymmp` to review animations, adjust voice pitch, or export via GPU hardware encoder.
+- **In Premiere Pro:** File -> Import -> select `premiere/final_video.xml` to edit transitions, add color grading, or apply custom overlays.
+
+### Step 5: Audio Normalization
+Before uploading to YouTube, conform your final audio to YouTube's **-14.0 LUFS** loudness standard:
+```bash
+veraxi-ymmp normalize projects/my_video/final_video.mp4 -p youtube
+```
+Produces `projects/my_video/final_video_normalized.mp4`.
+
+---
+
+## YouTube Publishing, Automation & Analytics
+
+`veraxi-ymmp` provides an end-to-end suite for publishing videos, scheduling releases, and correlating retention metrics with script dialogue.
+
+### 1. Initial Google Cloud / OAuth Setup
+1. **Google Cloud Console:** Create a new project at [console.cloud.google.com](https://console.cloud.google.com/).
 2. **Enable APIs:** Enable both **YouTube Data API v3** and **YouTube Analytics API**.
-3. **Configure OAuth Consent:** Setup the OAuth consent screen. Choose "External", add yourself as a test user, and publish the app to "Production" to avoid the 7-day token expiration limit.
-4. **Create Credentials:** Create an OAuth 2.0 Client ID for a "Desktop app" and download the `client_secrets.json` file.
-5. **Install Extras:** Run `pip install -e ".[youtube]"`.
-6. **Authenticate:** Run `veraxi-ymmp youtube auth --client-secrets path/to/client_secrets.json`. This opens a browser to log in and saves your refresh token locally.
+3. **OAuth Consent Screen:**
+   - User Type: **External**
+   - Add your Google account under **Test Users**.
+   - Set Publishing Status to **In production** (to avoid the 7-day token expiration limit).
+4. **Create Credentials:** Create an OAuth client ID of type **Desktop app**, then download `client_secret.json`.
+5. **Authenticate Once:**
+   ```bash
+   veraxi-ymmp youtube auth --client-secrets /path/to/client_secret.json
+   ```
+   This opens your browser to authorize access, then securely writes your credentials to `~/.veraxi-ymmp/youtube_token.json` with restricted OS permissions (`0600`).
 
-*Note on Quotas:* The YouTube Data API has a default quota of 10,000 units/day (~1,600 units per video upload). Unverified API projects can only upload videos as "private" until they pass a YouTube API compliance audit.
-
-**Usage Examples:**
+### 2. Verify Channel Connection
+Check that your authenticated channel is detected properly:
 ```bash
-# Verify authentication setup and channel stats
 veraxi-ymmp youtube channel
-
-# Fetch metrics for specific videos as a JSON report
-veraxi-ymmp youtube stats --video-id YourVideoID1 --video-id YourVideoID2 --format json
-
-# CI/CD Usage
-# Export the token content to VERAXI_YOUTUBE_AUTHORIZED_USER_JSON in your GitHub Secrets
 ```
+
+### 3. Upload & Scheduled Publishing
+Upload any video with resumable streaming, automatic retry on rate limits, and thumbnail attachment:
+
+```bash
+veraxi-ymmp youtube upload projects/my_video/final_video_normalized.mp4 \
+    --title "Clean Architecture 解説【ずんだもん＆四国めたん】" \
+    --description "Clean Architectureの基本原則を初心者向けに解説します。" \
+    --tags "ずんだもん,VOICEVOX,CleanArchitecture,プログラミング" \
+    --privacy private \
+    --publish-at "2026-10-30T18:00:00Z" \
+    --thumbnail projects/my_video/thumbnail.png
+```
+
+You can also run synthesis and upload in a single automated step:
+```bash
+veraxi-ymmp run projects/my_video/ \
+    --upload-to-youtube \
+    --normalize \
+    --privacy private \
+    --publish-at "2026-10-30T18:00:00Z"
+```
+
+### 4. Check Upload & Processing Status
+Inspect processing status and privacy on YouTube servers:
+```bash
+veraxi-ymmp youtube status <VIDEO_ID>
+```
+
+### 5. Fetch Performance Analytics
+Query the YouTube Analytics API v2 directly from your terminal:
+
+```bash
+# Terminal table format
+veraxi-ymmp youtube stats --video-id <VIDEO_ID>
+
+# Day-by-day time-series export to Excel-ready CSV (UTF-8 BOM)
+veraxi-ymmp youtube stats --video-id <VIDEO_ID> --granularity day --format csv --output stats.csv
+
+# Machine-readable JSON output for automated dashboards
+veraxi-ymmp youtube stats --video-id <VIDEO_ID> --format json
+```
+**Metrics tracked:** `views`, `estimatedMinutesWatched`, `averageViewDuration`, `averageViewPercentage`, `likes`, `comments`, `shares`, `subscribersGained`, `subscribersLost`.
+
+### 6. Post-Publish Retention QA (Dialogue Drop-off Correlation)
+Correlate your YouTube audience watch curve against your dialogue cuts to see where viewers lose interest:
+```bash
+veraxi-ymmp youtube qa --video-id <VIDEO_ID> --project projects/my_video/
+```
+Generates a detailed correlation report in `projects/my_video/qa_reports/` highlighting the exact dialogue lines and timestamps associated with sharp retention drop-offs.
+
+### 7. Thumbnail A/B Testing
+Scientifically test multiple thumbnail variants:
+```bash
+# Initialize A/B experiment
+veraxi-ymmp youtube ab start --project projects/my_video/ --video-id <VIDEO_ID>
+
+# Rotate variants or evaluate current winner by CTR
+veraxi-ymmp youtube ab rotate --project projects/my_video/ --video-id <VIDEO_ID>
+veraxi-ymmp youtube ab evaluate --project projects/my_video/ --video-id <VIDEO_ID>
+veraxi-ymmp youtube ab commit --project projects/my_video/ --video-id <VIDEO_ID>
+```
+
+### 8. Headless / CI/CD Authentication
+For headless servers or GitHub Actions runners where browser login isn't possible:
+1. Copy the content of `~/.veraxi-ymmp/youtube_token.json`.
+2. Add it as an environment variable or repository secret named `VERAXI_YOUTUBE_AUTHORIZED_USER_JSON`.
+3. The adapter discovers this environment variable automatically with zero configuration.
 
 ---
 
@@ -126,7 +277,7 @@ veraxi-ymmp youtube stats --video-id YourVideoID1 --video-id YourVideoID2 --form
 
 ```bash
 # Install development dependencies
-pip install -e ".[dev]"
+pip install -e ".[dev,mcp,youtube]"
 
 # Run architectural fitness tests
 pytest tests/test_architectural_fitness.py -v
@@ -134,7 +285,7 @@ pytest tests/test_architectural_fitness.py -v
 # Run full test suite
 pytest
 
-# Lint and type check
+# Code quality & privacy scans
 ruff check veraxi_ymmp/ tests/ scripts/
 mypy veraxi_ymmp
 python scripts/check_no_local_paths.py --all
