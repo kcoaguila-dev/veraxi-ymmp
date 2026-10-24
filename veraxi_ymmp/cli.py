@@ -293,7 +293,7 @@ def main() -> None:
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve"}:
         subcmd = sys.argv[1]
         sub_argv = sys.argv[2:]
         if subcmd == "run":
@@ -310,6 +310,8 @@ def main() -> None:
             _cmd_export_spec(sub_argv)
         elif subcmd == "validate":
             _cmd_validate(sub_argv)
+        elif subcmd == "serve":
+            _cmd_serve(sub_argv)
         return
 
     parser = argparse.ArgumentParser(
@@ -581,3 +583,11 @@ def _compile(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     main()
+
+def _cmd_serve(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Start the veraxi-ymmp API server for the Studio frontend.")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
+    args = parser.parse_args(argv)
+
+    from veraxi_ymmp.api_server import serve
+    serve(port=args.port)
