@@ -123,7 +123,7 @@ class TestBoundaryAndEdgeCases:
             description=huge_str,
             tags=[huge_str, "", "tag with spaces", "🚀🎉", "日本語タグ"],
             category_id="0",
-            privacy_status="unlisted",
+            privacy_status="private",
             made_for_kids=True,
             publish_at="2026-12-31T23:59:59Z",
             language="zh-CN",
@@ -219,15 +219,11 @@ class TestProtocolRuntimeChecking:
 
     def test_video_publisher_valid_implementation(self) -> None:
         class ValidPublisher:
-            def upload_video(
-                self,
-                video_path: Path,
-                metadata: VideoPublishMetadata,
-                progress_callback: Optional[ProgressCallback] = None,
-            ) -> UploadResult:
-                return UploadResult(video_id="v", url="u", status="s")
-
-            def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
+            def upload_video(self, video_path, metadata, progress_callback=None):
+                return UploadResult(video_id="d1", url="", status="uploaded")
+            def upload_thumbnail(self, video_id, thumbnail_path):
+                return True
+            def upload_caption(self, video_id, caption_path, language="ja", name="", is_draft=False):
                 return True
 
         pub = ValidPublisher()
@@ -257,8 +253,10 @@ class TestProtocolRuntimeChecking:
     def test_video_publisher_pep544_runtime_checkable_semantics(self) -> None:
         """Under PEP 544, @runtime_checkable checks hasattr, not callability or type signatures."""
         class NonCallablePublisher:
-            upload_video = "not_a_method"
-            upload_thumbnail = "not_a_method_either"
+            upload_video = "not_callable"
+            upload_thumbnail = 42
+            upload_caption = 42
+            upload_caption = 42
 
         pub = NonCallablePublisher()
         # PEP 544 standard behavior: hasattr is True, so isinstance is True
@@ -268,13 +266,15 @@ class TestProtocolRuntimeChecking:
 
     def test_video_analytics_provider_valid_implementation(self) -> None:
         class ValidAnalytics:
-            def fetch_retention_curve(
-                self,
-                video_id: str,
-                start_date: Optional[str] = None,
-                end_date: Optional[str] = None,
-            ) -> List[Tuple[float, float]]:
+            def fetch_retention_curve(self, video_id, start_date=None, end_date=None):
                 return [(0.0, 1.0), (1.0, 0.5)]
+            def fetch_variant_metrics(self, video_id, start_date=None, end_date=None):
+                return {}
+            def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
+                from veraxi_ymmp.ports import VideoStatsReport
+                return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
+            def get_channel_info(self):
+                return ("id", "title")
 
         analytics = ValidAnalytics()
         assert isinstance(analytics, VideoAnalyticsProvider)
@@ -291,6 +291,9 @@ class TestProtocolRuntimeChecking:
         """Under PEP 544, @runtime_checkable checks hasattr, not callability or type signatures."""
         class NonCallableAnalytics:
             fetch_retention_curve = 12345
+            fetch_variant_metrics = 12345
+            fetch_stats_report = 12345
+            get_channel_info = 12345
 
         analytics = NonCallableAnalytics()
         # PEP 544 standard behavior: hasattr is True, so isinstance is True

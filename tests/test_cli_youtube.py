@@ -20,7 +20,6 @@ from unittest.mock import patch
 import pytest
 
 from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
 from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
 
 
@@ -136,7 +135,7 @@ class TestCLIYouTubeUpload:
                 "--category-id",
                 "27",
                 "--privacy",
-                "unlisted",
+                "private",
                 "--thumbnail",
                 str(temp_thumbnail),
                 "--mock",
@@ -209,7 +208,7 @@ class TestCLIYouTubeStatus:
 class TestCLIYouTubeQA:
     """Verify qa subcommand execution, report generation, and error handling."""
 
-    def test_qa_mock_success_with_output_dir(self, tmp_path: Path) -> None:
+    def test_qa_mock_success_with_output_dir(self, mock_project_dir: Path, tmp_path: Path) -> None:
         """qa --mock produces .json and .md reports in specified output dir."""
         out_dir = tmp_path / "qa_out"
         with patch.object(
@@ -222,7 +221,7 @@ class TestCLIYouTubeQA:
                 "--video-id",
                 "qa_integration_vid",
                 "--project",
-                "projects/01_costco_business_model",
+                str(mock_project_dir),
                 "--output",
                 str(out_dir),
                 "--threshold",
@@ -247,12 +246,12 @@ class TestCLIYouTubeQA:
         assert "dropoff_points" in data
         assert "cut_metrics" in data
 
-    def test_qa_missing_video_id(self) -> None:
+    def test_qa_missing_video_id(self, tmp_path) -> None:
         """qa without --video-id exits with error."""
         with patch.object(
             sys,
             "argv",
-            ["veraxi-ymmp", "youtube", "qa", "--project", "projects/01_costco_business_model"],
+            ["veraxi-ymmp", "youtube", "qa", "--project", str(tmp_path)],
         ):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -310,7 +309,7 @@ class TestCLIYouTubeQA:
                 main()
             assert exc.value.code == 1
 
-    def test_qa_invalid_threshold(self) -> None:
+    def test_qa_invalid_threshold(self, mock_project_dir: Path, tmp_path: Path) -> None:
         """qa with non-float threshold exits with error."""
         with patch.object(
             sys,
@@ -322,7 +321,7 @@ class TestCLIYouTubeQA:
                 "--video-id",
                 "vid_123",
                 "--project",
-                "projects/01_costco_business_model",
+                str(mock_project_dir),
                 "--threshold",
                 "not_a_valid_float",
             ],
@@ -347,7 +346,6 @@ class TestCLIYouTubeUnknownSubcommand:
 
 @pytest.fixture
 def mock_project_dir(tmp_path: Path) -> Path:
-    """Create a fully valid mock project directory for pipeline run tests."""
     proj = tmp_path / "test_pipeline_project"
     proj.mkdir(parents=True, exist_ok=True)
     audio_dir = proj / "audio"
@@ -366,11 +364,13 @@ def mock_project_dir(tmp_path: Path) -> Path:
     script_data = [
         {"character": "ずんだもん", "text": "YouTube自動投稿のテストなのだ！"}
     ]
+    import json
     (proj / "script.json").write_text(
         json.dumps(script_data, ensure_ascii=False), encoding="utf-8"
     )
-    (proj / "final_video.mp4").write_bytes(b"\x00" * 2048)
-    (proj / "thumbnail.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 1024)
+    (proj / "final_video.mp4").write_bytes(b"dummy mp4")
+    (proj / "thumbnail.png").write_bytes(b"dummy png")
+
     return proj
 
 
@@ -381,51 +381,25 @@ class TestCLIRunYouTubeIntegration:
         self, mock_project_dir: Path
     ) -> None:
         """veraxi-ymmp run <project_dir> --upload-to-youtube --mock-upload uploads video, thumb, captions."""
-        dummy_wav = mock_project_dir / "audio" / "001_Zundamon.wav"
+        mock_project_dir / "audio" / "001_Zundamon.wav"
         real_mock = MockYouTubeAdapter()
 
-        with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
-                return_value=mock_project_dir / "thumbnail.png",
-            ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
-            patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
-                return_value=real_mock,
-            ),
-            patch.object(
+        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+             patch.object(
                 sys,
                 "argv",
                 [
                     "veraxi-ymmp",
                     "run",
                     str(mock_project_dir),
+                    "--no-tts",
+                    "--no-ymmp",
+                    "--no-premiere",
+                    "--no-qa",
                     "--upload-to-youtube",
                     "--mock-upload",
                 ],
-            ),
-        ):
-            ir = TimelineIR(
-                fps=60,
-                total_frames=60,
-                voice_clips=[
-                    VoiceClip(
-                        start_frame=0,
-                        length=60,
-                        character="ずんだもん",
-                        text="YouTube自動投稿のテストなのだ！",
-                        emotion="normal",
-                        motion="none",
-                        audio_path=dummy_wav,
-                        hatsuon="ユーチューブジドウトウコウノテストナノダ",
-                        subtitle_position="bottom_center",
-                        subtitle_style="outlined",
-                    )
-                ],
-            )
-            mock_build_ir.return_value = (ir, [dummy_wav])
+            ):
 
             main()
 
@@ -458,28 +432,22 @@ class TestCLIRunYouTubeIntegration:
         self, mock_project_dir: Path
     ) -> None:
         """veraxi-ymmp run <project_dir> --upload-to-youtube --mock-upload --publish-at succeeds with private status."""
-        dummy_wav = mock_project_dir / "audio" / "001_Zundamon.wav"
+        mock_project_dir / "audio" / "001_Zundamon.wav"
         real_mock = MockYouTubeAdapter()
         scheduled_ts = "2026-10-25T15:00:00Z"
 
-        with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
-                return_value=mock_project_dir / "thumbnail.png",
-            ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
-            patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
-                return_value=real_mock,
-            ),
-            patch.object(
+        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+             patch.object(
                 sys,
                 "argv",
                 [
                     "veraxi-ymmp",
                     "run",
                     str(mock_project_dir),
+                    "--no-tts",
+                    "--no-ymmp",
+                    "--no-premiere",
+                    "--no-qa",
                     "--upload-to-youtube",
                     "--mock-upload",
                     "--publish-at",
@@ -487,27 +455,7 @@ class TestCLIRunYouTubeIntegration:
                     "--privacy",
                     "private",
                 ],
-            ),
-        ):
-            ir = TimelineIR(
-                fps=60,
-                total_frames=60,
-                voice_clips=[
-                    VoiceClip(
-                        start_frame=0,
-                        length=60,
-                        character="ずんだもん",
-                        text="YouTube自動投稿のテストなのだ！",
-                        emotion="normal",
-                        motion="none",
-                        audio_path=dummy_wav,
-                        hatsuon="ユーチューブジドウトウコウノテストナノダ",
-                        subtitle_position="bottom_center",
-                        subtitle_style="outlined",
-                    )
-                ],
-            )
-            mock_build_ir.return_value = (ir, [dummy_wav])
+            ):
 
             main()
 
@@ -598,51 +546,28 @@ class TestCLIRunYouTubeIntegration:
     ) -> None:
         """When --upload-to-youtube is set and no video artifact exists, exits with code 1."""
         (mock_project_dir / "final_video.mp4").unlink()
-        dummy_wav = mock_project_dir / "audio" / "001_Zundamon.wav"
+        mock_project_dir / "audio" / "001_Zundamon.wav"
 
-        with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
-                return_value=mock_project_dir / "thumbnail.png",
-            ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
-            patch.object(
+        with patch.object(
                 sys,
                 "argv",
                 [
                     "veraxi-ymmp",
                     "run",
                     str(mock_project_dir),
+                    "--no-tts",
+                    "--no-ymmp",
+                    "--no-premiere",
+                    "--no-qa",
                     "--upload-to-youtube",
                     "--mock-upload",
-                    "--no-qa",
                 ],
-            ),
-        ):
-            ir = TimelineIR(
-                fps=60,
-                total_frames=60,
-                voice_clips=[
-                    VoiceClip(
-                        start_frame=0,
-                        length=60,
-                        character="ずんだもん",
-                        text="テスト",
-                        emotion="normal",
-                        motion="none",
-                        audio_path=dummy_wav,
-                        hatsuon="テスト",
-                        subtitle_position="bottom_center",
-                        subtitle_style="outlined",
-                    )
-                ],
-            )
-            mock_build_ir.return_value = (ir, [dummy_wav])
+            ):
 
             with pytest.raises(SystemExit) as exc:
                 main()
-            assert exc.value.code == 1
+
+        assert exc.value.code == 1
 
         captured = capsys.readouterr()
         assert "No video artifact found for YouTube upload" in captured.err
@@ -651,58 +576,29 @@ class TestCLIRunYouTubeIntegration:
         self, mock_project_dir: Path
     ) -> None:
         """--normalize calls normalize_video_audio and uploads normalized video."""
-        dummy_wav = mock_project_dir / "audio" / "001_Zundamon.wav"
+        mock_project_dir / "audio" / "001_Zundamon.wav"
         real_mock = MockYouTubeAdapter()
         norm_video = mock_project_dir / "final_video_normalized.mp4"
         norm_video.write_bytes(b"\x00" * 2048)
 
-        with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
-                return_value=mock_project_dir / "thumbnail.png",
-            ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
-            patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
-                return_value=real_mock,
-            ),
-            patch(
-                "veraxi_ymmp.audio_normalizer.normalize_video_audio",
-                return_value=norm_video,
-            ) as mock_norm,
-            patch.object(
+        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+             patch("veraxi_ymmp.audio_normalizer.normalize_video_audio", return_value=norm_video) as mock_norm, \
+             patch.object(
                 sys,
                 "argv",
                 [
                     "veraxi-ymmp",
                     "run",
                     str(mock_project_dir),
+                    "--no-tts",
+                    "--no-ymmp",
+                    "--no-premiere",
+                    "--no-qa",
                     "--upload-to-youtube",
                     "--mock-upload",
                     "--normalize",
                 ],
-            ),
-        ):
-            ir = TimelineIR(
-                fps=60,
-                total_frames=60,
-                voice_clips=[
-                    VoiceClip(
-                        start_frame=0,
-                        length=60,
-                        character="ずんだもん",
-                        text="テスト",
-                        emotion="normal",
-                        motion="none",
-                        audio_path=dummy_wav,
-                        hatsuon="テスト",
-                        subtitle_position="bottom_center",
-                        subtitle_style="outlined",
-                    )
-                ],
-            )
-            mock_build_ir.return_value = (ir, [dummy_wav])
+            ):
 
             main()
 
@@ -711,3 +607,33 @@ class TestCLIRunYouTubeIntegration:
         video_id = list(real_mock.uploaded_videos.keys())[0]
         uploaded_path, _ = real_mock.uploaded_videos[video_id]
         assert uploaded_path.name == "final_video_normalized.mp4"
+
+def test_youtube_auth_cli_parsing(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--client-secrets", "secrets.json", "--monetary"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.client_secrets == "secrets.json"
+            assert args.monetary is True
+            assert args.no_browser is False
+
+def test_youtube_stats_cli_parsing_json_csv_output(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "stats", "--video-id", "vid1", "--video-id", "vid2", "--format", "json"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_stats") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.video_id == ["vid1", "vid2"]
+            assert args.format == "json"
+
+def test_youtube_channel_cli_parsing(capsys) -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "channel", "--mock"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_channel") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.mock is True
