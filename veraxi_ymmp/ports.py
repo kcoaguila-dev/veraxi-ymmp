@@ -116,6 +116,7 @@ class TimelineExporter(Protocol):
 
 # Progress callback signature: (progress_ratio: float, bytes_uploaded: int, total_bytes: int) -> None
 ProgressCallback = Callable[[float, int, int], None]
+PipelineProgressCallback = Callable[[str, float, str], None]
 
 
 @runtime_checkable
@@ -206,6 +207,7 @@ __all__ = [
     "WinnerDecision",
     "ThumbnailExperiment",
     "ProgressCallback",
+    "PipelineProgressCallback",
     "VideoPublisher",
     "VideoAnalyticsProvider",
 ]
