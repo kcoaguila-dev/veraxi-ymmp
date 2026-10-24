@@ -4,6 +4,10 @@
       <stop offset="0%" stop-color="#10B981"/>
       <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
+    <linearGradient id="indigoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
     <linearGradient id="youtubeRed" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#EF4444"/>
       <stop offset="100%" stop-color="#DC2626"/>
@@ -47,7 +51,6 @@
     <rect x="0" y="0" width="196" height="36" rx="8" fill="url(#emeraldGrad)"/>
     <text x="98" y="23" font-size="13" font-weight="800" fill="#FFFFFF" text-anchor="middle">⚡ 動画を生成 (プレビュー)</text>
 
-    <!-- Divider between Generate and External Editors -->
     <line x1="210" y1="6" x2="210" y2="30" stroke="#334155" stroke-width="1"/>
 
     <!-- Open in YMM4 -->
@@ -60,18 +63,28 @@
   </g>
 
   <!-- ========================================================================= -->
-  <!-- LEFT WORKSPACE: STORYBOARD & SCRIPT (Descript Scenes + YMM4 Chat Input)   -->
+  <!-- LEFT WORKSPACE: STORYBOARD & WEB-AI COPY-PASTE BRIDGE                     -->
   <!-- ========================================================================= -->
   <g transform="translate(24, 78)" filter="url(#cardShadow)">
     <rect width="580" height="698" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
 
-    <!-- Panel Title & Import -->
-    <text x="24" y="34" font-size="15" font-weight="800" fill="#F8FAFC">1. 台本・スライド編集</text>
-    <text x="200" y="34" font-size="12" fill="#64748B">全18行 • 1分30秒</text>
+    <!-- Panel Title & Web AI Copy-Paste Bridge (Zero API Key Workflow!) -->
+    <text x="20" y="33" font-size="15" font-weight="800" fill="#F8FAFC">1. 台本・スライド編集</text>
+    <text x="184" y="33" font-size="11.5" fill="#64748B">18行 • 1分30秒</text>
 
-    <rect x="462" y="14" width="96" height="28" rx="6" fill="#1E293B"/>
-    <text x="510" y="32" font-size="11.5" font-weight="600" fill="#CBD5E1" text-anchor="middle">📂 台本読込</text>
-    <line x1="0" y1="52" x2="580" y2="52" stroke="#1E293B" stroke-width="1"/>
+    <!-- Step A: Copy Universal AI Prompt (for ChatGPT / Claude / Gemini Web) -->
+    <g transform="translate(274, 12)">
+      <rect width="154" height="30" rx="6" fill="url(#indigoGrad)"/>
+      <text x="77" y="20" font-size="11" font-weight="800" fill="#FFFFFF" text-anchor="middle">📋 AI用プロンプトをコピー</text>
+    </g>
+
+    <!-- Step B: Paste / Import JSON from Web AI -->
+    <g transform="translate(436, 12)">
+      <rect width="128" height="30" rx="6" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="64" y="20" font-size="11" font-weight="700" fill="#E2E8F0" text-anchor="middle">📥 JSON貼り付け</text>
+    </g>
+
+    <line x1="0" y1="54" x2="580" y2="54" stroke="#1E293B" stroke-width="1"/>
 
     <!-- ================= SCENE 1 BLOCK (Inline Slide + Dialogue Lines) ================= -->
     <g transform="translate(18, 68)">
@@ -98,6 +111,9 @@
         <rect x="134" y="12" width="66" height="20" rx="5" fill="#1E293B"/>
         <text x="167" y="26" font-size="10.5" fill="#FDE047" text-anchor="middle">😊 笑顔 ▾</text>
 
+        <rect x="206" y="12" width="70" height="20" rx="5" fill="#1E293B"/>
+        <text x="241" y="26" font-size="10" fill="#94A3B8" text-anchor="middle">⚡ ジャンプ ▾</text>
+
         <text x="64" y="52" font-size="14.5" font-weight="600" fill="#F8FAFC">みんな、AI自動化の衝撃は</text>
         <text x="64" y="74" font-size="14.5" font-weight="700" fill="#FDE047">ここまできたのだ！</text>
 
@@ -115,6 +131,9 @@
         <text x="64" y="26" font-size="12" font-weight="700" fill="#FB7185">四国めたん</text>
         <rect x="134" y="12" width="66" height="20" rx="5" fill="#1E293B"/>
         <text x="167" y="26" font-size="10.5" fill="#E2E8F0" text-anchor="middle">😌 通常 ▾</text>
+
+        <rect x="206" y="12" width="64" height="20" rx="5" fill="#1E293B"/>
+        <text x="238" y="26" font-size="10" fill="#94A3B8" text-anchor="middle">うなずき ▾</text>
 
         <text x="64" y="54" font-size="14.5" font-weight="600" fill="#FFFFFF">はい、ローカル環境でも無料で</text>
         <text x="64" y="76" font-size="14.5" font-weight="600" fill="#FFFFFF">全自動動画制作が可能ですわ。</text>
@@ -157,7 +176,7 @@
         <polygon points="487,42 496,48 487,54" fill="#10B981"/>
       </g>
 
-      <!-- Line 4: Friendly Length Suggestion -->
+      <!-- Line 4: Friendly Length Suggestion + Self-Heal Re-prompt Option -->
       <g transform="translate(12, 160)">
         <rect width="520" height="82" rx="8" fill="#231B12" stroke="#F59E0B" stroke-width="1.2"/>
         <circle cx="32" cy="41" r="20" fill="#881337" stroke="#F43F5E" stroke-width="1.5"/>
@@ -181,7 +200,7 @@
       <rect x="10" y="10" width="106" height="34" rx="7" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
       <text x="63" y="31" font-size="12" font-weight="800" fill="#A7F3D0" text-anchor="middle">ずんだもん ▾</text>
 
-      <text x="130" y="32" font-size="13" fill="#64748B">ここにセリフを入力して Enter で追加...</text>
+      <text x="130" y="32" font-size="13" fill="#64748B">手動でセリフを追加 (Enter)...</text>
 
       <rect x="462" y="10" width="72" height="34" rx="7" fill="#10B981"/>
       <text x="498" y="31" font-size="12.5" font-weight="800" fill="#080C14" text-anchor="middle">＋ 追加</text>
@@ -197,7 +216,6 @@
     <g filter="url(#cardShadow)">
       <rect width="632" height="464" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
 
-      <!-- Card Header -->
       <text x="24" y="34" font-size="15" font-weight="800" fill="#F8FAFC">2. プレビュー確認</text>
       <text x="160" y="34" font-size="12" fill="#34D399" font-weight="600">✓ 生成完了 (qa_test.mp4)</text>
 
@@ -211,16 +229,15 @@
       <g transform="translate(24, 66)">
         <rect width="584" height="328" rx="10" fill="url(#videoScreen)" stroke="#334155" stroke-width="1.5"/>
 
-        <!-- Slide Presentation Card Inside Video -->
         <rect x="112" y="24" width="360" height="176" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
         <rect x="112" y="24" width="360" height="32" rx="8" fill="#1E293B"/>
         <text x="292" y="45" font-size="11.5" font-weight="800" fill="#38BDF8" text-anchor="middle">SCENE 1 // AI VIDEO PIPELINE</text>
         <text x="292" y="102" font-size="20" font-weight="900" fill="#F8FAFC" text-anchor="middle">ローカル環境で完全無料</text>
-        <text x="292" y="136" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">台本を書くだけで音声・立ち絵・字幕を自動合成</text>
+        <text x="292" y="136" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">Web AIのJSONを貼るだけで音声・立ち絵・字幕を合成</text>
         <rect x="212" y="156" width="160" height="24" rx="12" fill="#064E3B"/>
-        <text x="292" y="172" font-size="11" font-weight="700" fill="#6EE7B7" text-anchor="middle">サーバー代 0円 • 高速出力</text>
+        <text x="292" y="172" font-size="11" font-weight="700" fill="#6EE7B7" text-anchor="middle">API課金 0円 • 高速出力</text>
 
-        <!-- Left Character Tachie: Metan (Speaking) -->
+        <!-- Left Character Tachie: Metan -->
         <g transform="translate(26, 148)">
           <circle cx="38" cy="36" r="26" fill="#FECDD3" stroke="#F43F5E" stroke-width="2"/>
           <path d="M10 96 C10 62 66 62 66 96 Z" fill="#881337" stroke="#F43F5E" stroke-width="2"/>
@@ -249,7 +266,6 @@
 
         <text x="102" y="23" font-size="13.5" font-family="monospace" font-weight="700" fill="#E2E8F0">00:14 / 01:30</text>
 
-        <!-- Scrubber with Scene Markers -->
         <rect x="220" y="14" width="364" height="8" rx="4" fill="#1E293B"/>
         <rect x="220" y="14" width="110" height="8" rx="4" fill="#10B981"/>
         <line x1="340" y1="11" x2="340" y2="25" stroke="#64748B" stroke-width="1.5"/>
@@ -258,7 +274,7 @@
       </g>
     </g>
 
-    <!-- 3. YOUTUBE THUMBNAIL & UPLOAD CARD (Separate Step 3 at Bottom-Right) -->
+    <!-- 3. YOUTUBE THUMBNAIL & UPLOAD CARD -->
     <g transform="translate(0, 482)" filter="url(#cardShadow)">
       <rect width="632" height="216" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
 
@@ -267,7 +283,6 @@
       <text x="551" y="32" font-size="11.5" font-weight="600" fill="#38BDF8" text-anchor="middle">✏ サムネ編集</text>
       <line x1="0" y1="50" x2="632" y2="50" stroke="#1E293B" stroke-width="1"/>
 
-      <!-- 16:9 Thumbnail Preview (240 x 135) -->
       <g transform="translate(24, 64)">
         <rect width="240" height="135" rx="8" fill="url(#thumbBg)" stroke="#475569" stroke-width="1.2"/>
         <rect x="12" y="12" width="84" height="22" rx="4" fill="#EF4444"/>
@@ -283,7 +298,6 @@
         <text x="212" y="124" font-size="9.5" font-family="monospace" font-weight="700" fill="#FFFFFF" text-anchor="middle">1:30</text>
       </g>
 
-      <!-- Right Side: Title + Privacy Selector + Dedicated Upload Button -->
       <g transform="translate(284, 64)">
         <text x="0" y="14" font-size="11.5" font-weight="700" fill="#94A3B8">動画タイトル</text>
         <rect x="0" y="22" width="324" height="34" rx="6" fill="#0B0F19" stroke="#1E293B" stroke-width="1"/>
@@ -291,13 +305,10 @@
 
         <text x="0" y="74" font-size="11" font-weight="600" fill="#34D399">✓ 3分割レイアウト・右下タイムスタンプ回避済</text>
 
-        <!-- Bottom Action Row: Privacy Dropdown + Separate YouTube Upload Button -->
         <g transform="translate(0, 92)">
-          <!-- Privacy Setting (Safe default: Private / Scheduled) -->
           <rect x="0" y="0" width="136" height="40" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1"/>
           <text x="68" y="25" font-size="12" font-weight="700" fill="#E2E8F0" text-anchor="middle">🔒 非公開 (下書き) ▾</text>
 
-          <!-- Dedicated YouTube Upload Button -->
           <rect x="148" y="0" width="176" height="40" rx="8" fill="url(#youtubeRed)"/>
           <text x="236" y="25" font-size="13" font-weight="800" fill="#FFFFFF" text-anchor="middle">🚀 YouTubeへ投稿</text>
         </g>
