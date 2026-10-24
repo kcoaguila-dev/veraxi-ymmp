@@ -72,6 +72,24 @@ class NullTTSBackend:
         return []
 
 
+@dataclass(frozen=True)
+class VideoStatsRow:
+    video_id: str
+    date: Optional[str]
+    metrics: Dict[str, Optional[float]]
+
+
+@dataclass(frozen=True)
+class VideoStatsReport:
+    video_ids: List[str]
+    start_date: str
+    end_date: str
+    granularity: str
+    metrics: List[str]
+    rows: List[VideoStatsRow]
+    fetched_at: str
+
+
 @dataclass
 class ExportResult:
     """Result of exporting a TimelineIR representation to an external target format."""
@@ -152,6 +170,21 @@ class VideoAnalyticsProvider(Protocol):
         end_date: Optional[str] = None,
     ) -> VariantMetrics:
         """Fetch impression, CTR, and watch metrics for a video over a time window."""
+        ...
+
+    def fetch_stats_report(
+        self,
+        video_ids: List[str],
+        start_date: str,
+        end_date: str,
+        metrics: List[str],
+        granularity: str = "total",
+    ) -> VideoStatsReport:
+        """Fetch video stats report for given videos."""
+        ...
+
+    def get_channel_info(self) -> Dict[str, Any]:
+        """Fetch authenticated channel info."""
         ...
 
 

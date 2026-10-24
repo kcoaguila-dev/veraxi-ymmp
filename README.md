@@ -96,6 +96,30 @@ veraxi-ymmp normalize output.mp4 --all
 set YMM4_PATH=C:\Users\YourUser\Documents\YukkuriMovieMaker_v4_Lite\YukkuriMovieMaker.exe
 ```
 
+### 5. YouTube Integration & Analytics
+To publish videos and retrieve stats, you must set up YouTube API access:
+
+1. **Create a GCP Project:** Go to Google Cloud Console and create a new project.
+2. **Enable APIs:** Enable both **YouTube Data API v3** and **YouTube Analytics API**.
+3. **Configure OAuth Consent:** Setup the OAuth consent screen. Choose "External", add yourself as a test user, and publish the app to "Production" to avoid the 7-day token expiration limit.
+4. **Create Credentials:** Create an OAuth 2.0 Client ID for a "Desktop app" and download the `client_secrets.json` file.
+5. **Install Extras:** Run `pip install -e ".[youtube]"`.
+6. **Authenticate:** Run `veraxi-ymmp youtube auth --client-secrets path/to/client_secrets.json`. This opens a browser to log in and saves your refresh token locally.
+
+*Note on Quotas:* The YouTube Data API has a default quota of 10,000 units/day (~1,600 units per video upload). Unverified API projects can only upload videos as "private" until they pass a YouTube API compliance audit.
+
+**Usage Examples:**
+```bash
+# Verify authentication setup and channel stats
+veraxi-ymmp youtube channel
+
+# Fetch metrics for specific videos as a JSON report
+veraxi-ymmp youtube stats --video-id YourVideoID1 --video-id YourVideoID2 --format json
+
+# CI/CD Usage
+# Export the token content to VERAXI_YOUTUBE_AUTHORIZED_USER_JSON in your GitHub Secrets
+```
+
 ---
 
 ## Development & Testing

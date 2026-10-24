@@ -38,15 +38,11 @@ from veraxi_ymmp.ports import (
 # ==============================================================================
 
 class DummyPublisherComplete:
-    def upload_video(
-        self,
-        video_path: Path,
-        metadata: VideoPublishMetadata,
-        progress_callback: Optional[ProgressCallback] = None,
-    ) -> UploadResult:
-        return UploadResult(video_id="dummy", url="https://youtu.be/dummy", status="uploaded")
-
-    def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
+    def upload_video(self, video_path, metadata, progress_callback=None):
+        return UploadResult(video_id="test", url="url", status="ok")
+    def upload_thumbnail(self, video_id, thumbnail_path):
+        return True
+    def upload_caption(self, video_id, caption_path, language="ja", name="", is_draft=False):
         return True
 
 
@@ -66,13 +62,15 @@ class DummyPublisherMissingVideo:
 
 
 class DummyAnalyticsComplete:
-    def fetch_retention_curve(
-        self,
-        video_id: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> List[Tuple[float, float]]:
-        return [(0.0, 1.0), (1.0, 0.5)]
+    def fetch_retention_curve(self, video_id, start_date=None, end_date=None):
+        return [(0.0, 1.0)]
+    def fetch_variant_metrics(self, video_id, start_date=None, end_date=None):
+        return {}
+    def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
+        from veraxi_ymmp.ports import VideoStatsReport
+        return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
+    def get_channel_info(self):
+        return ("id", "title")
 
 
 class DummyAnalyticsMissingMethod:
@@ -113,6 +111,7 @@ def test_protocol_pep544_runtime_checkable_attribute_semantics():
     class NonCallablePublisher:
         upload_video = "not_callable"
         upload_thumbnail = 42
+        upload_caption = "not_callable"
 
     # Under PEP 544, hasattr checks pass
     assert isinstance(NonCallablePublisher(), VideoPublisher)

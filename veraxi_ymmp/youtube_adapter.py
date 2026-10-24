@@ -71,9 +71,19 @@ def _is_retryable_http_error(e: Exception) -> Tuple[bool, int]:
         except (ValueError, TypeError):
             pass
 
-    if status is not None and status in RETRYABLE_STATUS_CODES:
+    if status is None:
+        # Default to retryable for unknown connection drops (Timeout, ConnectionReset, etc.)
+        return True, 500
+
+    # Specifically do not retry 403 quota errors
+    if status == 403:
+        return False, status
+
+    # Retry 429 and 5xx errors
+    if status == 429 or status in RETRYABLE_STATUS_CODES:
         return True, status
-    return False, status if status is not None else 0
+
+    return False, status
 
 
 class YouTubeAdapter:
@@ -402,7 +412,7 @@ class YouTubeAdapter:
         """Fetch impression, CTR, and watch metrics for a video over a time window."""
         try:
             req = self.analytics.reports().query(
-                ids="channel==MINE", metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
+                ids="channel==MINE", metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,subscribersGained",
                 filters=f"video=={video_id}", startDate=start_date or "2020-01-01", endDate=end_date or "2030-12-31",
             )
             res = req.execute()
@@ -424,6 +434,106 @@ class YouTubeAdapter:
                 average_view_percentage=65.0, average_view_duration_sec=120.0, retention_score=0.65,
                 sample_start=start_date, sample_end=end_date, raw_metrics={"error": str(e)},
             )
+
+    def fetch_stats_report(
+        self,
+        video_ids: List[str],
+        start_date: str,
+        end_date: str,
+        metrics: List[str],
+        granularity: str = "total",
+    ) -> Any:
+        from datetime import datetime, timezone
+        from .ports import VideoStatsReport, VideoStatsRow
+
+        dim = "video"
+        if granularity == "day":
+            dim = "video,day"
+
+        metrics_str = ",".join(metrics)
+        rows_out = []
+
+        for vid in video_ids:
+            try:
+                req = self.analytics.reports().query(
+                    ids="channel==MINE",
+                    metrics=metrics_str,
+                    dimensions=dim,
+                    filters=f"video=={vid}",
+                    startDate=start_date,
+                    endDate=end_date,
+                )
+                res = req.execute()
+                headers = res.get("columnHeaders", [])
+
+                metric_indices = {}
+                date_idx = -1
+
+                for i, h in enumerate(headers):
+                    name = h.get("name")
+                    if name in metrics:
+                        metric_indices[name] = i
+                    elif name == "day":
+                        date_idx = i
+                    elif name == "video":
+                        pass
+
+                for row in res.get("rows", []):
+                    row_metrics = {}
+                    for m in metrics:
+                        if m in metric_indices:
+                            val = row[metric_indices[m]]
+                            # handle nulls properly
+                            try:
+                                row_metrics[m] = float(val) if val is not None else None
+                            except ValueError:
+                                row_metrics[m] = None
+                        else:
+                            row_metrics[m] = None
+
+                    date_val = row[date_idx] if date_idx != -1 else None
+                    rows_out.append(VideoStatsRow(
+                        video_id=vid,
+                        date=date_val,
+                        metrics=row_metrics
+                    ))
+            except Exception as e:
+                logger.warning(f"Failed to fetch stats for video {vid}: {e}")
+                # Append empty row on failure
+                rows_out.append(VideoStatsRow(
+                    video_id=vid,
+                    date=None,
+                    metrics={m: None for m in metrics}
+                ))
+
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return VideoStatsReport(
+            video_ids=video_ids,
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity,
+            metrics=metrics,
+            rows=rows_out,
+            fetched_at=now_str
+        )
+
+    def get_channel_info(self) -> Dict[str, Any]:
+        """Get the authenticated channel's title and ID."""
+        request = self.youtube.channels().list(part="snippet,statistics", mine=True)
+        res = request.execute()
+        items = res.get("items", [])
+        if not items:
+            raise ValueError("No YouTube channel found for the authenticated user.")
+        channel = items[0]
+        stats = channel.get("statistics", {})
+        return {
+            "id": channel.get("id"),
+            "title": channel.get("snippet", {}).get("title"),
+            "customUrl": channel.get("snippet", {}).get("customUrl"),
+            "subscriberCount": stats.get("subscriberCount") if not stats.get("hiddenSubscriberCount") else None,
+            "videoCount": stats.get("videoCount"),
+            "viewCount": stats.get("viewCount"),
+        }
 
     def get_retention_report(
         self,
@@ -737,6 +847,39 @@ class MockYouTubeAdapter:
             average_view_percentage=65.0, average_view_duration_sec=120.0, retention_score=0.65,
             sample_start=start_date, sample_end=end_date,
         )
+
+    def fetch_stats_report(
+        self,
+        video_ids: List[str],
+        start_date: str,
+        end_date: str,
+        metrics: List[str],
+        granularity: str = "total",
+    ) -> Any:
+        from datetime import datetime, timezone
+        from .ports import VideoStatsReport, VideoStatsRow
+        self.call_log.append(f"fetch_stats_report:{','.join(video_ids)}")
+        rows = []
+        for vid in video_ids:
+            if granularity == "day":
+                rows.append(VideoStatsRow(vid, start_date, {m: 10.0 for m in metrics}))
+                rows.append(VideoStatsRow(vid, end_date, {m: 12.0 for m in metrics}))
+            else:
+                rows.append(VideoStatsRow(vid, None, {m: 22.0 for m in metrics}))
+
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return VideoStatsReport(video_ids, start_date, end_date, granularity, metrics, rows, now_str)
+
+    def get_channel_info(self) -> Dict[str, Any]:
+        self.call_log.append("get_channel_info")
+        return {
+            "id": "UC_mock_channel",
+            "title": "Mock Channel",
+            "customUrl": "@mockchannel",
+            "subscriberCount": 1000,
+            "videoCount": 42,
+            "viewCount": 100000
+        }
 
 
 __all__ = [

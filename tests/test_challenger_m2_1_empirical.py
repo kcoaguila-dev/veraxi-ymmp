@@ -1,3 +1,19 @@
+from __future__ import annotations
+import json
+from pathlib import Path
+import struct
+import sys
+from typing import Any, Dict, List, Optional
+from unittest.mock import patch
+import pytest
+from veraxi_ymmp.cli import main
+from veraxi_ymmp.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.pipeline import ProjectPipeline
+from veraxi_ymmp.srt_generator import _format_srt_time, generate_srt
+from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+
+
+
 """Empirical and adversarial test suite for Milestone 2 deliverables.
 
 Author: challenger_2_m2_1
@@ -8,22 +24,15 @@ Scope:
 - R4: Error handling, edge cases, and Clean Architecture invariants.
 """
 
-from __future__ import annotations
 
-import json
-from pathlib import Path
-import struct
-import sys
-from typing import Any, Dict, List, Optional
-from unittest.mock import patch
 
-import pytest
 
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.srt_generator import _format_srt_time, generate_srt
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+
+
+
+
+
+
 
 
 def _create_minimal_wav(path: Path) -> Path:
@@ -115,6 +124,7 @@ def project_factory(tmp_path: Path):
 # =============================================================================
 # Test Group 1: ProjectPipeline.run Empirical Integration & Discovery
 # =============================================================================
+
 
 
 class TestPipelineRunEmpiricalIntegration:

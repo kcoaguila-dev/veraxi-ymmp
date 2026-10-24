@@ -76,3 +76,9 @@ Thumbs.db
 
 # Ruff cache
 .ruff_cache/
+
+# YouTube OAuth & QA Reports
+client_secret*.json
+*youtube_token*.json
+.veraxi-ymmp/
+qa_reports/

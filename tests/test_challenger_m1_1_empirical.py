@@ -113,17 +113,26 @@ class TestDateFormatsAdversarial:
 
     def test_hour_24_iso_behavior(self) -> None:
         """Adversarial check: ISO 8601-1:2019 permits 24:00:00 as end-of-day.
-
-        Python 3.14 datetime.fromisoformat parses 2026-10-25T24:00:00+00:00 as 2026-10-26 00:00:00+00:00.
-        Therefore, ir.py accepts it without ValueError.
+        Python 3.14+ datetime.fromisoformat parses 24:00:00, whereas Python < 3.14 raises ValueError.
         """
-        meta = VideoPublishMetadata(
-            title="Hour 24",
-            publish_at="2026-10-25T24:00:00Z",
-            privacy_status="private",
-        )
-        assert meta.publish_at == "2026-10-25T24:00:00Z"
-
+        import sys
+        import pytest
+        if sys.version_info >= (3, 14):
+            meta = VideoPublishMetadata(
+                title="Hour 24",
+                publish_at="2026-10-25T24:00:00Z",
+                privacy_status="private",
+            )
+            assert meta.publish_at == "2026-10-25T24:00:00Z"
+        else:
+            with pytest.raises(
+                ValueError, match="Invalid ISO-8601 publish_at format"
+            ):
+                VideoPublishMetadata(
+                    title="Hour 24",
+                    publish_at="2026-10-25T24:00:00Z",
+                    privacy_status="private",
+                )
     def test_date_only_string_behavior(self) -> None:
         """Check behavior when date-only '2026-10-25' is provided (missing time & timezone).
 

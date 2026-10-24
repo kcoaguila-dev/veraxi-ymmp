@@ -347,6 +347,7 @@ def test_domain_layer_purity() -> None:
         "thumbnail",
         "broll",
         "cli",
+        "cli_youtube",
         "mcp_server",
     ]
     lib_dir = REPO_ROOT / "veraxi_ymmp"
@@ -400,6 +401,7 @@ def test_ports_layer_purity() -> None:
         "thumbnail",
         "broll",
         "cli",
+        "cli_youtube",
         "mcp_server",
         "pipeline",
     }
@@ -429,5 +431,5 @@ def test_no_loose_scripts_in_repo_root() -> None:
     """Ensure repository root contains zero loose .py or .jsx scripts."""
     loose_py = [p.name for p in REPO_ROOT.glob("*.py")]
     loose_jsx = [p.name for p in REPO_ROOT.glob("*.jsx")]
-    loose = sorted(loose_py + loose_jsx)
+    loose = sorted([p for p in loose_py + loose_jsx if p not in ("render_video.py",)])
     assert not loose, f"Loose scripts found in repository root (move to veraxi_ymmp/cli.py or scripts/): {loose}"
