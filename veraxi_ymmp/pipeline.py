@@ -21,7 +21,7 @@ from .compiler import YMMPCompiler
 from .ir import TimelineIR, UploadResult, VideoPublishMetadata
 from .logging import logger
 from .moviepy_renderer import MoviePyRenderer
-from .ports import VideoPublisher
+from .ports import VideoPublisher, PipelineProgressCallback
 from .premiere_exporter import PremiereExporter, export_to_premiere as export_to_premiere
 from .srt_generator import generate_srt
 from .thumbnail import generate_project_thumbnail
@@ -73,6 +73,7 @@ class ProjectPipeline:
         fast_qa_duration: Optional[float] = 25.0,
         tts_backend: Optional[Any] = None,
         exporters: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[PipelineProgressCallback] = None,
     ) -> None:
         self.template_path = Path(template_path)
         self.voicevox_client = voicevox_client
@@ -83,6 +84,8 @@ class ProjectPipeline:
         )
         self.fast_qa_duration = fast_qa_duration
         self.exporters = dict(exporters) if exporters is not None else {}
+        self.progress_callback = progress_callback
+        self.progress_callback = progress_callback
 
     def run(
         self,
@@ -104,6 +107,13 @@ class ProjectPipeline:
         publisher: Optional[VideoPublisher] = None,
     ) -> PipelineResult:
         """Execute the end-to-end video synthesis pipeline for a project directory."""
+        def _notify(stage: str, progress: float, message: str) -> None:
+            if self.progress_callback:
+                try:
+                    self.progress_callback(stage, progress, message)
+                except Exception as cb_err:
+                    logger.debug(f"Progress callback raised an unhandled exception: {cb_err}")
+
         proj_dir = Path(project_path).resolve()
         result = PipelineResult(project_dir=proj_dir)
 
@@ -179,14 +189,21 @@ class ProjectPipeline:
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Building Timeline IR & Synthesizing Audio...")
+        _notify("synthesizing_audio", 0.15, f"Synthesizing voice audio for {len(script_data)} lines via VOICEVOX...")
         try:
             timeline_ir, audio_files = compiler.build_ir(script_data, audio_dir)
             result.timeline_ir = timeline_ir
             result.audio_files = audio_files
             logger.info(f"Synthesized {len(timeline_ir.voice_clips)} voice clips successfully.")
+            _notify(
+                "synthesizing_audio",
+                0.40,
+                f"Synthesized {len(timeline_ir.voice_clips)} audio clips successfully.",
+            )
         except Exception as e:
             err_msg = f"Failed during IR compilation: {e}"
             logger.error(err_msg)
+            _notify("synthesizing_audio", 0.40, f"Error synthesizing audio: {e}")
             result.errors.append(err_msg)
             result.success = False
             return result
@@ -226,6 +243,7 @@ class ProjectPipeline:
 
         # 3. YMM4 Project Export
         if do_ymmp:
+            _notify("exporting_ymmp_and_xml", 0.60, "Exporting YMMP")
             logger.info("--- [2/3] Generating Yukkuri Movie Maker 4 (.ymmp) ---")
             try:
                 ymmp_dir = proj_dir / "ymmp"
@@ -263,6 +281,8 @@ class ProjectPipeline:
                 effective_qa_duration = timeline_ir.min_all_speakers_duration(
                     effective_qa_duration
                 )
+            _notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
+            _notify("moviepy_rendering", 0.70, "Rendering QA")
             logger.info(
                 f"--- [3/4] Rendering MoviePy QA Preview Video ({effective_qa_duration}s) ---"
             )
@@ -290,6 +310,7 @@ class ProjectPipeline:
                     )
                 result.qa_video_path = qa_out
                 logger.info(f"QA preview video ready at: {qa_out}")
+                _notify("moviepy_rendering", 0.85, "QA Render Complete")
             except Exception as e:
                 err_msg = f"Failed generating MoviePy QA video: {e}"
                 logger.error(err_msg)
@@ -332,6 +353,7 @@ class ProjectPipeline:
 
             video_to_upload = target_video
             if normalize_loudness:
+                _notify("audio_normalization", 0.85, "Normalizing Audio")
                 logger.info("Normalizing video audio loudness for YouTube (-14.0 LUFS)...")
                 from .audio_normalizer import normalize_video_audio
 
@@ -339,6 +361,7 @@ class ProjectPipeline:
                 try:
                     video_to_upload = normalize_video_audio(target_video, norm_out, target_i=-14.0)
                     logger.info(f"Loudness normalized video ready: {video_to_upload}")
+                    _notify("audio_normalization", 0.95, "Normalization Complete")
                 except Exception as e:
                     logger.warning(f"Loudness normalization failed, using original video: {e}")
                     video_to_upload = target_video

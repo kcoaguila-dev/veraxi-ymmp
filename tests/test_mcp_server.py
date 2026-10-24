@@ -17,6 +17,11 @@ from veraxi_ymmp.mcp_server import (
     run_pipeline,
     validate_script,
     workspace_path,
+    get_voicevox_health,
+    audition_voice,
+    render_broll_slides,
+    normalize_project_audio,
+    launch_ymm4_desktop
 )
 from veraxi_ymmp.pipeline import PipelineResult
 
@@ -143,3 +148,74 @@ def test_run_pipeline_and_generate_thumbnail_tool(
         thumb_res = generate_thumbnail_tool("demo_proj")
         assert thumb_res == str(expected_thumb)
         assert mock_thumb.called
+
+@patch("veraxi_ymmp.mcp_server.VoicevoxClient.is_available", return_value=True)
+@patch("veraxi_ymmp.mcp_server.VoicevoxClient.get_speakers", return_value=[{"name": "ずんだもん"}])
+def test_get_voicevox_health(mock_speakers, mock_is_available) -> None:
+    res = get_voicevox_health("http://fake")
+    assert res["available"] is True
+    assert res["url"] == "http://fake"
+    assert res["speakers"] == [{"name": "ずんだもん"}]
+
+@patch("veraxi_ymmp.mcp_server.VoicevoxClient.get_audio_query")
+@patch("requests.post")
+def test_audition_voice(mock_post, mock_get_audio_query) -> None:
+    mock_get_audio_query.return_value = {"accent_phrases": [{"moras": [1, 2]}]}
+    import io
+    import wave
+
+    # Create a valid dummy wav file in memory
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x00\x00" * 24000) # 1 second of silence
+    mock_post.return_value.content = buf.getvalue()
+    mock_post.return_value.raise_for_status = lambda: None
+
+    res = audition_voice("テスト", 3)
+    assert Path(res["path"]).exists()
+    assert res["duration_seconds"] == 1.0
+
+@patch("veraxi_ymmp.mcp_server.render_from_manifest")
+@patch("veraxi_ymmp.mcp_server.Image.open")
+def test_render_broll_slides(mock_image_open, mock_render) -> None:
+    mock_render.return_value = [Path("fake1.png"), Path("fake2.png")]
+    mock_img = mock_image_open.return_value.__enter__.return_value
+    mock_img.size = (1920, 1080)
+
+    res = render_broll_slides("manifest.json")
+    assert len(res["slides"]) == 2
+    assert res["slides"][0]["width"] == 1920
+
+@patch("subprocess.run")
+@patch("veraxi_ymmp.mcp_server.normalize_video_audio")
+def test_normalize_project_audio(mock_normalize, mock_run, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    proj = tmp_path / "testproj"
+    proj.mkdir()
+    (proj / "final_video.mp4").touch()
+
+    mock_run.return_value.stderr = '{"input_i": "-10.0", "input_tp": "-0.5"}'
+    mock_normalize.return_value = proj / "final_video_youtube.mp4"
+
+    res = normalize_project_audio("testproj")
+    assert res["measured_i"] == -10.0
+    assert res["measured_tp"] == -0.5
+    assert res["target_lufs"] == -14.0
+    assert "youtube" in res["output_path"]
+
+@patch("subprocess.Popen")
+def test_launch_ymm4_desktop(mock_popen, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("YMM4_PATH", "fake_path.exe")
+    monkeypatch.setattr("os.path.exists", lambda p: True)
+
+    proj = tmp_path / "testproj"
+    proj.mkdir()
+    (proj / "test.ymmp").touch()
+
+    res = launch_ymm4_desktop("testproj")
+    assert res["launched"] is True
+    assert res["executable"] == "fake_path.exe"
