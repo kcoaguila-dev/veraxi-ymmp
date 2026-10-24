@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .broll import render_from_manifest
 from .compiler import YMMPCompiler
 from .ir import TimelineIR, UploadResult, VideoPublishMetadata
 from .logging import logger
@@ -84,7 +83,6 @@ class ProjectPipeline:
         )
         self.fast_qa_duration = fast_qa_duration
         self.exporters = dict(exporters) if exporters is not None else {}
-        self.progress_callback = progress_callback
         self.progress_callback = progress_callback
 
     def run(
@@ -160,6 +158,7 @@ class ProjectPipeline:
         if broll_manifest_path.exists():
             logger.info("Found broll_manifest.json; rendering B-Roll assets...")
             try:
+                from .broll import render_from_manifest
                 render_from_manifest(broll_manifest_path, proj_dir / "broll")
             except Exception as e:
                 logger.warning(f"Failed rendering B-Roll manifest: {e}")
@@ -184,6 +183,21 @@ class ProjectPipeline:
         )
         if not self.use_tts:
             compiler.config.use_tts = False
+
+        # Optional B-Roll manifest pre-step
+        broll_manifest_path = proj_dir / "broll_manifest.json"
+        if broll_manifest_path.exists():
+            _notify("rendering_broll", 0.05, "Rendering B-Roll slides from manifest...")
+            try:
+                from .broll import render_from_manifest
+                render_from_manifest(broll_manifest_path, proj_dir / "broll")
+                _notify("rendering_broll", 0.10, "B-Roll slides rendered successfully.")
+            except Exception as e:
+                logger.warning(f"Failed rendering B-Roll manifest: {e}")
+                _notify("rendering_broll", 0.10, f"B-Roll rendering skipped: {e}")
+        else:
+            # If no B-Roll manifest exists, advance progress smoothly so the GUI doesn't stall
+            _notify("rendering_broll", 0.10, "No B-Roll manifest found, skipping.")
 
         audio_dir = proj_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
