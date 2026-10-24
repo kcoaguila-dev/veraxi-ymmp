@@ -198,7 +198,7 @@ def get_voicevox_health(voicevox_url: str = "http://localhost:50021") -> Dict[st
 def audition_voice(text: str, speaker_id: int, speed: float = 1.0, voicevox_url: str = "http://localhost:50021") -> Dict[str, Any]:
     """Synthesizes a single test line of dialogue to a temporary cached WAV file."""
     client = VoicevoxClient(base_url=voicevox_url)
-    import requests
+    import requests  # type: ignore
     import io
     import wave
     try:

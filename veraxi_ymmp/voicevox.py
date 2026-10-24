@@ -14,7 +14,7 @@ import asyncio
 import wave
 from typing import Any, Dict, List, Tuple, Union, cast
 
-import requests
+import requests  # type: ignore
 
 from .logging import logger
 from .ports import NullTTSBackend as NullTTSBackend, TTSBackend as TTSBackend
@@ -125,7 +125,7 @@ class VoicevoxClient:
         """
         try:
             response = requests.get(f"{self.base_url}/version", timeout=3)
-            return response.status_code == 200
+            return bool(response.status_code == 200)
         except requests.exceptions.RequestException:
             return False
 
