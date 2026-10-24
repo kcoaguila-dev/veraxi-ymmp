@@ -3,6 +3,11 @@ Automated QA tests for systematic subtitle and speech bubble plate safe zones.
 Guarantees that speech bubble plates and subtitles maintain adequate space at the bottom
 to prevent the bottom border from ever being clipped or touching the canvas edge.
 """
+from veraxi_ymmp.subtitle_plate import create_speech_plate
+from veraxi_ymmp.typography import (
+    calculate_ymm4_subtitle_y,
+)
+from veraxi_ymmp.validation import ValidationError, validate_ymmp_timeline
 
 import base64
 import brotli
@@ -29,11 +34,6 @@ def mock_path_exists(monkeypatch):
 
     monkeypatch.setattr(pathlib.Path, "exists", _mock_exists)
 
-from veraxi_ymmp.subtitle_plate import create_speech_plate
-from veraxi_ymmp.typography import (
-    calculate_ymm4_subtitle_y,
-)
-from veraxi_ymmp.validation import ValidationError, validate_ymmp_timeline
 
 
 @pytest.fixture

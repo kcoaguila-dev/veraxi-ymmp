@@ -1,8 +1,14 @@
+import copy
+from veraxi_ymmp.compiler import YMMPCompiler
+from veraxi_ymmp.voicevox import VoicevoxClient
+from unittest.mock import Mock
 import os
 import json
 from pathlib import Path
 import pytest
 
+
+import pytest
 @pytest.fixture(autouse=True)
 def mock_ymmp_timeline_validation(monkeypatch):
     """Bypass disk file checks (PSDs/WAVs) during compiler unit tests.
@@ -22,10 +28,8 @@ def mock_ymmp_timeline_validation(monkeypatch):
     )
 
 
-import copy
-from veraxi_ymmp.compiler import YMMPCompiler
-from veraxi_ymmp.voicevox import VoicevoxClient
-from unittest.mock import Mock
+
+
 
 
 def test_compile(tmp_path):

@@ -227,6 +227,22 @@ def project_factory(tmp_path: Path):
 # =============================================================================
 
 
+
+@pytest.fixture(autouse=True)
+def mock_ymmp_timeline_validation(monkeypatch):
+    """Bypass disk file checks (PSDs/WAVs) during compiler unit tests."""
+    dummy_result = {
+        "status": "PASS",
+        "voice_count": 1,
+        "tachie_count": 1,
+        "plate_count": 0,
+        "bgm_count": 0,
+    }
+    monkeypatch.setattr(
+        "veraxi_ymmp.pipeline.validate_ymmp_timeline",
+        lambda *args, **kwargs: dummy_result,
+    )
+
 class TestPipelineRunEmpiricalIntegration:
     """Empirical verification of ProjectPipeline.run coordinating upload, thumbnail, and captions."""
 

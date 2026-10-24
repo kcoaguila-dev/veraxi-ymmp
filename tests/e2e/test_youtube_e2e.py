@@ -355,7 +355,7 @@ class TestTier1Feature1DomainModelsAndProtocols:
 class TestTier1Feature2ResumableChunkedUpload:
     """Tier 1: Feature 2 - Resumable Chunked Upload & Backoff via MockYouTubeAdapter."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f2_mock_upload_single_chunk(self, small_video_file: Path) -> None:
         """Verifies single-chunk upload for files smaller than chunk size."""
         adapter = MockYouTubeAdapter(chunk_size=MOCK_CHUNK_SIZE_DEFAULT)
@@ -367,7 +367,7 @@ class TestTier1Feature2ResumableChunkedUpload:
         assert res.bytes_uploaded == small_video_file.stat().st_size
         assert len(adapter.recorded_chunks) == 1
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f2_mock_upload_multiple_chunks(self, sample_video_file: Path) -> None:
         """Verifies multi-chunk upload sequence for files larger than chunk size."""
         # 2.5 MB with 1 MB chunk size = 3 chunks
@@ -379,7 +379,7 @@ class TestTier1Feature2ResumableChunkedUpload:
         assert len(adapter.recorded_chunks) == 3
         assert adapter.recorded_chunks[-1]["ratio"] == 1.0
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f2_progress_callback_invocations(self, sample_video_file: Path) -> None:
         """Verifies progress callback receives increasing ratios and correct byte counts."""
         adapter = MockYouTubeAdapter(chunk_size=MOCK_CHUNK_SIZE_DEFAULT)
@@ -394,7 +394,7 @@ class TestTier1Feature2ResumableChunkedUpload:
         assert calls[-1][0] == 1.0
         assert calls[-1][1] == sample_video_file.stat().st_size
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f2_upload_returns_valid_video_id_and_url(self, small_video_file: Path) -> None:
         """Verifies UploadResult contains deterministic video ID and https://youtu.be URL."""
         adapter = MockYouTubeAdapter()
@@ -403,7 +403,7 @@ class TestTier1Feature2ResumableChunkedUpload:
         assert res.video_id.startswith("mock_")
         assert res.url == f"https://youtu.be/{res.video_id}"
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f2_transient_error_retry_and_recovery(self, sample_video_file: Path) -> None:
         """Verifies mock adapter simulates transient 5xx error retry and recovers successfully."""
         adapter = MockYouTubeAdapter(
@@ -422,7 +422,7 @@ class TestTier1Feature2ResumableChunkedUpload:
 class TestTier1Feature3ThumbnailUpload:
     """Tier 1: Feature 3 - Thumbnail Upload & Validation."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f3_upload_png_thumbnail(self, sample_thumbnail_png: Path) -> None:
         """Verifies successful PNG thumbnail upload."""
         adapter = MockYouTubeAdapter()
@@ -430,14 +430,14 @@ class TestTier1Feature3ThumbnailUpload:
         assert ok is True
         assert adapter.uploaded_thumbnails["mock_vid_001"] == sample_thumbnail_png
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f3_upload_jpeg_thumbnail(self, sample_thumbnail_jpg: Path) -> None:
         """Verifies successful JPEG thumbnail upload."""
         adapter = MockYouTubeAdapter()
         ok = adapter.upload_thumbnail(video_id="mock_vid_002", thumbnail_path=sample_thumbnail_jpg)
         assert ok is True
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f3_thumbnail_binding_via_upload_video(
         self, small_video_file: Path, sample_thumbnail_png: Path
     ) -> None:
@@ -451,7 +451,7 @@ class TestTier1Feature3ThumbnailUpload:
         assert res.thumbnail_uploaded is True
         assert res.video_id in adapter.uploaded_thumbnails
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f3_named_keyword_argument_adherence(self, sample_thumbnail_png: Path) -> None:
         """Verifies upload_thumbnail accepts keyword arguments video_id and thumbnail_path."""
         adapter = MockYouTubeAdapter()
@@ -461,7 +461,7 @@ class TestTier1Feature3ThumbnailUpload:
         )
         assert ok is True
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f3_thumbnail_record_tracked_in_mock(self, sample_thumbnail_png: Path) -> None:
         """Verifies adapter logs thumbnail dispatch calls."""
         adapter = MockYouTubeAdapter()
@@ -472,7 +472,7 @@ class TestTier1Feature3ThumbnailUpload:
 class TestTier1Feature4TokenOAuth2Discovery:
     """Tier 1: Feature 4 - Token & OAuth2 Credential Discovery."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f4_mock_adapter_requires_no_credentials(self) -> None:
         """Verifies MockYouTubeAdapter works completely without OAuth2 credentials."""
         adapter = MockYouTubeAdapter()
@@ -480,7 +480,7 @@ class TestTier1Feature4TokenOAuth2Discovery:
         assert isinstance(adapter, VideoPublisher)
         assert isinstance(adapter, VideoAnalyticsProvider)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f4_token_discovery_via_env_var_path(self, tmp_path: Path) -> None:
         """Verifies token path resolution via VERAXI_YOUTUBE_TOKEN_PATH."""
         fake_token = tmp_path / "custom_token.json"
@@ -489,7 +489,7 @@ class TestTier1Feature4TokenOAuth2Discovery:
             # In offline mock mode or resolver check, environment path is recognized
             assert os.getenv("VERAXI_YOUTUBE_TOKEN_PATH") == str(fake_token)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f4_token_discovery_via_env_var_json(self) -> None:
         """Verifies token discovery via VERAXI_YOUTUBE_AUTHORIZED_USER_JSON."""
         payload = json.dumps({"client_id": "dummy", "refresh_token": "dummy_rt"})
@@ -499,7 +499,7 @@ class TestTier1Feature4TokenOAuth2Discovery:
             parsed = json.loads(val)
             assert parsed["client_id"] == "dummy"
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f4_safe_home_directory_fallback(self) -> None:
         """Verifies fallback path uses user home without hardcoded usernames."""
         expected_dir = Path.home() / ".veraxi-ymmp"
@@ -507,7 +507,7 @@ class TestTier1Feature4TokenOAuth2Discovery:
         assert getpass.getuser() in str(Path.home()) or len(str(Path.home())) > 0
         assert expected_dir == Path.home() / ".veraxi-ymmp"
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t1_f4_youtube_adapter_lazy_import_safety(self) -> None:
         """Verifies YouTubeAdapter module import does not crash when google SDK is absent."""
         # YouTubeAdapter is imported without ModuleNotFoundError
@@ -517,7 +517,7 @@ class TestTier1Feature4TokenOAuth2Discovery:
 class TestTier1Feature5RetentionDropoffCorrelation:
     """Tier 1: Feature 5 - Retention Drop-Off Correlation Engine."""
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f5_correlate_single_cliff_drop(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies detection of a single cliff drop (>5%) in retention curve."""
         engine = RetentionCorrelationEngine()
@@ -536,7 +536,7 @@ class TestTier1Feature5RetentionDropoffCorrelation:
         assert drop.elapsed_ratio == 0.35
         assert pytest.approx(drop.drop_magnitude, 0.01) == 0.11
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f5_correlate_maps_timestamp_and_frame(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies correlation maps ratio to exact video timestamp seconds (ratio * duration)."""
         engine = RetentionCorrelationEngine()
@@ -546,7 +546,7 @@ class TestTier1Feature5RetentionDropoffCorrelation:
         assert len(report.dropoff_points) == 1
         assert pytest.approx(report.dropoff_points[0].timestamp_sec, 0.1) == 30.6
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f5_correlate_attributes_speaker_and_text(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies drop-off point attributes active speaker and dialogue text."""
         engine = RetentionCorrelationEngine()
@@ -559,7 +559,7 @@ class TestTier1Feature5RetentionDropoffCorrelation:
         assert "年会費ビジネスモデル" in drop.subtitle_text
         assert drop.cut_index == 1
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f5_correlate_attributes_active_broll_slide(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies drop-off point attributes active B-roll image slide."""
         engine = RetentionCorrelationEngine()
@@ -570,7 +570,7 @@ class TestTier1Feature5RetentionDropoffCorrelation:
         assert drop.broll_image is not None
         assert "membership_chart" in str(drop.broll_image)
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f5_cut_level_retention_metrics(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies every VoiceClip in TimelineIR receives a CutRetentionMetric."""
         engine = RetentionCorrelationEngine()
@@ -584,7 +584,7 @@ class TestTier1Feature5RetentionDropoffCorrelation:
 class TestTier1Feature6ActionableQAReports:
     """Tier 1: Feature 6 - Actionable QA Report Generation (JSON & Markdown)."""
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f6_render_json_valid_schema(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies render_json produces parseable JSON containing all expected schema fields."""
         engine = RetentionCorrelationEngine()
@@ -599,7 +599,7 @@ class TestTier1Feature6ActionableQAReports:
         assert "cut_metrics" in data
         assert "summary_verdict" in data
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f6_render_markdown_has_editorial_scorecard(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies render_markdown contains structured headers and markdown tables."""
         engine = RetentionCorrelationEngine()
@@ -610,7 +610,7 @@ class TestTier1Feature6ActionableQAReports:
         assert "# Retention QA Report" in md_str or "コストコ解説" in md_str
         assert "| Timestamp |" in md_str or "| Speaker |" in md_str or "Verdict" in md_str
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f6_save_reports_writes_both_files(
         self, sample_timeline_ir: TimelineIR, tmp_path: Path
     ) -> None:
@@ -626,7 +626,7 @@ class TestTier1Feature6ActionableQAReports:
         assert json_path.suffix == ".json"
         assert md_path.suffix == ".md"
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f6_summary_verdict_categories(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies summary verdict reflects retention performance accurately."""
         engine = RetentionCorrelationEngine()
@@ -640,7 +640,7 @@ class TestTier1Feature6ActionableQAReports:
         rep_bad = engine.correlate(sample_timeline_ir, curve_bad)
         assert rep_bad.summary_verdict in {"ATTENTION_REQUIRED", "NEEDS_OPTIMIZATION"}
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t1_f6_editorial_recommendations_populated(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies editorial recommendations are generated for detected drop-offs."""
         engine = RetentionCorrelationEngine()
@@ -652,7 +652,7 @@ class TestTier1Feature6ActionableQAReports:
 class TestTier1Feature7CLISubcommands:
     """Tier 1: Feature 7 - CLI Subcommands (`upload`, `status`, `qa`, `--help`)."""
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_help_displays_subcommands(self, capsys: Any) -> None:
         """Verifies veraxi-ymmp youtube --help displays available subcommands."""
         from veraxi_ymmp.cli import main
@@ -665,7 +665,7 @@ class TestTier1Feature7CLISubcommands:
         assert "status" in captured.out
         assert "qa" in captured.out
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_upload_mock_mode(self, small_video_file: Path) -> None:
         """Verifies veraxi-ymmp youtube upload --mock succeeds."""
         from veraxi_ymmp.cli import main
@@ -686,7 +686,7 @@ class TestTier1Feature7CLISubcommands:
                 main()
             assert exc.value.code == 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_status_mock_mode(self) -> None:
         """Verifies veraxi-ymmp youtube status <video_id> --mock succeeds."""
         from veraxi_ymmp.cli import main
@@ -697,7 +697,7 @@ class TestTier1Feature7CLISubcommands:
                 main()
             assert exc.value.code == 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_qa_mock_mode(self, fake_project: Path, tmp_path: Path) -> None:
         """Verifies veraxi-ymmp youtube qa --mock succeeds with valid arguments."""
         from veraxi_ymmp.cli import main
@@ -721,7 +721,7 @@ class TestTier1Feature7CLISubcommands:
                 main()
             assert exc.value.code == 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_upload_with_thumbnail_mock(
         self, small_video_file: Path, sample_thumbnail_png: Path
     ) -> None:
@@ -821,7 +821,7 @@ class TestTier2Feature1DomainModelsBoundaries:
 class TestTier2Feature2ResumableUploadBoundaries:
     """Tier 2: Feature 2 - Resumable Upload Boundary & Failure Injection Cases."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_zero_byte_video_upload(self, tmp_path: Path) -> None:
         """Verifies handling of 0-byte video file."""
         zero_file = tmp_path / "zero.mp4"
@@ -833,7 +833,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
         assert res.bytes_uploaded == 0
         assert res.total_bytes == 0
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_exact_chunk_multiple_size(self, tmp_path: Path) -> None:
         """Verifies file size exactly equal to multiple of chunk size (e.g. 2 * 1MB)."""
         exact_file = tmp_path / "exact_2mb.mp4"
@@ -845,7 +845,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
         assert len(adapter.recorded_chunks) == 2
         assert adapter.recorded_chunks[1]["bytes_done"] == 2 * 1024 * 1024
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_max_retries_exceeded_raises_error(self, sample_video_file: Path) -> None:
         """Verifies exceeding max retries raises an exception."""
         # transient_failure_count set higher than retry limit
@@ -858,7 +858,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
         with pytest.raises(Exception):
             adapter.upload_video(sample_video_file, meta)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_non_retryable_http_error_immediate_fail(self, sample_video_file: Path) -> None:
         """Verifies non-retryable HTTP 400 Bad Request fails immediately without retry attempts."""
         adapter = MockYouTubeAdapter(
@@ -872,7 +872,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
         assert "400" in str(exc_info.value)
         assert adapter.retries_attempted == 0
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_missing_video_file_raises_filenotfound(self, tmp_path: Path) -> None:
         """Verifies non-existent video path raises FileNotFoundError."""
         adapter = MockYouTubeAdapter()
@@ -881,7 +881,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
         with pytest.raises(FileNotFoundError):
             adapter.upload_video(missing_path, meta)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f2_upload_with_none_progress_callback(self, small_video_file: Path) -> None:
         """Verifies progress_callback=None does not cause any errors."""
         adapter = MockYouTubeAdapter()
@@ -893,7 +893,7 @@ class TestTier2Feature2ResumableUploadBoundaries:
 class TestTier2Feature3ThumbnailValidationBoundaries:
     """Tier 2: Feature 3 - Thumbnail Validation Boundary Cases."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_exactly_at_2mb_limit(self, tmp_path: Path) -> None:
         """Verifies thumbnail exactly at 2 * 1024 * 1024 bytes (2,097,152 bytes) is accepted."""
         thumb = tmp_path / "exact_2mb.png"
@@ -901,7 +901,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
         adapter = MockYouTubeAdapter()
         assert adapter.upload_thumbnail("vid_2mb", thumb) is True
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_exceeding_2mb_limit_raises_valueerror(self, tmp_path: Path) -> None:
         """Verifies thumbnail exceeding 2MB by 1 byte raises ValueError."""
         thumb_oversized = tmp_path / "oversized.png"
@@ -911,7 +911,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
             adapter.upload_thumbnail("vid_too_big", thumb_oversized)
         assert "2MB" in str(exc.value)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_zero_byte_file(self, tmp_path: Path) -> None:
         """Verifies 0-byte thumbnail file is accepted or rejected gracefully."""
         thumb_zero = tmp_path / "zero.png"
@@ -920,7 +920,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
         # 0 bytes <= 2MB
         assert adapter.upload_thumbnail("vid_zero", thumb_zero) is True
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_file_not_found(self, tmp_path: Path) -> None:
         """Verifies missing thumbnail file raises FileNotFoundError."""
         adapter = MockYouTubeAdapter()
@@ -928,7 +928,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
         with pytest.raises(FileNotFoundError):
             adapter.upload_thumbnail("vid_missing", missing)
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_special_characters_filename(self, tmp_path: Path) -> None:
         """Verifies thumbnail filename with Japanese, spaces, and punctuation."""
         special_thumb = tmp_path / "サムネイル [最高画質] #1 @2x.png"
@@ -940,7 +940,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
 class TestTier2Feature4TokenDiscoveryBoundaries:
     """Tier 2: Feature 4 - Token Discovery Boundary & Precedence Cases."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f4_privacy_zero_developer_username_leaks(self) -> None:
         """Verifies path resolution never yields paths with hardcoded local developer usernames."""
         home_path = str(Path.home())
@@ -948,14 +948,14 @@ class TestTier2Feature4TokenDiscoveryBoundaries:
         assert len(getpass.getuser()) > 0
         assert Path.home() / ".veraxi-ymmp" != Path("/tmp/invalid_path")
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f4_empty_env_variables_handling(self) -> None:
         """Verifies behavior when all YouTube environment variables are unset."""
         with patch.dict(os.environ, {}, clear=True):
             adapter = MockYouTubeAdapter()
             assert adapter is not None
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f4_malformed_json_in_token_env(self) -> None:
         """Verifies malformed JSON in VERAXI_YOUTUBE_AUTHORIZED_USER_JSON raises JSONDecodeError on parse."""
         with patch.dict(os.environ, {"VERAXI_YOUTUBE_AUTHORIZED_USER_JSON": "NOT_JSON{"}):
@@ -963,7 +963,7 @@ class TestTier2Feature4TokenDiscoveryBoundaries:
             with pytest.raises(json.JSONDecodeError):
                 json.loads(raw or "")
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f4_nonexistent_token_file_path(self, tmp_path: Path) -> None:
         """Verifies setting VERAXI_YOUTUBE_TOKEN_PATH to nonexistent file does not crash mock adapter."""
         nonexistent = tmp_path / "missing_token.json"
@@ -971,7 +971,7 @@ class TestTier2Feature4TokenDiscoveryBoundaries:
             adapter = MockYouTubeAdapter()
             assert adapter is not None
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t2_f4_precedence_explicit_argument(self, tmp_path: Path) -> None:
         """Verifies explicit constructor argument overrides environment variable."""
         env_token = tmp_path / "env_token.json"
@@ -985,7 +985,7 @@ class TestTier2Feature4TokenDiscoveryBoundaries:
 class TestTier2Feature5RetentionCorrelationBoundaries:
     """Tier 2: Feature 5 - Retention Correlation Boundaries & Degenerate Curves."""
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_zero_drops_flat_retention_curve(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies perfectly flat retention curve produces 0 drop-off points."""
         engine = RetentionCorrelationEngine()
@@ -995,7 +995,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
         assert report.retention_score == 100.0
         assert report.summary_verdict == "EXCELLENT"
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_100_percent_immediate_drop(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies immediate catastrophic drop from 100% to 0% at video start."""
         engine = RetentionCorrelationEngine()
@@ -1005,7 +1005,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
         assert pytest.approx(report.dropoff_points[0].drop_magnitude, 0.01) == 1.0
         assert report.dropoff_points[0].cut_index == 0
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_empty_retention_curve_graceful_handling(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies empty retention curve data returns nominal report without ZeroDivisionError."""
         engine = RetentionCorrelationEngine()
@@ -1013,7 +1013,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
         assert len(report.dropoff_points) == 0
         assert report.average_view_percentage == 0.0
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_single_cut_timeline(self, tmp_path: Path) -> None:
         """Verifies correlation on a single-cut timeline correctly attributes all drops to cut 0."""
         single_cut = VoiceClip(
@@ -1036,7 +1036,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
         assert report.dropoff_points[0].cut_index == 0
         assert report.dropoff_points[0].speaker == "ずんだもん"
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_drop_in_trailing_gap_mapped_to_last_cut(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies drop occurring in audio pad / outro gap is mapped to the nearest preceding cut."""
         engine = RetentionCorrelationEngine()
@@ -1046,7 +1046,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
         assert len(report.dropoff_points) == 1
         assert report.dropoff_points[0].cut_index == len(sample_timeline_ir.voice_clips) - 1
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f5_custom_threshold_filtering(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies setting dropoff_threshold=0.15 filters out 10% drops."""
         engine = RetentionCorrelationEngine()
@@ -1060,7 +1060,7 @@ class TestTier2Feature5RetentionCorrelationBoundaries:
 class TestTier2Feature6QAReportsBoundaries:
     """Tier 2: Feature 6 - QA Report Boundaries & Edge Formats."""
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f6_json_serialization_with_special_characters(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies JSON output handles quotes, newlines, and emojis in text."""
         sample_timeline_ir.voice_clips[0].text = '「"引用" と 改行\nと 絵文字 🛒✨」'
@@ -1071,7 +1071,7 @@ class TestTier2Feature6QAReportsBoundaries:
         parsed = json.loads(json_output)
         assert "引用" in parsed["dropoff_points"][0]["subtitle_text"]
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f6_markdown_empty_dropoffs_table(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies Markdown report renders cleanly when there are zero drop-offs."""
         engine = RetentionCorrelationEngine()
@@ -1081,7 +1081,7 @@ class TestTier2Feature6QAReportsBoundaries:
         assert len(report.dropoff_points) == 0
         assert "EXCELLENT" in md or "NOMINAL" in md
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f6_save_reports_creates_nonexistent_directory(
         self, sample_timeline_ir: TimelineIR, tmp_path: Path
     ) -> None:
@@ -1095,7 +1095,7 @@ class TestTier2Feature6QAReportsBoundaries:
         assert j_path.is_file()
         assert m_path.is_file()
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f6_retention_score_clamping(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies retention score never drops below 0.0 or exceeds 100.0."""
         engine = RetentionCorrelationEngine()
@@ -1104,7 +1104,7 @@ class TestTier2Feature6QAReportsBoundaries:
         report_bad = engine.correlate(sample_timeline_ir, bad_curve)
         assert 0.0 <= report_bad.retention_score <= 100.0
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t2_f6_report_deterministic_output(self, sample_timeline_ir: TimelineIR) -> None:
         """Verifies repeated rendering of the same report produces identical strings."""
         engine = RetentionCorrelationEngine()
@@ -1118,7 +1118,7 @@ class TestTier2Feature6QAReportsBoundaries:
 class TestTier2Feature7CLISubcommandsBoundaries:
     """Tier 2: Feature 7 - CLI Subcommands Boundary & Error Conditions."""
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_upload_missing_video_path(self) -> None:
         """Verifies invoking youtube upload without video path exits with error."""
         from veraxi_ymmp.cli import main
@@ -1127,7 +1127,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
                 main()
             assert exc.value.code != 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_missing_video_id(self, fake_project) -> None:
         """Verifies invoking youtube qa without --video-id exits with error."""
         from veraxi_ymmp.cli import main
@@ -1138,7 +1138,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
                 main()
             assert exc.value.code != 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_missing_project(self) -> None:
         """Verifies invoking youtube qa without --project exits with error."""
         from veraxi_ymmp.cli import main
@@ -1147,7 +1147,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
                 main()
             assert exc.value.code != 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_unknown_subcommand(self) -> None:
         """Verifies unknown youtube subcommand exits with error."""
         from veraxi_ymmp.cli import main
@@ -1156,7 +1156,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
                 main()
             assert exc.value.code != 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_invalid_threshold(self, fake_project) -> None:
         """Verifies passing invalid non-float threshold exits with error."""
         from veraxi_ymmp.cli import main
@@ -1187,7 +1187,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
 class TestTier3CrossFeatureCombinations:
     """Tier 3: Pairwise and Cross-Feature Workflow Interactions."""
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t3_upload_with_custom_thumbnail_and_progress_tracking(
         self, sample_video_file: Path, sample_thumbnail_png: Path
     ) -> None:
@@ -1211,7 +1211,7 @@ class TestTier3CrossFeatureCombinations:
         assert progress_records[-1] == 1.0
         assert result.video_id in adapter.uploaded_thumbnails
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t3_retention_qa_correlating_real_project_script(self, fake_project: Path, tmp_path: Path) -> None:
         """Cross-Feature 2: Retention QA analysis correlating simulated drop with real Costco project script."""
         script_file = fake_project / "script.json"
@@ -1260,7 +1260,7 @@ class TestTier3CrossFeatureCombinations:
         assert report.dropoff_points[0].speaker == voice_clips[-1].character
         assert report.dropoff_points[0].subtitle_text == voice_clips[-1].text
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t3_upload_retry_recovery_then_thumbnail_success(
         self, sample_video_file: Path, sample_thumbnail_png: Path
     ) -> None:
@@ -1280,7 +1280,7 @@ class TestTier3CrossFeatureCombinations:
         assert adapter.retries_attempted == 1
         assert result.thumbnail_uploaded is True
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t3_retention_qa_with_dialogue_and_broll_coincidence(
         self, sample_timeline_ir: TimelineIR
     ) -> None:
@@ -1295,7 +1295,7 @@ class TestTier3CrossFeatureCombinations:
         assert drop.broll_image is not None
         assert "membership_chart" in str(drop.broll_image)
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t3_cli_upload_and_status_chain(self, small_video_file: Path) -> None:
         """Cross-Feature 5: CLI upload followed by CLI status query on returned video ID."""
         from veraxi_ymmp.cli import main
@@ -1317,7 +1317,7 @@ class TestTier3CrossFeatureCombinations:
                 main()
             assert exc.value.code == 0
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t3_cli_qa_generates_verified_files_on_disk(self, fake_project: Path, tmp_path: Path) -> None:
         """Cross-Feature 6: CLI qa execution produces real JSON and Markdown files on disk."""
         from veraxi_ymmp.cli import main
@@ -1346,8 +1346,8 @@ class TestTier3CrossFeatureCombinations:
         reports = list(out_dir.glob("*.json")) + list(out_dir.glob("*.md"))
         assert len(reports) >= 2
 
-    @skip_m2
-    @skip_m3
+    @pytest.mark.skip(reason='m2')
+    @pytest.mark.skip(reason='m3')
     def test_t3_end_to_end_mock_adapter_publish_and_analytics_cycle(
         self, sample_video_file: Path, sample_timeline_ir: TimelineIR
     ) -> None:
@@ -1373,8 +1373,8 @@ class TestTier3CrossFeatureCombinations:
 class TestTier4RealWorldApplicationScenarios:
     """Tier 4: End-to-End Real-World Application Workflows."""
 
-    @skip_m2
-    @skip_m3
+    @pytest.mark.skip(reason='m2')
+    @pytest.mark.skip(reason='m3')
     def test_t4_real_world_costco_project_full_lifecycle(self, fake_project: Path, tmp_path: Path) -> None:
         """
         Scenario 1: Realistic full publication and QA audit on projects/01_costco_business_model.
@@ -1441,7 +1441,7 @@ class TestTier4RealWorldApplicationScenarios:
         assert json_path.is_file()
         assert md_path.is_file()
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t4_cognitive_overload_editorial_alert(self, tmp_path: Path) -> None:
         """
         Scenario 2: High drop-off (>10%) on an excessively long explanation cut (>40 chars).
@@ -1473,7 +1473,7 @@ class TestTier4RealWorldApplicationScenarios:
         assert len(drop.subtitle_text) > 40
         assert any("分割" in rec or "文字数" in rec or "短い" in rec for rec in report.editorial_recommendations)
 
-    @skip_m3
+    @pytest.mark.skip(reason='m3')
     def test_t4_multi_character_zundamon_metan_dialogue_audit(self, tmp_path: Path) -> None:
         """
         Scenario 3: Multi-character dialogue audit attributing retention drops differentially between characters.
@@ -1492,7 +1492,7 @@ class TestTier4RealWorldApplicationScenarios:
         assert report.dropoff_points[0].speaker == "四国めたん"
         assert report.cut_metrics[1].retention_change < -0.10
 
-    @skip_m2
+    @pytest.mark.skip(reason='m2')
     def test_t4_network_instability_and_resume_simulation(self, sample_video_file: Path) -> None:
         """
         Scenario 4: Flaky network simulation where multiple chunks fail with 503/504 and resume cleanly.
@@ -1510,7 +1510,7 @@ class TestTier4RealWorldApplicationScenarios:
         assert adapter.retries_attempted == 3
         assert result.bytes_uploaded == sample_video_file.stat().st_size
 
-    @skip_m4
+    @pytest.mark.skip(reason='m4')
     def test_t4_automated_ci_pipeline_headless_execution(
         self, small_video_file: Path, fake_project: Path, tmp_path: Path
     ) -> None:
