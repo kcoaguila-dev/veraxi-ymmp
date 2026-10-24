@@ -216,7 +216,7 @@ def _cmd_validate(argv: List[str]) -> None:
     errors: List[str] = []
 
     # Check heuristics manually for specific cut errors, then rely on validate_director_script for correctness
-    from .script import VALID_EMOTIONS, VALID_MOTIONS
+    from .script import VALID_EMOTIONS
 
     for idx, entry in enumerate(script_data):
         if not isinstance(entry, dict):
