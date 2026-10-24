@@ -128,3 +128,25 @@ def test_normalize_all_platforms(tmp_path: Path) -> None:
         assert mock_run.call_count == len(PLATFORM_TARGETS)
         for plat, out_path in outputs.items():
             assert out_path == (out_dir / f"source_{plat}.mp4").resolve()
+
+def test_pipeline_progress_callback(tmp_path: Path) -> None:
+    from veraxi_ymmp.pipeline import ProjectPipeline
+    import json
+
+    stages = []
+
+    def cb(stage: str, ratio: float, msg: str) -> None:
+        stages.append(stage)
+
+    pipeline = ProjectPipeline(use_tts=False, progress_callback=cb)
+
+    proj = tmp_path / "testproj"
+    proj.mkdir()
+
+    with open(proj / "script.json", "w", encoding="utf-8") as f:
+        json.dump([{"character": "ずんだもん", "text": "テスト"}], f)
+
+    pipeline.run(proj)
+
+    assert "synthesizing_audio" in stages
+    assert "exporting_ymmp_and_xml" in stages
