@@ -469,6 +469,54 @@ def save_project_script(project_dir: str, script_json: str, broll_manifest_json:
     proj_path = workspace_path(project_dir)
     proj_path.mkdir(parents=True, exist_ok=True)
 
+    errors = []
+    try:
+        script_data = json.loads(script_json)
+    except Exception as e:
+        errors.append(f"Invalid JSON: {e}")
+        script_data = None
+
+    if script_data is not None:
+        try:
+            from veraxi_ymmp.script import validate_director_script, VALID_EMOTIONS
+            # Heuristics check
+            for idx, entry in enumerate(script_data):
+                if not isinstance(entry, dict):
+                    continue
+                if "type" in entry and "character" not in entry:
+                    continue
+
+                char = entry.get("character", "unknown")
+                text = entry.get("text", "")
+                if isinstance(text, str) and len(text) > 40:
+                    errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({len(text)} chars).")
+
+                emotion = entry.get("emotion")
+                if emotion is not None and emotion not in VALID_EMOTIONS:
+                    errors.append(f"Cut #{idx} ({char}): Invalid emotion '{emotion}'. Valid emotions are: [{', '.join(VALID_EMOTIONS)}]")
+
+            validate_director_script(script_data)
+        except Exception as e:
+            if str(e) not in errors:
+                errors.append(str(e))
+
+    if errors:
+        lines = [
+            "================ LLM RE-PROMPT BLOCK (COPY & PASTE TO AI) ================",
+            "The script you provided failed schema validation with the following errors:"
+        ]
+        for error in errors:
+            lines.append(f"  - {error}")
+        lines.append("Please fix these specific entries while preserving the rest of the script, and return the complete corrected JSON block.")
+        lines.append("==========================================================================")
+        reprompt = "\n".join(lines)
+        return {
+            "success": False,
+            "valid": False,
+            "errors": errors,
+            "reprompt_block": reprompt
+        }
+
     validation = validate_script(script_json)
 
     warnings = []
@@ -569,6 +617,31 @@ def upload_project_to_youtube(
         "thumbnail_uploaded": result.thumbnail_uploaded,
         "caption_uploaded": caption_uploaded,
         "bytes_uploaded": result.bytes_uploaded
+    }
+
+
+
+@mcp.tool()
+def get_ai_prompt_spec() -> Dict[str, Any]:
+    """Returns the Universal AI Prompt and JSON Schema for scripts."""
+    from veraxi_ymmp.constants import DEFAULT_SPEAKER_MAP
+    from veraxi_ymmp.schema import get_director_script_schema
+
+    prompt_path = Path(__file__).parent / "templates" / "UNIVERSAL_AI_PROMPT.md"
+    prompt_markdown = ""
+    if prompt_path.exists():
+        prompt_markdown = prompt_path.read_text(encoding="utf-8")
+
+    # Append available speakers
+    speakers_md = "\n\n### Available Speakers:\n"
+    for name, spk_id in DEFAULT_SPEAKER_MAP.items():
+        speakers_md += f"- **{name}** (ID: {spk_id})\n"
+
+    prompt_markdown += speakers_md
+
+    return {
+        "prompt_markdown": prompt_markdown,
+        "json_schema": get_director_script_schema()
     }
 
 

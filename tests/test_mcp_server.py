@@ -260,7 +260,18 @@ def test_save_project_script(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     proj_dir = tmp_path / "projects" / "testproj"
     proj_dir.mkdir(parents=True)
 
-    script_data = [{"character": "zundamon", "text": "a" * 40}] # > 35 chars
+    script_data = [{
+        "character": "ずんだもん",
+        "text": "a" * 38,
+        "emotion": "neutral",
+        "motion": "none",
+        "bgm": None,
+        "sfx": None,
+        "image": None,
+        "character_position": "center",
+        "subtitle_position": "bottom_center",
+        "subtitle_style": "outlined"
+    }]
     res = save_project_script("projects/testproj", json.dumps(script_data))
 
     assert res["success"] is True
@@ -288,3 +299,26 @@ def test_upload_project_to_youtube(mock_upload_caption, mock_upload_video, monke
     assert res["success"] is True
     assert res["video_id"] == "fakeid"
     assert res["caption_uploaded"] is True
+
+
+
+def test_get_ai_prompt_spec() -> None:
+    from veraxi_ymmp.mcp_server import get_ai_prompt_spec
+    res = get_ai_prompt_spec()
+    assert "prompt_markdown" in res
+    assert "json_schema" in res
+    assert "ずんだもん" in res["prompt_markdown"]
+
+def test_save_project_script_reprompt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from veraxi_ymmp.mcp_server import save_project_script
+    monkeypatch.chdir(tmp_path)
+    proj_dir = tmp_path / "projects" / "testproj"
+    proj_dir.mkdir(parents=True)
+
+    script_data = [{"character": "zundamon", "text": "hello", "emotion": "invalid_emotion"}]
+    res = save_project_script("projects/testproj", json.dumps(script_data))
+
+    assert res["success"] is False
+    assert res["valid"] is False
+    assert len(res["errors"]) > 0
+    assert "LLM RE-PROMPT BLOCK" in res["reprompt_block"]
