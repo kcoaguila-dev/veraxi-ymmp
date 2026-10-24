@@ -1,0 +1,307 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800" style="background:#0B0F19; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif;">
+  <defs>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="youtubeRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#DC2626"/>
+    </linearGradient>
+    <linearGradient id="videoScreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#090D16"/>
+    </linearGradient>
+    <linearGradient id="thumbBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065F46"/>
+      <stop offset="55%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#881337"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-3%" y="-3%" width="106%" height="108%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- ========================================================================= -->
+  <!-- TOP NAVIGATION BAR (Local Build & Editor Handoff Only — Safe & Clear)     -->
+  <!-- ========================================================================= -->
+  <rect x="0" y="0" width="1280" height="60" fill="#111827"/>
+  <line x1="0" y1="60" x2="1280" y2="60" stroke="#1E293B" stroke-width="1"/>
+
+  <!-- Left: Brand + Project Title -->
+  <g transform="translate(24, 16)">
+    <rect width="28" height="28" rx="7" fill="url(#emeraldGrad)"/>
+    <path d="M8 9 L14 20 L20 9" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="40" y="20" font-size="16" font-weight="800" fill="#F8FAFC">veraxi Studio</text>
+
+    <line x1="162" y1="4" x2="162" y2="24" stroke="#334155" stroke-width="1"/>
+    <text x="178" y="19" font-size="13.5" font-weight="600" fill="#E2E8F0">ずんだもんAI自動化解説</text>
+    <rect x="342" y="4" width="118" height="22" rx="11" fill="#064E3B"/>
+    <circle cx="354" cy="15" r="3.5" fill="#34D399"/>
+    <text x="364" y="19" font-size="10.5" font-weight="700" fill="#A7F3D0">VOICEVOX OK</text>
+  </g>
+
+  <!-- Right: Step 1 (Local Generate) + Optional Editor Handoffs -->
+  <g transform="translate(724, 12)">
+    <!-- Primary Safe Local Action: Generate / Update Video -->
+    <rect x="0" y="0" width="196" height="36" rx="8" fill="url(#emeraldGrad)"/>
+    <text x="98" y="23" font-size="13" font-weight="800" fill="#FFFFFF" text-anchor="middle">⚡ 動画を生成 (プレビュー)</text>
+
+    <!-- Divider between Generate and External Editors -->
+    <line x1="210" y1="6" x2="210" y2="30" stroke="#334155" stroke-width="1"/>
+
+    <!-- Open in YMM4 -->
+    <rect x="224" y="0" width="146" height="36" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+    <text x="297" y="23" font-size="12.5" font-weight="700" fill="#E2E8F0" text-anchor="middle">🎬 YMM4で開く</text>
+
+    <!-- Premiere XML -->
+    <rect x="380" y="0" width="152" height="36" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+    <text x="456" y="23" font-size="12.5" font-weight="700" fill="#E2E8F0" text-anchor="middle">📄 Premiere書き出し</text>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- LEFT WORKSPACE: STORYBOARD & SCRIPT (Descript Scenes + YMM4 Chat Input)   -->
+  <!-- ========================================================================= -->
+  <g transform="translate(24, 78)" filter="url(#cardShadow)">
+    <rect width="580" height="698" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
+
+    <!-- Panel Title & Import -->
+    <text x="24" y="34" font-size="15" font-weight="800" fill="#F8FAFC">1. 台本・スライド編集</text>
+    <text x="200" y="34" font-size="12" fill="#64748B">全18行 • 1分30秒</text>
+
+    <rect x="462" y="14" width="96" height="28" rx="6" fill="#1E293B"/>
+    <text x="510" y="32" font-size="11.5" font-weight="600" fill="#CBD5E1" text-anchor="middle">📂 台本読込</text>
+    <line x1="0" y1="52" x2="580" y2="52" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- ================= SCENE 1 BLOCK (Inline Slide + Dialogue Lines) ================= -->
+    <g transform="translate(18, 68)">
+      <rect width="544" height="276" rx="10" fill="#0E1525" stroke="#1E293B" stroke-width="1"/>
+
+      <!-- Scene Header with Inline Slide Thumbnail -->
+      <rect width="544" height="58" rx="10" fill="#162033"/>
+      <rect x="12" y="8" width="74" height="42" rx="4" fill="#0B0F19" stroke="#38BDF8" stroke-width="1.2"/>
+      <text x="49" y="26" font-size="7.5" font-weight="800" fill="#38BDF8" text-anchor="middle">SLIDE 1</text>
+      <text x="49" y="39" font-size="7" fill="#E2E8F0" text-anchor="middle">AI動画自動化</text>
+
+      <text x="98" y="26" font-size="13" font-weight="800" fill="#F8FAFC">シーン 1：イントロ（AI自動化の衝撃）</text>
+      <text x="98" y="44" font-size="11" fill="#94A3B8">背景スライド: slide_01.png • BGM: ほのぼの日常</text>
+      <rect x="454" y="16" width="76" height="26" rx="6" fill="#1E293B"/>
+      <text x="492" y="33" font-size="11" font-weight="600" fill="#38BDF8" text-anchor="middle">🖼 スライド変更</text>
+
+      <!-- Line 1: Zundamon -->
+      <g transform="translate(12, 70)">
+        <rect width="520" height="88" rx="8" fill="#151F32" stroke="#1E293B" stroke-width="1"/>
+        <circle cx="32" cy="44" r="20" fill="#064E3B" stroke="#10B981" stroke-width="1.5"/>
+        <text x="32" y="48" font-size="10" font-weight="800" fill="#A7F3D0" text-anchor="middle">ずんだ</text>
+
+        <text x="64" y="26" font-size="12" font-weight="700" fill="#34D399">ずんだもん</text>
+        <rect x="134" y="12" width="66" height="20" rx="5" fill="#1E293B"/>
+        <text x="167" y="26" font-size="10.5" fill="#FDE047" text-anchor="middle">😊 笑顔 ▾</text>
+
+        <text x="64" y="52" font-size="14.5" font-weight="600" fill="#F8FAFC">みんな、AI自動化の衝撃は</text>
+        <text x="64" y="74" font-size="14.5" font-weight="700" fill="#FDE047">ここまできたのだ！</text>
+
+        <text x="466" y="26" font-size="11" fill="#64748B" text-anchor="end">23文字</text>
+        <circle cx="490" cy="52" r="15" fill="#1E293B"/>
+        <polygon points="487,46 496,52 487,58" fill="#10B981"/>
+      </g>
+
+      <!-- Line 2: Shikoku Metan (Currently Selected / Playing) -->
+      <g transform="translate(12, 168)">
+        <rect width="520" height="94" rx="8" fill="#1A2744" stroke="#3B82F6" stroke-width="1.8"/>
+        <circle cx="32" cy="47" r="20" fill="#881337" stroke="#F43F5E" stroke-width="1.5"/>
+        <text x="32" y="51" font-size="10" font-weight="800" fill="#FECDD3" text-anchor="middle">めたん</text>
+
+        <text x="64" y="26" font-size="12" font-weight="700" fill="#FB7185">四国めたん</text>
+        <rect x="134" y="12" width="66" height="20" rx="5" fill="#1E293B"/>
+        <text x="167" y="26" font-size="10.5" fill="#E2E8F0" text-anchor="middle">😌 通常 ▾</text>
+
+        <text x="64" y="54" font-size="14.5" font-weight="600" fill="#FFFFFF">はい、ローカル環境でも無料で</text>
+        <text x="64" y="76" font-size="14.5" font-weight="600" fill="#FFFFFF">全自動動画制作が可能ですわ。</text>
+
+        <text x="466" y="26" font-size="11" fill="#93C5FD" text-anchor="end">28文字 ✓</text>
+        <circle cx="490" cy="54" r="15" fill="#3B82F6"/>
+        <polygon points="487,48 496,54 487,60" fill="#FFFFFF"/>
+      </g>
+    </g>
+
+    <!-- ================= SCENE 2 BLOCK ================= -->
+    <g transform="translate(18, 358)">
+      <rect width="544" height="254" rx="10" fill="#0E1525" stroke="#1E293B" stroke-width="1"/>
+
+      <rect width="544" height="58" rx="10" fill="#162033"/>
+      <rect x="12" y="8" width="74" height="42" rx="4" fill="#0B0F19" stroke="#475569" stroke-width="1"/>
+      <text x="49" y="26" font-size="7.5" font-weight="800" fill="#94A3B8" text-anchor="middle">SLIDE 2</text>
+      <text x="49" y="39" font-size="7" fill="#CBD5E1" text-anchor="middle">YMM4連携</text>
+
+      <text x="98" y="26" font-size="13" font-weight="800" fill="#F8FAFC">シーン 2：YMM4・Premiere連携の仕組み</text>
+      <text x="98" y="44" font-size="11" fill="#94A3B8">背景スライド: slide_02.png</text>
+      <rect x="454" y="16" width="76" height="26" rx="6" fill="#1E293B"/>
+      <text x="492" y="33" font-size="11" font-weight="600" fill="#38BDF8" text-anchor="middle">🖼 スライド変更</text>
+
+      <!-- Line 3: Zundamon -->
+      <g transform="translate(12, 70)">
+        <rect width="520" height="82" rx="8" fill="#151F32" stroke="#1E293B" stroke-width="1"/>
+        <circle cx="32" cy="41" r="20" fill="#064E3B" stroke="#10B981" stroke-width="1.5"/>
+        <text x="32" y="45" font-size="10" font-weight="800" fill="#A7F3D0" text-anchor="middle">ずんだ</text>
+
+        <text x="64" y="25" font-size="12" font-weight="700" fill="#34D399">ずんだもん</text>
+        <rect x="134" y="11" width="66" height="20" rx="5" fill="#1E293B"/>
+        <text x="167" y="25" font-size="10.5" fill="#FDE047" text-anchor="middle">✨ 喜び ▾</text>
+
+        <text x="64" y="50" font-size="14.5" font-weight="600" fill="#F8FAFC">YMM4もPremiereもワンクリックで</text>
+        <text x="64" y="70" font-size="14.5" font-weight="600" fill="#F8FAFC">書き出せて隙がないのだ！</text>
+
+        <text x="466" y="25" font-size="11" fill="#64748B" text-anchor="end">27文字</text>
+        <circle cx="490" cy="48" r="15" fill="#1E293B"/>
+        <polygon points="487,42 496,48 487,54" fill="#10B981"/>
+      </g>
+
+      <!-- Line 4: Friendly Length Suggestion -->
+      <g transform="translate(12, 160)">
+        <rect width="520" height="82" rx="8" fill="#231B12" stroke="#F59E0B" stroke-width="1.2"/>
+        <circle cx="32" cy="41" r="20" fill="#881337" stroke="#F43F5E" stroke-width="1.5"/>
+        <text x="32" y="45" font-size="10" font-weight="800" fill="#FECDD3" text-anchor="middle">めたん</text>
+
+        <text x="64" y="25" font-size="12" font-weight="700" fill="#FB7185">四国めたん</text>
+        <rect x="296" y="10" width="174" height="22" rx="5" fill="#78350F"/>
+        <text x="383" y="25" font-size="10.5" font-weight="700" fill="#FDE047" text-anchor="middle">✂ 38文字 — 2行に分割を推奨</text>
+
+        <text x="64" y="50" font-size="13.5" font-weight="600" fill="#FDE68A">その通りですわ。ただし1カット35文字を超えると</text>
+        <text x="64" y="70" font-size="13.5" font-weight="600" fill="#FDE68A">字幕が少し読みづらくなってしまいますわ。</text>
+
+        <circle cx="490" cy="48" r="15" fill="#1E293B"/>
+        <polygon points="487,42 496,48 487,54" fill="#F59E0B"/>
+      </g>
+    </g>
+
+    <!-- ================= YMM4-STYLE QUICK CHAT INPUT BAR AT BOTTOM ================= -->
+    <g transform="translate(18, 626)">
+      <rect width="544" height="54" rx="10" fill="#080C14" stroke="#334155" stroke-width="1.2"/>
+      <rect x="10" y="10" width="106" height="34" rx="7" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
+      <text x="63" y="31" font-size="12" font-weight="800" fill="#A7F3D0" text-anchor="middle">ずんだもん ▾</text>
+
+      <text x="130" y="32" font-size="13" fill="#64748B">ここにセリフを入力して Enter で追加...</text>
+
+      <rect x="462" y="10" width="72" height="34" rx="7" fill="#10B981"/>
+      <text x="498" y="31" font-size="12.5" font-weight="800" fill="#080C14" text-anchor="middle">＋ 追加</text>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- RIGHT WORKSPACE: 2. PREVIEW PLAYER  +  3. SEPARATE YOUTUBE UPLOAD CARD   -->
+  <!-- ========================================================================= -->
+  <g transform="translate(624, 78)">
+
+    <!-- 2. MAIN VIDEO PREVIEW CARD -->
+    <g filter="url(#cardShadow)">
+      <rect width="632" height="464" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
+
+      <!-- Card Header -->
+      <text x="24" y="34" font-size="15" font-weight="800" fill="#F8FAFC">2. プレビュー確認</text>
+      <text x="160" y="34" font-size="12" fill="#34D399" font-weight="600">✓ 生成完了 (qa_test.mp4)</text>
+
+      <g transform="translate(442, 14)">
+        <rect width="168" height="26" rx="13" fill="#064E3B"/>
+        <text x="84" y="17" font-size="11" font-weight="700" fill="#A7F3D0" text-anchor="middle">🔊 音量バランス: 最適 ✓</text>
+      </g>
+      <line x1="0" y1="52" x2="632" y2="52" stroke="#1E293B" stroke-width="1"/>
+
+      <!-- Large 16:9 Video Canvas (584 x 328) -->
+      <g transform="translate(24, 66)">
+        <rect width="584" height="328" rx="10" fill="url(#videoScreen)" stroke="#334155" stroke-width="1.5"/>
+
+        <!-- Slide Presentation Card Inside Video -->
+        <rect x="112" y="24" width="360" height="176" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
+        <rect x="112" y="24" width="360" height="32" rx="8" fill="#1E293B"/>
+        <text x="292" y="45" font-size="11.5" font-weight="800" fill="#38BDF8" text-anchor="middle">SCENE 1 // AI VIDEO PIPELINE</text>
+        <text x="292" y="102" font-size="20" font-weight="900" fill="#F8FAFC" text-anchor="middle">ローカル環境で完全無料</text>
+        <text x="292" y="136" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">台本を書くだけで音声・立ち絵・字幕を自動合成</text>
+        <rect x="212" y="156" width="160" height="24" rx="12" fill="#064E3B"/>
+        <text x="292" y="172" font-size="11" font-weight="700" fill="#6EE7B7" text-anchor="middle">サーバー代 0円 • 高速出力</text>
+
+        <!-- Left Character Tachie: Metan (Speaking) -->
+        <g transform="translate(26, 148)">
+          <circle cx="38" cy="36" r="26" fill="#FECDD3" stroke="#F43F5E" stroke-width="2"/>
+          <path d="M10 96 C10 62 66 62 66 96 Z" fill="#881337" stroke="#F43F5E" stroke-width="2"/>
+          <rect x="8" y="80" width="60" height="18" rx="4" fill="#4C0519"/>
+          <text x="38" y="93" font-size="10" font-weight="800" fill="#FECDD3" text-anchor="middle">四国めたん</text>
+        </g>
+
+        <!-- Right Character Tachie: Zundamon -->
+        <g transform="translate(482, 148)">
+          <circle cx="38" cy="36" r="26" fill="#A7F3D0" stroke="#10B981" stroke-width="2"/>
+          <path d="M10 96 C10 62 66 62 66 96 Z" fill="#064E3B" stroke="#10B981" stroke-width="2"/>
+          <rect x="8" y="80" width="60" height="18" rx="4" fill="#052E22"/>
+          <text x="38" y="93" font-size="10" font-weight="800" fill="#A7F3D0" text-anchor="middle">ずんだもん</text>
+        </g>
+
+        <!-- Speech Bubble Subtitle Plate -->
+        <rect x="82" y="238" width="420" height="72" rx="12" fill="#090D16" fill-opacity="0.95" stroke="#F43F5E" stroke-width="2.2"/>
+        <text x="292" y="268" font-size="15.5" font-weight="800" fill="#FFFFFF" text-anchor="middle">「はい、ローカル環境でも無料で</text>
+        <text x="292" y="294" font-size="15.5" font-weight="800" fill="#FECDD3" text-anchor="middle">全自動動画制作が可能ですわ。」</text>
+      </g>
+
+      <!-- Clean Player Controls Bar -->
+      <g transform="translate(24, 410)">
+        <rect x="0" y="0" width="84" height="36" rx="8" fill="#10B981"/>
+        <text x="42" y="23" font-size="13.5" font-weight="800" fill="#080C14" text-anchor="middle">▶ 再生</text>
+
+        <text x="102" y="23" font-size="13.5" font-family="monospace" font-weight="700" fill="#E2E8F0">00:14 / 01:30</text>
+
+        <!-- Scrubber with Scene Markers -->
+        <rect x="220" y="14" width="364" height="8" rx="4" fill="#1E293B"/>
+        <rect x="220" y="14" width="110" height="8" rx="4" fill="#10B981"/>
+        <line x1="340" y1="11" x2="340" y2="25" stroke="#64748B" stroke-width="1.5"/>
+        <line x1="460" y1="11" x2="460" y2="25" stroke="#64748B" stroke-width="1.5"/>
+        <circle cx="330" cy="18" r="7" fill="#FFFFFF" stroke="#10B981" stroke-width="2.5"/>
+      </g>
+    </g>
+
+    <!-- 3. YOUTUBE THUMBNAIL & UPLOAD CARD (Separate Step 3 at Bottom-Right) -->
+    <g transform="translate(0, 482)" filter="url(#cardShadow)">
+      <rect width="632" height="216" rx="14" fill="#111827" stroke="#1E293B" stroke-width="1.2"/>
+
+      <text x="24" y="34" font-size="15" font-weight="800" fill="#F8FAFC">3. YouTubeサムネイル・投稿</text>
+      <rect x="494" y="14" width="114" height="28" rx="6" fill="#1E293B"/>
+      <text x="551" y="32" font-size="11.5" font-weight="600" fill="#38BDF8" text-anchor="middle">✏ サムネ編集</text>
+      <line x1="0" y1="50" x2="632" y2="50" stroke="#1E293B" stroke-width="1"/>
+
+      <!-- 16:9 Thumbnail Preview (240 x 135) -->
+      <g transform="translate(24, 64)">
+        <rect width="240" height="135" rx="8" fill="url(#thumbBg)" stroke="#475569" stroke-width="1.2"/>
+        <rect x="12" y="12" width="84" height="22" rx="4" fill="#EF4444"/>
+        <text x="54" y="27" font-size="11" font-weight="800" fill="#FFFFFF" text-anchor="middle">サーバー代 $0</text>
+
+        <text x="14" y="68" font-size="24" font-weight="900" fill="#FDE047" stroke="#080C14" stroke-width="3" paint-order="stroke">完全無料！</text>
+        <text x="14" y="96" font-size="16" font-weight="900" fill="#FFFFFF" stroke="#080C14" stroke-width="2" paint-order="stroke">AI動画自動化ツール</text>
+
+        <circle cx="196" cy="78" r="28" fill="#A7F3D0" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="196" y="83" font-size="10" font-weight="900" fill="#064E3B" text-anchor="middle">ずんだもん</text>
+
+        <rect x="192" y="112" width="40" height="16" rx="3" fill="#080C14" fill-opacity="0.9"/>
+        <text x="212" y="124" font-size="9.5" font-family="monospace" font-weight="700" fill="#FFFFFF" text-anchor="middle">1:30</text>
+      </g>
+
+      <!-- Right Side: Title + Privacy Selector + Dedicated Upload Button -->
+      <g transform="translate(284, 64)">
+        <text x="0" y="14" font-size="11.5" font-weight="700" fill="#94A3B8">動画タイトル</text>
+        <rect x="0" y="22" width="324" height="34" rx="6" fill="#0B0F19" stroke="#1E293B" stroke-width="1"/>
+        <text x="12" y="44" font-size="12" font-weight="700" fill="#F8FAFC">【完全無料】ずんだもん解説動画をAIで自動生成！</text>
+
+        <text x="0" y="74" font-size="11" font-weight="600" fill="#34D399">✓ 3分割レイアウト・右下タイムスタンプ回避済</text>
+
+        <!-- Bottom Action Row: Privacy Dropdown + Separate YouTube Upload Button -->
+        <g transform="translate(0, 92)">
+          <!-- Privacy Setting (Safe default: Private / Scheduled) -->
+          <rect x="0" y="0" width="136" height="40" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+          <text x="68" y="25" font-size="12" font-weight="700" fill="#E2E8F0" text-anchor="middle">🔒 非公開 (下書き) ▾</text>
+
+          <!-- Dedicated YouTube Upload Button -->
+          <rect x="148" y="0" width="176" height="40" rx="8" fill="url(#youtubeRed)"/>
+          <text x="236" y="25" font-size="13" font-weight="800" fill="#FFFFFF" text-anchor="middle">🚀 YouTubeへ投稿</text>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
