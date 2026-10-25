@@ -9,7 +9,6 @@ from typing import Any, Dict
 
 from veraxi_ymmp.logging import logger
 from veraxi_ymmp.mcp_server import (
-    run_pipeline,
     list_projects,
     load_project,
     save_project_script,
@@ -34,6 +33,7 @@ def _project_rel_path(project_name: str) -> str:
         raise ValueError("Invalid project name")
     return f"projects/{project_name}"
 
+
 class APIHandler(http.server.SimpleHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self.send_response(200, "ok")
@@ -44,7 +44,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
     def send_json(self, status_code: int, data: Any) -> None:
         try:
-            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
         except TypeError as e:
             logger.error(f"JSON serialization error: {e}, data: {data}")
             self.send_error(500, "Internal Server Error")
@@ -117,8 +117,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 match = re.match(r'bytes=(\d+)-(\d*)', range_header)
                 if match:
                     start = int(match.group(1))
-                    end = match.group(2)
-                    end = int(end) if end else file_size - 1
+                    end_str = match.group(2)
+                    end = int(end_str) if end_str else file_size - 1
 
                     if start >= file_size or end >= file_size:
                         self.send_response(416)
@@ -198,7 +198,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                             self.wfile.write(f.read())
                         try:
                             wav_path.unlink()
-                        except:
+                        except OSError:
                             pass
                         return
                     else:
@@ -219,7 +219,12 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 use_tts = body.get("use_tts", True)
 
                 with _pipeline_lock:
-                    _pipeline_status[project_name] = {"status": "running", "stage": "starting", "progress": 0.0, "message": ""}
+                    _pipeline_status[project_name] = {
+                        "status": "running",
+                        "stage": "starting",
+                        "progress": 0.0,
+                        "message": "",
+                    }
 
                 def run_bg() -> None:
                     def cb(stage: str, ratio: float, msg: str) -> None:
@@ -233,7 +238,9 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     try:
                         from veraxi_ymmp.pipeline import ProjectPipeline
                         import dataclasses
-                        res_obj = ProjectPipeline(use_tts=use_tts, progress_callback=cb).run(workspace_path(_project_rel_path(project_name)))
+                        res_obj = ProjectPipeline(use_tts=use_tts, progress_callback=cb).run(
+                            workspace_path(_project_rel_path(project_name))
+                        )
                         res = dataclasses.asdict(res_obj)
                         with _pipeline_lock:
                             _pipeline_status[project_name] = {
@@ -332,6 +339,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+
 
 def serve(port: int = 8000) -> None:
     server_address = ('127.0.0.1', port)

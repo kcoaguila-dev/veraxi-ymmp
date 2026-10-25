@@ -24,7 +24,7 @@ interface StudioState {
   saveScript: () => Promise<any>;
   runPipeline: (useTts?: boolean) => Promise<void>;
 
-  refreshMedia: () => void;
+  refreshMedia: () => Promise<void>;
   mediaCacheBust: number;
 }
 
@@ -54,7 +54,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           const status = await api.getPipelineStatus(activeProjectName);
           setPipelineStatus(status);
           if (status.status === 'complete') {
-            refreshMedia();
+            await refreshMedia();
           }
         } catch (e) {
           console.error('Failed to poll pipeline status', e);
@@ -98,7 +98,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setProjectData(data);
       setIsDirty(false);
       setPipelineStatus({ status: 'idle' });
-      refreshMedia();
+      setMediaCacheBust(Date.now());
     } catch (e) {
       console.error('Failed to load project data', e);
     }
@@ -177,9 +177,16 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  const refreshMedia = () => {
+  const refreshMedia = async () => {
     setMediaCacheBust(Date.now());
-    if (activeProjectName) setActiveProject(activeProjectName);
+    if (activeProjectName) {
+      try {
+        const data = await api.getProject(activeProjectName);
+        setProjectData(data);
+      } catch (e) {
+        console.error('Failed to refresh project media', e);
+      }
+    }
   };
 
   const value: StudioState = {
