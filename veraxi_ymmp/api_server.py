@@ -102,6 +102,12 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(403, "Forbidden")
                 return
 
+            if (not file_path.exists() or not file_path.is_file()) and filename.startswith("assets/"):
+                ws_root = workspace_path(".").resolve()
+                ws_candidate = (ws_root / filename).resolve()
+                if str(ws_candidate).startswith(str(ws_root)) and ws_candidate.exists() and ws_candidate.is_file():
+                    file_path = ws_candidate
+
             if not file_path.exists() or not file_path.is_file():
                 self.send_error(404, "Not Found")
                 return
