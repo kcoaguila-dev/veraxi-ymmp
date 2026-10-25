@@ -1,3 +1,4 @@
+import json
 import socket
 import threading
 import time
@@ -240,3 +241,42 @@ def test_api_voicevox_audition_error(api_server: str) -> None:
         )
         assert res.status_code == 500
         assert "Voicevox offline" in res.json()["error"]
+
+
+def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
+    with patch("veraxi_ymmp.api_server.workspace_path", return_value=tmp_path / "projects" / "hist_proj"):
+        proj_dir = tmp_path / "projects" / "hist_proj"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "script.json").write_text(
+            json.dumps([{"character": "ずんだもん", "text": "初期バージョンなのだ！"}]),
+            encoding="utf-8"
+        )
+
+        from veraxi_ymmp.history import backup_project_script
+        snap_id = backup_project_script(proj_dir, reason="api_test")
+        assert snap_id is not None
+
+        # 1. GET /api/projects/hist_proj/history
+        res = requests.get(f"{api_server}/api/projects/hist_proj/history")
+        assert res.status_code == 200
+        history = res.json().get("history", [])
+        assert len(history) == 1
+        assert history[0]["id"] == snap_id
+
+        # 2. Overwrite script
+        (proj_dir / "script.json").write_text(
+            json.dumps([{"character": "四国めたん", "text": "変更後ですわ。"}]),
+            encoding="utf-8"
+        )
+
+        # 3. POST /api/projects/hist_proj/history/restore
+        res_restore = requests.post(
+            f"{api_server}/api/projects/hist_proj/history/restore",
+            json={"history_id": snap_id}
+        )
+        assert res_restore.status_code == 200
+        assert res_restore.json()["success"] is True
+
+        # Verify disk script is restored
+        restored_data = json.loads((proj_dir / "script.json").read_text(encoding="utf-8"))
+        assert restored_data[0]["text"] == "初期バージョンなのだ！"

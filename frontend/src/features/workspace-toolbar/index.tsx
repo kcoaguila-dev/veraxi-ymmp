@@ -3,7 +3,7 @@ import { useStudioStore } from '../../shared/store';
 import { api } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, voicevoxHealth, pipelineStatus, runPipeline } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, voicevoxHealth, pipelineStatus, runPipeline, isDirty } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
@@ -75,8 +75,20 @@ export const WorkspaceToolbar: React.FC = () => {
             aria-label="プロジェクト選択"
             className="bg-[#1E293B]/90 hover:bg-[#1E293B] border border-[#334155] rounded-[7px] px-3 py-1 text-[13px] font-semibold text-[#E2E8F0] focus:outline-none focus:border-[#10B981] transition-colors"
             value={activeProjectName || ''}
-            onChange={(e) => setActiveProject(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (isDirty) {
+                const confirmed = window.confirm(
+                  '未保存の台本編集があります。プロジェクトを切り替えると変更が破棄されますがよろしいですか？'
+                );
+                if (!confirmed) return;
+              }
+              setActiveProject(next);
+            }}
           >
+            {activeProjectName && !projects.some(p => p.name === activeProjectName) && (
+              <option value={activeProjectName}>{activeProjectName}</option>
+            )}
             {projects.map(p => (
               <option key={p.name} value={p.name}>{p.name}</option>
             ))}

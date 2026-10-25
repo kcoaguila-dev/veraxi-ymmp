@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from './api';
 import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry } from './types';
+import {
+  getInitialProjectName,
+  persistActiveProject,
+  resolveActiveProject
+} from './project-storage';
 
 interface StudioState {
   projects: ProjectSummary[];
@@ -10,7 +15,7 @@ interface StudioState {
   pipelineStatus: PipelineStatus;
   isDirty: boolean;
 
-  loadProjects: () => Promise<void>;
+  loadProjects: (preferredName?: string) => Promise<void>;
   createProject: (name: string) => Promise<void>;
   setActiveProject: (name: string) => Promise<void>;
 
@@ -32,7 +37,7 @@ const StudioContext = createContext<StudioState | null>(null);
 
 export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [activeProjectName, setActiveProjectName] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState<string | null>(() => getInitialProjectName());
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
@@ -45,6 +50,17 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const interval = setInterval(checkVoicevox, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const targetFromUrl = getInitialProjectName();
+      if (targetFromUrl && targetFromUrl !== activeProjectName) {
+        setActiveProject(targetFromUrl);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeProjectName]);
 
   useEffect(() => {
     let interval: number;
@@ -73,12 +89,19 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  const loadProjects = async () => {
+  const loadProjects = async (preferredName?: string) => {
     try {
       const res = await api.getProjects();
       setProjects(res.projects);
-      if (res.projects.length > 0 && !activeProjectName) {
-        setActiveProject(res.projects[0].name);
+      if (res.projects.length > 0) {
+        const candidate = preferredName || activeProjectName || getInitialProjectName();
+        const target = resolveActiveProject(res.projects, candidate);
+        if (target) {
+          await setActiveProject(target);
+        }
+      } else {
+        setActiveProjectName(null);
+        setProjectData(null);
       }
     } catch (e) {
       console.error('Failed to load projects', e);
@@ -87,12 +110,12 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const createProject = async (name: string) => {
     await api.createProject(name);
-    await loadProjects();
-    await setActiveProject(name);
+    await loadProjects(name);
   };
 
   const setActiveProject = async (name: string) => {
     setActiveProjectName(name);
+    persistActiveProject(name);
     try {
       const data = await api.getProject(name);
       setProjectData(data);

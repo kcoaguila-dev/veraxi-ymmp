@@ -668,6 +668,9 @@ def render_from_manifest(
     else:
         specs = raw_loaded
 
+    if not isinstance(specs, list):
+        specs = []
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     proj_dir = manifest_dir if manifest_dir is not None else out_dir.parent
