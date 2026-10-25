@@ -85,6 +85,14 @@ class ProjectPipeline:
         self.exporters = dict(exporters) if exporters is not None else {}
         self.progress_callback = progress_callback
 
+    def _resolve_project_template(self, proj_dir: Path) -> Path:
+        if self.template_path == Path("examples/full_template.ymmp"):
+            from .broll import detect_project_vertical
+            shorts_tmpl = Path("examples/shorts_template.ymmp")
+            if shorts_tmpl.exists() and detect_project_vertical(proj_dir):
+                return shorts_tmpl
+        return self.template_path
+
     def run(
         self,
         project_path: Union[str, Path],
@@ -176,7 +184,7 @@ class ProjectPipeline:
             backend = None
 
         compiler = YMMPCompiler(
-            template_path=self.template_path,
+            template_path=self._resolve_project_template(proj_dir),
             voicevox_client=backend if isinstance(backend, VoicevoxClient) else self.voicevox_client,
             tts_backend=backend,
             speaker_map=self.speaker_map,

@@ -228,6 +228,19 @@ class TestCharacterPSDRegistry:
         metan_no_broll = registry.get_spatial_layout("四国めたん", has_broll=False)
         assert metan_no_broll == {"x": -550.0, "y": 300.0, "zoom": 62.0, "layer": 4}
 
+    def test_get_spatial_layout_vertical_mobile(self) -> None:
+        """Test 9:16 vertical spatial layout places Metan on left and Zundamon on right."""
+        registry = CharacterPSDRegistry()
+
+        zunda_vert = registry.get_spatial_layout("ずんだもん", has_broll=True, is_vertical=True)
+        assert zunda_vert == {"x": 220.0, "y": 210.0, "zoom": 55.0, "layer": 6}
+
+        metan_vert = registry.get_spatial_layout("四国めたん", has_broll=True, is_vertical=True)
+        assert metan_vert == {"x": -220.0, "y": 260.0, "zoom": 48.0, "layer": 4}
+
+        tsumugi_vert = registry.get_spatial_layout("春日部つむぎ", has_broll=False, is_vertical=True)
+        assert tsumugi_vert == {"x": 0.0, "y": 240.0, "zoom": 50.0, "layer": 5}
+
     def test_register_character_open_closed_principle(self, tmp_path: Path) -> None:
         """Test registering a custom character adhering to the Open-Closed Principle."""
         registry = CharacterPSDRegistry()
