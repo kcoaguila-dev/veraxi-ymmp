@@ -5,17 +5,22 @@ import { api } from '../../shared/api';
 export const WorkspaceToolbar: React.FC = () => {
   const { projects, activeProjectName, setActiveProject, createProject, voicevoxHealth, pipelineStatus, runPipeline } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
+  const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
   const [useTts, setUseTts] = useState(true);
 
   const handleYMM4 = async () => {
     if (!activeProjectName) return;
     setLoadingYMM(true);
+    setYmmSuccess(false);
     try {
       await api.launchYMM4(activeProjectName);
-    } catch (e) {
+      setYmmSuccess(true);
+      setTimeout(() => setYmmSuccess(false), 5000);
+    } catch (e: any) {
       console.error(e);
-      alert('Failed to launch YMM4. Ensure YMM4 is configured properly.');
+      const detail = e?.data?.error || e?.message || 'Ensure YMM4 is configured properly.';
+      alert(`Failed to launch YMM4: ${detail}`);
     }
     setLoadingYMM(false);
   };
@@ -139,10 +144,15 @@ export const WorkspaceToolbar: React.FC = () => {
         <button
           onClick={handleYMM4}
           disabled={loadingYMM}
-          className="h-[36px] px-3.5 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+          className={`h-[36px] px-3.5 rounded-[8px] border text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors ${
+            ymmSuccess
+              ? 'bg-[#064E3B] border-[#10B981] text-[#A7F3D0]'
+              : 'bg-[#1E293B] hover:bg-[#334155] border-[#475569] text-[#E2E8F0]'
+          }`}
+          title="YMM4でプロジェクトを開く"
         >
-          <span>{loadingYMM ? '⏳' : '🎬'}</span>
-          <span>YMM4で開く</span>
+          <span>{loadingYMM ? '⏳' : ymmSuccess ? '✅' : '🎬'}</span>
+          <span>{loadingYMM ? '起動中...' : ymmSuccess ? 'YMM4起動完了' : 'YMM4で開く'}</span>
         </button>
 
         <button

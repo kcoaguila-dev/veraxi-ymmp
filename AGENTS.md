@@ -53,6 +53,8 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator must stru
   - Hard limit: Maximum 2 lines per speech bubble.
   - Character ceiling: $\le 35\text{--}40$ characters per dialogue cut.
   - Natural interjections: NEVER begin with bare `「ええ、」`. Use character-specific affirmations (`「はい、」`, `「その通りですわ、」`, `「まさにその通りなのだ！」`).
+  - **Grounded Staging Invariant:** NEVER use cartoon `"jump"` in technical, architectural, or commentary videos. Characters must remain grounded (`"motion": "none"` or subtle `"nod"`). Expressiveness is conveyed through facial emotions and rapid camera cuts, avoiding amateur bouncing that fights with B-roll text.
+  - **Clean Audio Invariant:** NEVER inject slapstick cartoon SFX (`pon.wav` is permanently banned). NEVER use murky BGM loops with vocal chops or chatter. Use only clean non-vocal instrumental BGM (`assets/bgm/2_23_AM.mp3`) ducked low ($\le 0.08$).
 
 #### 3. Creative & Asset Designer
 - **Scope:** Generates B-roll slides and YouTube thumbnails using `veraxi_ymmp.broll` and `veraxi_ymmp.thumbnail`.

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import os
+import shutil
 import subprocess
 import tempfile
 from PIL import Image
@@ -338,24 +339,128 @@ def normalize_project_audio(project_dir: str, platform: str = "youtube") -> Dict
         "measured_tp": measured_tp
     }
 
+def find_ymm4_executable() -> Optional[str]:
+    """Auto-detects YukkuriMovieMaker.exe across common install locations, portable folders, and user paths."""
+    ymm4_path = os.environ.get("YMM4_PATH")
+    if ymm4_path and os.path.exists(ymm4_path):
+        return ymm4_path
+
+    which_path = shutil.which("YukkuriMovieMaker.exe") or shutil.which("YukkuriMovieMaker")
+    if which_path and os.path.exists(which_path):
+        return which_path
+
+    home = Path.home()
+    for folder in ["Documents", "Desktop", "Downloads"]:
+        d = home / folder
+        if d.exists():
+            for p in list(d.glob("*YukkuriMovieMaker*/YukkuriMovieMaker.exe")) + list(d.glob("*YMM4*/YukkuriMovieMaker.exe")):
+                if p.exists():
+                    return str(p)
+
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        base_dir = Path(local_app_data)
+        for subdir in ["YukkuriMovieMaker4", "Programs/YukkuriMovieMaker4"]:
+            cand = base_dir / subdir / "YukkuriMovieMaker.exe"
+            if cand.exists():
+                return str(cand)
+
+    for env_var in ["ProgramFiles", "ProgramFiles(x86)"]:
+        pf = os.environ.get(env_var)
+        if pf:
+            for sub in ["YukkuriMovieMaker4", "YukkuriMovieMaker_v4_Lite"]:
+                cand = Path(pf) / sub / "YukkuriMovieMaker.exe"
+                if cand.exists():
+                    return str(cand)
+
+    for cand in [Path("C:/YukkuriMovieMaker4/YukkuriMovieMaker.exe"), Path("C:/YukkuriMovieMaker_v4_Lite/YukkuriMovieMaker.exe")]:
+        if cand.exists():
+            return str(cand)
+
+    return None
+
+
+def spawn_interactive_desktop_process(cmd: str, cwd: Optional[str] = None) -> bool:
+    r"""Spawns a GUI process attached to the user's interactive desktop (WinSta0\Default).
+
+    Returns True if successfully launched via Win32 CreateProcessW, False otherwise.
+    """
+    if os.name != "nt":
+        return False
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class STARTUPINFOW(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("lpReserved", wintypes.LPWSTR),
+                ("lpDesktop", wintypes.LPWSTR),
+                ("lpTitle", wintypes.LPWSTR),
+                ("dwX", wintypes.DWORD),
+                ("dwY", wintypes.DWORD),
+                ("dwXSize", wintypes.DWORD),
+                ("dwYSize", wintypes.DWORD),
+                ("dwXCountChars", wintypes.DWORD),
+                ("dwYCountChars", wintypes.DWORD),
+                ("dwFillAttribute", wintypes.DWORD),
+                ("dwFlags", wintypes.DWORD),
+                ("wShowWindow", wintypes.WORD),
+                ("cbReserved2", wintypes.WORD),
+                ("lpReserved2", ctypes.c_char_p),
+                ("hStdInput", wintypes.HANDLE),
+                ("hStdOutput", wintypes.HANDLE),
+                ("hStdError", wintypes.HANDLE),
+            ]
+
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("hProcess", wintypes.HANDLE),
+                ("hThread", wintypes.HANDLE),
+                ("dwProcessId", wintypes.DWORD),
+                ("dwThreadId", wintypes.DWORD),
+            ]
+
+        si = STARTUPINFOW()
+        si.cb = ctypes.sizeof(STARTUPINFOW)
+        si.lpDesktop = r"WinSta0\Default"
+        si.dwFlags = 0x00000001  # STARTF_USESHOWWINDOW
+        si.wShowWindow = 1       # SW_SHOWNORMAL
+        pi = PROCESS_INFORMATION()
+
+        success = ctypes.windll.kernel32.CreateProcessW(
+            None,
+            cmd,
+            None,
+            None,
+            False,
+            0x00000200,  # CREATE_NEW_PROCESS_GROUP
+            None,
+            cwd,
+            ctypes.byref(si),
+            ctypes.byref(pi),
+        )
+        if success:
+            ctypes.windll.kernel32.CloseHandle(pi.hProcess)
+            ctypes.windll.kernel32.CloseHandle(pi.hThread)
+            return True
+    except Exception as e:
+        logger.warning(f"spawn_interactive_desktop_process failed: {e}")
+    return False
+
+
 @mcp.tool()
 def launch_ymm4_desktop(project_dir: str) -> Dict[str, Any]:
     """Locates YMM4 and launches the project .ymmp file."""
     proj_path = workspace_path(project_dir)
 
-    ymm4_path = os.environ.get("YMM4_PATH")
-    if not ymm4_path:
-        local_app_data = os.environ.get("LOCALAPPDATA", "")
-        if local_app_data:
-            base_dir = Path(local_app_data)
-            for subdir in ["YukkuriMovieMaker4", "Programs/YukkuriMovieMaker4"]:
-                candidate = base_dir / subdir / "YukkuriMovieMaker.exe"
-                if candidate.exists():
-                    ymm4_path = str(candidate)
-                    break
-
+    ymm4_path = find_ymm4_executable()
     if not ymm4_path or not os.path.exists(ymm4_path):
-        raise FileNotFoundError("Could not find YukkuriMovieMaker.exe")
+        raise FileNotFoundError(
+            "Could not find YukkuriMovieMaker.exe. "
+            "Please ensure YMM4 is in Documents, AppData, or Program Files, or set the YMM4_PATH environment variable."
+        )
 
     ymmp_dir = proj_path / "ymmp"
     ymmp_file = None
@@ -372,20 +477,40 @@ def launch_ymm4_desktop(project_dir: str) -> Dict[str, Any]:
     if not ymmp_file:
         raise FileNotFoundError(f"Could not find a .ymmp file in {proj_path}")
 
-    cmd = [ymm4_path, str(ymmp_file)]
-    kwargs: Dict[str, Any] = {}
-    if os.name == 'nt':
-        kwargs['creationflags'] = getattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+    ymm4_dir = str(Path(ymm4_path).parent)
+    resolved_ymmp = str(ymmp_file.resolve())
 
-    try:
-        subprocess.Popen(cmd, **kwargs)
-        return {
-            "launched": True,
-            "executable": ymm4_path,
-            "project": str(ymmp_file)
+    started = False
+    ymm4_cmd = f'"{ymm4_path}" "{resolved_ymmp}"'
+    if os.name == "nt":
+        started = spawn_interactive_desktop_process(ymm4_cmd, cwd=ymm4_dir)
+
+    if not started:
+        kwargs: Dict[str, Any] = {
+            "cwd": ymm4_dir,
         }
-    except Exception as e:
-        raise RuntimeError(f"Failed to launch YMM4: {e}")
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        cmd = [ymm4_path, resolved_ymmp]
+        try:
+            subprocess.Popen(cmd, **kwargs)
+            started = True
+        except Exception as e:
+            raise RuntimeError(f"Failed to launch YMM4: {e}")
+
+    if os.name == "nt":
+        explorer_cmd = f'explorer.exe /select,"{resolved_ymmp}"'
+        if not spawn_interactive_desktop_process(explorer_cmd, cwd=ymm4_dir):
+            try:
+                subprocess.Popen(["explorer.exe", f"/select,{resolved_ymmp}"])
+            except Exception:
+                pass
+
+    return {
+        "launched": True,
+        "executable": ymm4_path,
+        "project": resolved_ymmp,
+    }
 
 
 

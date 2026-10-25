@@ -42,6 +42,7 @@ def create_speech_plate(
     canvas_h: int = 360,
     overwrite: bool = True,
     bottom_safe_margin: float = 50.0,
+    canvas_total_h: int = 1080,
 ) -> SpeechPlateResult:
     """
     Renders a clean white speech bubble plate (Zabuton)
@@ -90,7 +91,7 @@ def create_speech_plate(
         img.save(out_path, format="PNG")
 
     center_y = calculate_ymm4_subtitle_y(
-        geom.box_h, canvas_h=1080, bottom_safe_margin=bottom_safe_margin
+        geom.box_h, canvas_h=canvas_total_h, bottom_safe_margin=bottom_safe_margin
     )
     voice_y = float(center_y + geom.voice_y_offset)
     return SpeechPlateResult(

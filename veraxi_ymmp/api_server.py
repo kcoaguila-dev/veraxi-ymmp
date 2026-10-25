@@ -2,7 +2,9 @@ import http.server
 import json
 import re
 import socketserver
+import sys
 import threading
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict
@@ -155,9 +157,14 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             with open(file_path, 'rb') as f:
                 self.wfile.write(f.read())
 
+        except (ConnectionResetError, BrokenPipeError):
+            return
         except Exception as e:
             logger.error(f"Media error: {e}", exc_info=True)
-            self.send_error(500, str(e))
+            try:
+                self.send_error(500, str(e))
+            except (ConnectionResetError, BrokenPipeError):
+                pass
 
     def do_POST(self) -> None:
         try:
@@ -345,6 +352,13 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    allow_reuse_address = True
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        exc_type, exc_val, _ = sys.exc_info()
+        if exc_type in (ConnectionResetError, BrokenPipeError):
+            return  # Normal client disconnect
+        logger.error(f"Socket error for {client_address}: {exc_val}")
 
 
 def serve(port: int = 8000) -> None:
@@ -352,7 +366,17 @@ def serve(port: int = 8000) -> None:
     httpd = ThreadingHTTPServer(server_address, APIHandler)
     logger.info(f"Starting Veraxi YMMP API server on http://127.0.0.1:{port}")
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        logger.info("Shutting down API server")
-        httpd.server_close()
+        while True:
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                logger.info("Shutting down API server")
+                break
+            except Exception as e:
+                logger.error(f"API server loop recovered from exception: {e}", exc_info=True)
+                time.sleep(0.5)
+    finally:
+        try:
+            httpd.server_close()
+        except Exception:
+            pass

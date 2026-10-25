@@ -464,6 +464,9 @@ def validate_ymmp_timeline(
             )
 
     # Check 8: Speech Plate & Subtitle Bottom Margin Safe Zone
+    v_info = timeline.get("VideoInfo", {})
+    canvas_h = float(v_info.get("Height", 1080))
+    max_safe_plate_y = (canvas_h / 2.0) - 95.0
     for i, it in enumerate(plate_items_layer7):
         y_obj = it.get("Y")
         y_val = (
@@ -471,10 +474,10 @@ def validate_ymmp_timeline(
             if isinstance(y_obj, dict)
             else (y_obj if isinstance(y_obj, (int, float)) else 0.0)
         )
-        if y_val > 445.0:
+        if y_val > max_safe_plate_y:
             raise ValidationError(
-                f"Plate ImageItem[{i}] at frame {it.get('Frame')} has Y={y_val} > 445.0. "
-                "Speech bubble plate must maintain at least 45-50px safe distance from bottom canvas edge (+540.0)!"
+                f"Plate ImageItem[{i}] at frame {it.get('Frame')} has Y={y_val} > {max_safe_plate_y}. "
+                f"Speech bubble plate must maintain safe distance from bottom canvas edge (+{canvas_h / 2.0})!"
             )
 
     # Check 9: Concentric Subtitle Alignment
