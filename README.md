@@ -1,6 +1,6 @@
 # veraxi-ymmp
 
-Clean-architecture multi-target video production engine for YukkuriMovieMaker4 (`.ymmp`), Adobe Premiere Pro (FCPXML), Adobe After Effects (`.jsx`), MoviePy, B-Roll graphics, and publication-ready YouTube thumbnails.
+Clean-architecture multi-target video production engine and visual studio for YukkuriMovieMaker4 (`.ymmp`), Adobe Premiere Pro (FCPXML), Adobe After Effects (`.jsx`), MoviePy, B-Roll graphics, and publication-ready YouTube thumbnails.
 
 > For an in-depth breakdown of Clean Architecture layers, data flow diagrams, dependency rules, and fitness guardrails, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -17,12 +17,56 @@ Clean-architecture multi-target video production engine for YukkuriMovieMaker4 (
 
 ```
 Script (Writer/Director) ──> VoiceVox TTS ──> TimelineIR ──┬──> YMM4 (.ymmp)
-                                                          ├──> Premiere Pro (FCPXML)
-                                                          ├──> MoviePy (Preview MP4)
-                                                          ├──> After Effects (.jsx)
-                                                          ├──> SRT Subtitles (.srt)
-                                                          └──> YouTube Thumbnail (.png)
+                                                           ├──> Premiere Pro (FCPXML)
+                                                           ├──> MoviePy (Preview MP4)
+                                                           ├──> After Effects (.jsx)
+                                                           ├──> SRT Subtitles (.srt)
+                                                           └──> YouTube Thumbnail (.png)
 ```
+
+---
+
+## veraxi Studio GUI (Visual NLE & Web AI Bridge)
+
+`veraxi-ymmp` includes **veraxi Studio**, a desktop-grade visual editing interface designed with high-density NLE aesthetics (`#0B0F19` obsidian canvas, `#111827` panels, and semantic character branding).
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ veraxi Studio   [01_costco_business_model ▾]  [VOICEVOX OK]  [⚡動画を生成]  │
+├────────────────────────────────────────┬────────────────────────────────────┤
+│ 1. 台本・スライド編集                  │ 2. プレビュー確認 (qa_test.mp4)    │
+│  • Scene 1: イントロ (Slide 1 Preview) │   ┌──────────────────────────────┐ │
+│    [ずんだ] 笑顔 | 23文字              │   │   16:9 Video Canvas          │ │
+│    [めたん] 通常 | 28文字              │   └──────────────────────────────┘ │
+│  • Scene 2: 収益解説 (Slide 2 Preview) │   [▶ 再生] 00:14/01:30 [Scrubber]  │
+│    [めたん] ✂ 38文字 (分割推奨)       ├────────────────────────────────────┤
+│                                        │ 3. YouTubeサムネイル・投稿         │
+│ [ずんだもん ▾] 手動セリフ追加 [＋追加] │   [3分割サムネ] タイトル / 投稿    │
+└────────────────────────────────────────┴────────────────────────────────────┘
+```
+
+### Key Features
+- **Scene-Grouped Storyboard Editor:** Dialogue lines are grouped into cohesive visual scene blocks with inline slide thumbnails (`SLIDE N`), background/BGM indicators, and one-click slide changing.
+- **Real-Time Guardrails:** Automatic character length counter (`23文字 ✓`), warning states for readability (`✂ 38文字 — 2行に分割を推奨` with 1-click splitting), and rule enforcement (e.g. flagging bare `「ええ、」`).
+- **Instant Voicevox Auditioning:** 1-click circular audition buttons on dialogue cards to test speech synthesis and pronunciation immediately.
+- **Zero API Key Web AI Bridge:**
+  - `📋 AI用プロンプトをコピー`: Copies the universal structured prompt formatted for ChatGPT, Claude, or Gemini Web.
+  - `📥 JSON貼り付け`: Pastes generated JSON arrays directly into the project with automated schema validation and self-healing re-prompt diagnostics.
+- **Built-in Studio Transport & Loudness Normalization:** Integrated 16:9 player with custom transport bar, millisecond timecode, scene scrubber, and one-click EBU R128 (-14.0 LUFS) normalization.
+- **YouTube Thumbnail & Direct Upload:** Fixed 3-split thumbnail preview with timestamp dead-zone protection, thumbnail regeneration, privacy controls, scheduling, and direct YouTube upload (or offline test mock).
+- **One-Click NLE Handoff:** Dedicated header buttons to immediately launch projects in **YMM4** (`.ymmp`) or download Adobe **Premiere Pro** (`.xml`).
+
+### Launching the Studio GUI
+```bash
+# Terminal 1: Start the backend API server (runs on port 8000)
+veraxi-ymmp serve
+
+# Terminal 2: Start the frontend dev server (runs on port 1420)
+cd frontend
+npm install
+npm run dev
+```
+Open **`http://localhost:1420`** in your browser.
 
 ---
 
@@ -55,7 +99,8 @@ Script (Writer/Director) ──> VoiceVox TTS ──> TimelineIR ──┬──
 ## Prerequisites & Installation
 
 ### 1. System Requirements
-- **Python:** 3.10, 3.11, 3.12, or 3.13
+- **Python:** 3.10, 3.11, 3.12, 3.13, or 3.14
+- **Node.js & npm:** 18+ (required for building and running `veraxi Studio` frontend)
 - **FFmpeg:** Installed and available on system `PATH` (required for MoviePy rendering and audio normalization).
 - **VOICEVOX Engine (Local):** Running on `http://127.0.0.1:50021` (required for speech synthesis). Download free at [voicevox.hiroshiba.jp](https://voicevox.hiroshiba.jp/).
 - **YukkuriMovieMaker4 (Optional):** If rendering final `.ymmp` projects via hardware acceleration on Windows.
@@ -109,8 +154,8 @@ Create a folder under `projects/my_video/` and write your dialogue in `script.js
 [
   {
     "character": "ずんだもん",
-    "text": "こんにちはなのだ！今日はClean Architectureについて解説するのだ！",
-    "emotion": "smile"
+    "text": "みんな、こんにちはなのだ！今日はClean Architectureについて解説するのだ！",
+    "emotion": "happy"
   },
   {
     "character": "四国めたん",
@@ -176,6 +221,27 @@ Before uploading to YouTube, conform your final audio to YouTube's **-14.0 LUFS*
 veraxi-ymmp normalize projects/my_video/final_video.mp4 -p youtube
 ```
 Produces `projects/my_video/final_video_normalized.mp4`.
+
+---
+
+## MCP Server Integration (LLM Agent Tools)
+
+`veraxi-ymmp` provides an official Model Context Protocol (MCP) server that exposes video generation tools, project management, and Voicevox speech auditioning directly to AI assistants:
+
+```bash
+# Start MCP server directly over STDIO
+veraxi-ymmp-mcp
+```
+
+### Exposed MCP Tools
+- `list_projects`: Discover active project folders in `projects/`.
+- `load_project`: Read script, broll manifest, and media status for a project.
+- `save_project_script`: Validate and persist script and broll entries with self-healing feedback.
+- `audition_voice`: Synthesize single-line speech clips for character auditioning.
+- `generate_thumbnail_tool`: Produce 3-split 1080p YouTube thumbnails.
+- `normalize_project_audio`: Conform audio to EBU R128 (-14.0 LUFS).
+- `launch_ymm4_desktop`: Launch the generated project directly in YukkuriMovieMaker4 on Windows.
+- `upload_project_to_youtube`: Upload video and metadata directly to YouTube.
 
 ---
 
@@ -270,6 +336,22 @@ For headless servers or GitHub Actions runners where browser login isn't possibl
 1. Copy the content of `~/.veraxi-ymmp/youtube_token.json`.
 2. Add it as an environment variable or repository secret named `VERAXI_YOUTUBE_AUTHORIZED_USER_JSON`.
 3. The adapter discovers this environment variable automatically with zero configuration.
+
+---
+
+## CLI Reference Summary
+
+| Command | Usage | Description |
+|---|---|---|
+| `veraxi-ymmp serve` | `veraxi-ymmp serve [--port 8000]` | Starts the local API server for the `veraxi Studio` frontend. |
+| `veraxi-ymmp run` | `veraxi-ymmp run <project_dir>` | Runs the full end-to-end compilation pipeline. |
+| `veraxi-ymmp normalize` | `veraxi-ymmp normalize <video> -p youtube` | Conforms audio loudness to EBU R128 (-14.0 LUFS). |
+| `veraxi-ymmp broll` | `veraxi-ymmp broll <manifest> -o <out_dir>` | Generates high-resolution presentation slide graphics. |
+| `veraxi-ymmp thumbnail` | `veraxi-ymmp thumbnail <project_dir>` | Generates publication-ready 3-split YouTube thumbnails. |
+| `veraxi-ymmp youtube` | `veraxi-ymmp youtube <auth\|upload\|stats\|ab>` | YouTube OAuth, upload, stats analysis, and A/B experiments. |
+| `veraxi-ymmp validate` | `veraxi-ymmp validate <script.json>` | Validates script schema and character dialogue constraints. |
+| `veraxi-ymmp export-spec`| `veraxi-ymmp export-spec` | Exports schema and prompt templates for LLM consumption. |
+| `veraxi-ymmp-mcp` | `veraxi-ymmp-mcp` | Starts the Model Context Protocol (MCP) server over STDIO. |
 
 ---
 
