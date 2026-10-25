@@ -1,11 +1,16 @@
-import {
+import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry
-} from './types';
+} from './types.ts';
 
 export class APIError extends Error {
-  constructor(public status: number, public data: any, message: string) {
+  status: number;
+  data: any;
+
+  constructor(status: number, data: any, message: string) {
     super(message);
+    this.status = status;
+    this.data = data;
     this.name = 'APIError';
   }
 }
@@ -51,11 +56,12 @@ export const api = {
 
   getVoicevoxHealth: () => fetchAPI<VoicevoxHealth>('/api/voicevox/health'),
 
-  auditionVoice: async (text: string, character: string, speed: number = 1.0) => {
+  auditionVoice: async (text: string, character: string, speed: number = 1.0, signal?: AbortSignal) => {
     const res = await fetch('/api/voicevox/audition', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, character, speed })
+      body: JSON.stringify({ text, character, speed }),
+      signal
     });
     if (!res.ok) {
         throw new Error('Failed to audition voice');

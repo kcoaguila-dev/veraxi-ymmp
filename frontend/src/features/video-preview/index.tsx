@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api } from '../../shared/api';
 import { LoudnessResult } from '../../shared/types';
@@ -11,6 +11,19 @@ export const VideoPreview: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loudness, setLoudness] = useState<LoudnessResult | null>(null);
   const [isNormalizing, setIsNormalizing] = useState(false);
+
+  useEffect(() => {
+    const handlePausePreview = () => {
+      if (videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause();
+      }
+    };
+
+    window.addEventListener('veraxi:pause-preview', handlePausePreview);
+    return () => {
+      window.removeEventListener('veraxi:pause-preview', handlePausePreview);
+    };
+  }, []);
 
   const formatTime = (time: number) => {
     if (!Number.isFinite(time) || time < 0) return '00:00';
@@ -34,6 +47,8 @@ export const VideoPreview: React.FC = () => {
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
+      // Discontinue any active single-line audition to guarantee audio exclusivity
+      window.dispatchEvent(new CustomEvent('veraxi:stop-audition'));
       videoRef.current.play();
     } else {
       videoRef.current.pause();
@@ -117,7 +132,10 @@ export const VideoPreview: React.FC = () => {
               className="w-full h-full object-contain cursor-pointer"
               src={videoSrc}
               onClick={togglePlay}
-              onPlay={() => setIsPlaying(true)}
+              onPlay={() => {
+                window.dispatchEvent(new CustomEvent('veraxi:stop-audition'));
+                setIsPlaying(true);
+              }}
               onPause={() => setIsPlaying(false)}
               onEnded={() => setIsPlaying(false)}
               onTimeUpdate={handleTimeUpdate}
