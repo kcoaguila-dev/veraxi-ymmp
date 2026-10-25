@@ -169,12 +169,57 @@ export const StoryboardScript: React.FC = () => {
 
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyList, setHistoryList] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyToast, setHistoryToast] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [promptTopic, setPromptTopic] = useState('');
   const [promptLengthMode, setPromptLengthMode] = useState<'golden' | 'medium' | 'short'>('golden');
   const [copySuccessMsg, setCopySuccessMsg] = useState<string | null>(null);
   const [pasteJson, setPasteJson] = useState('');
   const [repromptBlock, setRepromptBlock] = useState<string | null>(null);
   const [isAutoSplitting, setIsAutoSplitting] = useState(false);
+
+  const handleOpenHistory = async () => {
+    if (!activeProjectName) return;
+    setShowHistoryModal(true);
+    setIsLoadingHistory(true);
+    try {
+      const res = await api.getProjectHistory(activeProjectName);
+      setHistoryList(res.history || []);
+    } catch (e) {
+      console.error('Failed to load project history', e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (historyId: string, cutCount: number) => {
+    if (!activeProjectName) return;
+    const ok = window.confirm(
+      `【台本の復元確認】\n` +
+      `スナップショット [${historyId}]（${cutCount}カット）に台本を復元します。\n\n` +
+      `※ 現在の台本も自動バックアップされるため、いつでも復元前に戻すことができます。\n\n` +
+      `復元を実行しますか？`
+    );
+    if (!ok) return;
+
+    setIsRestoring(true);
+    try {
+      const res = await api.restoreProjectHistory(activeProjectName, historyId);
+      if (res.success) {
+        await setActiveProject(activeProjectName);
+        setShowHistoryModal(false);
+        setHistoryToast(`台本を復元しました（${res.cut_count}カット）。直前の状態もバックアップされました。`);
+        setTimeout(() => setHistoryToast(null), 5000);
+      }
+    } catch (e: any) {
+      alert(`復元に失敗しました: ${e.message || 'Unknown error'}`);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const getCharStyle = (char?: string) => {
     if (!char) {
@@ -429,6 +474,19 @@ export const StoryboardScript: React.FC = () => {
       }
     }
 
+    // Safety confirmation if existing project already has a script
+    if (projectData?.script && projectData.script.length > 0) {
+      const oldCount = projectData.script.filter((s) => s && (s.character || s.text)).length;
+      const newCount = parsed.filter((s) => s && (s.character || s.text)).length;
+      const ok = window.confirm(
+        `【台本の上書き確認】\n` +
+        `現在の台本（${oldCount}カット）が新しい台本（${newCount}カット）で上書きされます。\n\n` +
+        `※ 現在の台本は自動バックアップ保存されるため、上部の「🕒 履歴・復元」からいつでも元に戻せます。\n\n` +
+        `上書きして反映しますか？`
+      );
+      if (!ok) return;
+    }
+
     try {
       const res = await api.saveProjectScript(activeProjectName, parsed, payload.broll_manifest);
       if (res.success) {
@@ -436,6 +494,8 @@ export const StoryboardScript: React.FC = () => {
         setShowPasteModal(false);
         setPasteJson('');
         setRepromptBlock(null);
+        setHistoryToast('台本を上書き反映しました（直前の状態は自動バックアップされました）');
+        setTimeout(() => setHistoryToast(null), 5000);
       } else {
         setRepromptBlock(res.reprompt_block || 'Validation failed without a reprompt block.');
       }
@@ -516,6 +576,14 @@ export const StoryboardScript: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleOpenHistory}
+            title="過去の台本バージョン履歴を確認・復元"
+            className="h-[30px] px-2.5 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#94A3B8] hover:text-[#F8FAFC] text-[11px] font-bold flex items-center gap-1 transition-colors whitespace-nowrap"
+          >
+            🕒 履歴・復元
+          </button>
           <button
             onClick={() => setShowPromptModal(true)}
             className="h-[30px] px-3 rounded-[6px] bg-gradient-to-br from-[#6366F1] to-[#4F46E5] hover:from-[#818CF8] hover:to-[#6366F1] text-white text-[11px] font-extrabold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap"
@@ -1129,6 +1197,101 @@ export const StoryboardScript: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* History & Rollback Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111827] border border-[#1E293B] rounded-[14px] p-6 w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#1E293B] shrink-0">
+              <div>
+                <h3 className="font-extrabold text-[16px] text-[#F8FAFC] flex items-center gap-2">
+                  <span>🕒</span> 台本履歴・復元（自動バックアップ）
+                </h3>
+                <p className="text-xs text-[#94A3B8] mt-1">
+                  台本を保存または上書きするたびに自動保存されたスナップショットです。
+                </p>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="text-[#94A3B8] hover:text-[#F8FAFC] p-1.5 rounded-md hover:bg-[#1E293B] transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-2.5">
+              {isLoadingHistory ? (
+                <div className="text-center py-8 text-xs text-[#94A3B8]">
+                  ⏳ 履歴を読み込み中...
+                </div>
+              ) : historyList.length === 0 ? (
+                <div className="text-center py-10 bg-[#0B0F19] rounded-[10px] border border-[#1E293B] p-6 text-xs text-[#64748B]">
+                  バックアップ履歴はまだありません。台本を編集・上書きすると自動で作成されます。
+                </div>
+              ) : (
+                historyList.map((snap) => {
+                  const dateStr = snap.timestamp ? new Date(snap.timestamp).toLocaleString('ja-JP') : snap.id;
+                  return (
+                    <div
+                      key={snap.id}
+                      className="bg-[#0B0F19] hover:bg-[#0E1525] border border-[#1E293B] hover:border-[#334155] rounded-[10px] p-3.5 flex items-center justify-between gap-4 transition-all"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-[#E2E8F0]">
+                            {dateStr}
+                          </span>
+                          <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full bg-[#064E3B] text-[#34D399] border border-[#10B981]/30">
+                            {snap.cut_count} カット
+                          </span>
+                          {snap.total_chars > 0 && (
+                            <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-[#1E293B] text-[#94A3B8] border border-[#334155]">
+                              {snap.total_chars} 文字
+                            </span>
+                          )}
+                          {snap.reason && (
+                            <span className="text-[10px] text-[#64748B] font-mono">
+                              ({snap.reason})
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11.5px] text-[#94A3B8] truncate font-sans">
+                          {snap.preview ? `冒頭: ${snap.preview}` : '（セリフプレビューなし）'}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => handleRestoreSnapshot(snap.id, snap.cut_count)}
+                        disabled={isRestoring}
+                        className="bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] hover:text-[#7DD3FC] border border-[#38BDF8]/40 hover:border-[#38BDF8] text-xs font-bold px-3 py-1.5 rounded-[7px] shrink-0 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        ↩ 復元する
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#1E293B] flex justify-end shrink-0">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="bg-[#1E293B] hover:bg-[#334155] px-4 py-1.5 rounded-[8px] text-xs font-bold text-[#E2E8F0]"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Status Toast */}
+      {historyToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#064E3B] border border-[#10B981] text-[#A7F3D0] px-4 py-3 rounded-[10px] shadow-2xl text-xs font-bold flex items-center gap-2 animate-fade-in">
+          <span>✓</span>
+          <span>{historyToast}</span>
         </div>
       )}
     </div>

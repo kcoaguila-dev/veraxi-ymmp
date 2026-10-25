@@ -650,6 +650,11 @@ def save_project_script(project_dir: str, script_json: str, broll_manifest_json:
         if len(text) > 35:
             warnings.append(f"Cut {i} ({entry.get('character')}) exceeds 35 characters ({len(text)}). Consider splitting.")
 
+    from veraxi_ymmp.history import backup_project_script, cleanup_stale_audio
+
+    # Non-destructive automatic revision backup before overriding
+    backup_id = backup_project_script(proj_path, reason="script_save")
+
     with open(proj_path / "script.json", "w", encoding="utf-8") as f:
         f.write(script_json)
 
@@ -662,10 +667,30 @@ def save_project_script(project_dir: str, script_json: str, broll_manifest_json:
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid broll_manifest_json: {e}")
 
+    cut_count = len(script_data) if isinstance(script_data, list) else 0
+    cleaned_audio_count = cleanup_stale_audio(proj_path, cut_count)
+
     return {
         "success": True,
+        "backup_created": backup_id,
+        "cleaned_audio_count": cleaned_audio_count,
         "warnings": warnings
     }
+
+@mcp.tool()
+def list_project_history(project_dir: str) -> Dict[str, Any]:
+    """Returns list of all timestamped historical backups of script.json for project_dir."""
+    from veraxi_ymmp.history import list_script_history
+    proj_path = workspace_path(project_dir)
+    snapshots = list_script_history(proj_path)
+    return {"project_dir": project_dir, "history": snapshots}
+
+@mcp.tool()
+def restore_project_history(project_dir: str, history_id: str) -> Dict[str, Any]:
+    """Restores a previous historical script snapshot non-destructively (backing up current first)."""
+    from veraxi_ymmp.history import restore_script_history
+    proj_path = workspace_path(project_dir)
+    return restore_script_history(proj_path, history_id)
 
 @mcp.tool()
 def upload_project_to_youtube(

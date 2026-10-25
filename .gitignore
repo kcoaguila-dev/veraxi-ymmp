@@ -66,6 +66,7 @@ artifacts/
 projects/
 scratch/
 verification_frames/
+.history/
 
 # OS files
 .DS_Store

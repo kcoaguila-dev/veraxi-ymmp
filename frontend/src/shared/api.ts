@@ -40,7 +40,33 @@ export const api = {
 
   getProject: (name: string) => fetchAPI<ProjectData>(`/api/projects/${encodeURIComponent(name)}`),
 
-  saveProjectScript: (name: string, script: DirectorScriptEntry[], broll_manifest?: any[]) => fetchAPI<{ success: boolean; warnings?: string[]; valid?: boolean; errors?: string[]; reprompt_block?: string }>(`/api/projects/${encodeURIComponent(name)}/script`, {
+  getProjectHistory: (name: string) => fetchAPI<{
+    history: Array<{
+      id: string;
+      timestamp: string;
+      cut_count: number;
+      total_chars: number;
+      preview: string;
+      reason: string;
+      has_broll: boolean;
+      size_bytes: number;
+    }>;
+  }>(`/api/projects/${encodeURIComponent(name)}/history`),
+
+  restoreProjectHistory: (name: string, historyId: string) => fetchAPI<{
+    success: boolean;
+    restored_id: string;
+    pre_restore_backup_id: string | null;
+    cut_count: number;
+    restored_broll: boolean;
+    cleaned_audio_count: number;
+  }>(`/api/projects/${encodeURIComponent(name)}/history/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ history_id: historyId })
+  }),
+
+  saveProjectScript: (name: string, script: DirectorScriptEntry[], broll_manifest?: any[]) => fetchAPI<{ success: boolean; warnings?: string[]; valid?: boolean; errors?: string[]; reprompt_block?: string; backup_created?: string }>(`/api/projects/${encodeURIComponent(name)}/script`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ script, broll_manifest })

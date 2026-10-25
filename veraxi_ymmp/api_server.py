@@ -77,6 +77,14 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 project_name = urllib.parse.unquote(match.group(1))
                 return self.send_json(200, load_project(_project_rel_path(project_name)))
 
+            match = re.match(r'^/api/projects/([^/]+)/history$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.history import list_script_history
+                proj_path = workspace_path(_project_rel_path(project_name))
+                history = list_script_history(proj_path)
+                return self.send_json(200, {"history": history})
+
             match = re.match(r'^/api/projects/([^/]+)/status$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -294,6 +302,20 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     thumb_path = generate_thumbnail_tool(_project_rel_path(project_name))
                     return self.send_json(200, {"success": True, "thumbnail_path": thumb_path})
+                except Exception as e:
+                    return self.send_json(500, {"error": str(e)})
+
+            match = re.match(r'^/api/projects/([^/]+)/history/restore$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                history_id = body.get("history_id", "")
+                from veraxi_ymmp.history import restore_script_history
+                try:
+                    proj_path = workspace_path(_project_rel_path(project_name))
+                    result = restore_script_history(proj_path, history_id)
+                    return self.send_json(200, result)
+                except (ValueError, FileNotFoundError) as e:
+                    return self.send_json(400, {"error": str(e)})
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
 
