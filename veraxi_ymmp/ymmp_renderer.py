@@ -274,9 +274,12 @@ class YMMPRenderer:
         audio_files = audio_files or []
         registry = self.psd_registry
 
+        all_char_names = ["ずんだもん", "四国めたん", "春日部つむぎ"]
+        for c in timeline_ir.voice_clips:
+            if c.character not in all_char_names:
+                all_char_names.append(c.character)
         output_data["Characters"] = [
-            registry.create_character_definition("ずんだもん"),
-            registry.create_character_definition("四国めたん"),
+            registry.create_character_definition(name) for name in all_char_names
         ]
 
         plates_dir = output_path.parent / "plates"
@@ -414,7 +417,7 @@ class YMMPRenderer:
         for clip in timeline_ir.voice_clips:
             frm, lng = clip.start_frame, clip.length
             has_broll = any(s <= frm < e or s < frm + lng <= e for s, e in broll_intervals)
-            for c_name in [clip.character] if has_broll else ["四国めたん", "ずんだもん"]:
+            for c_name in [clip.character] if has_broll else list(dict.fromkeys([c.character for c in timeline_ir.voice_clips])):
                 add_or_coalesce_tachie(c_name, has_broll, frm, lng)
 
         # 3. Layer 0: Background ImageItem

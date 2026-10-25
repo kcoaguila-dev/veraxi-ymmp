@@ -205,3 +205,38 @@ def test_api_integration_lifecycle(api_server: str, tmp_path: Path) -> None:
         assert res_load.status_code == 200
         data = res_load.json()
         assert data.get("script") == valid_script
+
+
+def test_api_voicevox_audition_success(api_server: str, tmp_path: Path) -> None:
+    fake_wav = tmp_path / "test_audition.wav"
+    fake_wav.write_bytes(b"RIFFdummywavdata")
+
+    with patch("veraxi_ymmp.api_server.audition_voice") as mock_audition:
+        mock_audition.return_value = {
+            "path": str(fake_wav),
+            "duration_seconds": 1.5,
+        }
+        res = requests.post(
+            f"{api_server}/api/voicevox/audition",
+            json={"text": "こんにちは", "character": "ずんだもん", "speed": 1.0},
+        )
+        assert res.status_code == 200
+        assert res.headers["Content-Type"] == "audio/wav"
+        assert res.content == b"RIFFdummywavdata"
+        # Verify the temporary file was cleaned up (allow server thread a moment to unlink)
+        for _ in range(20):
+            if not fake_wav.exists():
+                break
+            time.sleep(0.05)
+        assert not fake_wav.exists()
+
+
+def test_api_voicevox_audition_error(api_server: str) -> None:
+    with patch("veraxi_ymmp.api_server.audition_voice") as mock_audition:
+        mock_audition.side_effect = RuntimeError("Voicevox offline")
+        res = requests.post(
+            f"{api_server}/api/voicevox/audition",
+            json={"text": "こんにちは", "character": "ずんだもん"},
+        )
+        assert res.status_code == 500
+        assert "Voicevox offline" in res.json()["error"]

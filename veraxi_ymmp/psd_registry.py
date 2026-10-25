@@ -53,6 +53,7 @@ class CharacterPSDRegistry:
         Path("ずんだもん立ち絵素材V3.2") / "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
     )
     DEFAULT_METAN_REL = Path("四国めたん立ち絵素材2.1") / "四国めたん立ち絵素材2.1.psd"
+    DEFAULT_TSUMUGI_REL = Path("春日部つむぎ立ち絵素材") / "春日部つむぎ立ち絵素材.psd"
 
     # Base layers & paths for Zundamon
     ZUNDA_BASE_LAYERS = [
@@ -148,6 +149,50 @@ class CharacterPSDRegistry:
         "\x1c!口\x1d0\x1c*ほほえみ\x1d0",
     ]
 
+    # Base layers & paths for Tsumugi
+    TSUMUGI_BASE_LAYERS = [
+        "n0",
+        "n2",
+        "n7",
+        "n6",
+        "n11",
+        "n10",
+        "n12",
+        "n17",
+        "n16",
+        "n37",
+        "n43",
+        "n55",
+        "n57",
+        "n42",
+        "n36",
+        "n26",
+        "n35",
+        "n34",
+        "n54",
+    ]
+    TSUMUGI_BASE_PATHS = [
+        "\x1c*体\x1d0",
+        "\x1c!サイドテール\x1d0",
+        "\x1c!右腕\x1d0",
+        "\x1c!右腕\x1d0\x1c*基本\x1d0",
+        "\x1c!左腕\x1d0",
+        "\x1c!左腕\x1d0\x1c*基本\x1d0",
+        "\x1c!もみあげ\x1d0",
+        "\x1c!ほっぺ\x1d0",
+        "\x1c!ほっぺ\x1d0\x1c*基本\x1d0",
+        "\x1c!目\x1d0",
+        "\x1c!まゆ\x1d0",
+        "\x1c!口\x1d0",
+        "\x1c!ほくろ\x1d0",
+        "\x1c!まゆ\x1d0\x1c*普通眉\x1d0",
+        "\x1c!目\x1d0\x1c*基本目セット\x1d0",
+        "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c*白目基本\x1d0",
+        "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0",
+        "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0\x1c*基本\x1d0",
+        "\x1c!口\x1d0\x1c*ほほえみ\x1d0",
+    ]
+
     _instance: Optional[CharacterPSDRegistry] = None
 
     def __init__(self) -> None:
@@ -169,6 +214,7 @@ class CharacterPSDRegistry:
         char_lower = character.lower()
         is_zunda = "ずんだ" in char_lower or "zunda" in char_lower
         is_metan = "めたん" in char_lower or "metan" in char_lower
+        is_tsumugi = "つむぎ" in char_lower or "tsumugi" in char_lower
 
         # 1. Direct character-specific environment variable overrides
         if is_zunda:
@@ -181,6 +227,11 @@ class CharacterPSDRegistry:
             if env_override:
                 return Path(env_override).resolve()
             rel_subpath = cls.DEFAULT_METAN_REL
+        elif is_tsumugi:
+            env_override = os.environ.get("VERAXI_TSUMUGI_PSD") or os.environ.get("TSUMUGI_PSD_PATH")
+            if env_override:
+                return Path(env_override).resolve()
+            rel_subpath = cls.DEFAULT_TSUMUGI_REL
         else:
             rel_subpath = Path(character)
 
@@ -220,6 +271,8 @@ class CharacterPSDRegistry:
         char_lower = character.lower()
         if "ずんだ" in char_lower or "zunda" in char_lower:
             return list(self.ZUNDA_BASE_LAYERS)
+        elif "つむぎ" in char_lower or "tsumugi" in char_lower:
+            return list(self.TSUMUGI_BASE_LAYERS)
         return list(self.METAN_BASE_LAYERS)
 
     def get_base_paths(self, character: str) -> List[str]:
@@ -229,6 +282,8 @@ class CharacterPSDRegistry:
         char_lower = character.lower()
         if "ずんだ" in char_lower or "zunda" in char_lower:
             return list(self.ZUNDA_BASE_PATHS)
+        elif "つむぎ" in char_lower or "tsumugi" in char_lower:
+            return list(self.TSUMUGI_BASE_PATHS)
         return list(self.METAN_BASE_PATHS)
 
     @classmethod
@@ -244,6 +299,8 @@ class CharacterPSDRegistry:
             return {"n108", "n109"}
         elif "めたん" in s or "metan" in s:
             return {"n47", "n48"}
+        elif "つむぎ" in s or "tsumugi" in s:
+            return {"n53", "n54"}
         return set()
 
     def get_face_layers_and_paths(
@@ -278,7 +335,92 @@ class CharacterPSDRegistry:
             return layers, paths
 
         char_lower = character.lower()
-        if "ずんだ" in char_lower or "zunda" in char_lower:
+        if "つむぎ" in char_lower or "tsumugi" in char_lower:
+            layers = [
+                "n0",
+                "n2",
+                "n7",
+                "n6",
+                "n11",
+                "n10",
+                "n12",
+                "n17",
+                "n16",
+                "n37",
+                "n43",
+                "n55",
+                "n57",
+            ]
+            paths = [
+                "\x1c*体\x1d0",
+                "\x1c!サイドテール\x1d0",
+                "\x1c!右腕\x1d0",
+                "\x1c!右腕\x1d0\x1c*基本\x1d0",
+                "\x1c!左腕\x1d0",
+                "\x1c!左腕\x1d0\x1c*基本\x1d0",
+                "\x1c!もみあげ\x1d0",
+                "\x1c!ほっぺ\x1d0",
+                "\x1c!ほっぺ\x1d0\x1c*基本\x1d0",
+                "\x1c!目\x1d0",
+                "\x1c!まゆ\x1d0",
+                "\x1c!口\x1d0",
+                "\x1c!ほくろ\x1d0",
+            ]
+            if emotion == "surprised":
+                layers.extend(["n41", "n36", "n27", "n35", "n34", "n61", "n60"])
+                paths.extend([
+                    "\x1c!まゆ\x1d0\x1c*ごきげん眉\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c*白目見開き\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0\x1c*基本\x1d0",
+                    "\x1c表情記号\x1d0",
+                    "\x1c表情記号\x1d0\x1c汗\x1d0",
+                ])
+            elif emotion == "angry":
+                layers.extend(["n40", "n36", "n26", "n35", "n34"])
+                paths.extend([
+                    "\x1c!まゆ\x1d0\x1c*おこ眉\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c*白目基本\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0\x1c*基本\x1d0",
+                ])
+            elif emotion == "sad":
+                layers.extend(["n39", "n36", "n26", "n35", "n34", "n61", "n59"])
+                paths.extend([
+                    "\x1c!まゆ\x1d0\x1c*困り眉\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c*白目基本\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0\x1c*基本\x1d0",
+                    "\x1c表情記号\x1d0",
+                    "\x1c表情記号\x1d0\x1cなみだめ\x1d0",
+                ])
+            elif emotion == "happy":
+                layers.extend(["n41", "n21"])
+                paths.extend([
+                    "\x1c!まゆ\x1d0\x1c*ごきげん眉\x1d0",
+                    "\x1c!目\x1d0\x1c*にっこり\x1d0",
+                ])
+            else:  # normal
+                layers.extend(["n42", "n36", "n26", "n35", "n34"])
+                paths.extend([
+                    "\x1c!まゆ\x1d0\x1c*普通眉\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c*白目基本\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0",
+                    "\x1c!目\x1d0\x1c*基本目セット\x1d0\x1c!黒目\x1d0\x1c*基本\x1d0",
+                ])
+
+            if is_mouth_open:
+                layers.append("n53")
+                paths.append("\x1c!口\x1d0\x1c*わあ\x1d0")
+            else:
+                layers.append("n54")
+                paths.append("\x1c!口\x1d0\x1c*ほほえみ\x1d0")
+            return layers, paths
+        elif "ずんだ" in char_lower or "zunda" in char_lower:
             layers = [
                 "n153",
                 "n89",
@@ -464,19 +606,34 @@ class CharacterPSDRegistry:
         """Returns the TachieItem layer (6 for Zundamon, 4 for Metan/others)."""
         if character in self._custom_characters:
             return self._custom_characters[character].tachie_layer
-        return 6 if "ずんだ" in character.lower() else 4
+        char_lower = character.lower()
+        if "ずんだ" in char_lower or "zunda" in char_lower:
+            return 6
+        elif "つむぎ" in char_lower or "tsumugi" in char_lower:
+            return 5
+        return 4
 
     def get_style_id(self, character: str) -> int:
         """Returns default VOICEVOX style ID."""
         if character in self._custom_characters:
             return self._custom_characters[character].style_id
-        return 3 if "ずんだ" in character.lower() else 2
+        char_lower = character.lower()
+        if "ずんだ" in char_lower or "zunda" in char_lower:
+            return 3
+        elif "つむぎ" in char_lower or "tsumugi" in char_lower:
+            return 8
+        return 2
 
     def get_style_color(self, character: str) -> str:
         """Returns subtitle outline style color."""
         if character in self._custom_characters:
             return self._custom_characters[character].style_color
-        return "#FF006400" if "ずんだ" in character.lower() else "#FF8B008B"
+        char_lower = character.lower()
+        if "ずんだ" in char_lower or "zunda" in char_lower:
+            return "#FF006400"
+        elif "つむぎ" in char_lower or "tsumugi" in char_lower:
+            return "#FFD97706"
+        return "#FF8B008B"
 
     def get_font_color(self, character: str) -> str:
         """Returns subtitle font color."""
@@ -499,20 +656,23 @@ class CharacterPSDRegistry:
                 "layer": cfg.tachie_layer,
             }
 
-        is_zunda = "ずんだ" in character.lower()
+        char_lower = character.lower()
+        is_zunda = "ずんだ" in char_lower or "zunda" in char_lower
+        is_tsumugi = "つむぎ" in char_lower or "tsumugi" in char_lower
+        t_layer = self.get_tachie_layer(character)
         if has_broll:
             return {
                 "x": 650.0,
-                "y": 220.0 if is_zunda else 300.0,
-                "zoom": 55.0 if is_zunda else 48.0,
-                "layer": 6 if is_zunda else 4,
+                "y": 220.0 if is_zunda else (260.0 if is_tsumugi else 300.0),
+                "zoom": 55.0 if is_zunda else (50.0 if is_tsumugi else 48.0),
+                "layer": t_layer,
             }
         else:
             return {
                 "x": 550.0 if is_zunda else -550.0,
-                "y": 220.0 if is_zunda else 300.0,
-                "zoom": 70.0 if is_zunda else 62.0,
-                "layer": 6 if is_zunda else 4,
+                "y": 220.0 if is_zunda else (260.0 if is_tsumugi else 300.0),
+                "zoom": 70.0 if is_zunda else (64.0 if is_tsumugi else 62.0),
+                "layer": t_layer,
             }
 
     def create_character_definition(

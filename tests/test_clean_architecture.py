@@ -124,6 +124,8 @@ class TestCharacterPSDRegistry:
         # Must end with the respective canonical filename
         assert zunda_path.name == "坂本アヒル_ずんだもん立ち絵V3.2_全部入り版.psd.psd"
         assert metan_path.name == "四国めたん立ち絵素材2.1.psd"
+        tsumugi_path = CharacterPSDRegistry.resolve_psd_path("春日部つむぎ")
+        assert tsumugi_path.name == "春日部つむぎ立ち絵素材.psd"
         assert unknown_path.name == "unknown_actor.psd"
 
     def test_resolve_psd_path_with_psd_dir(self, clean_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -146,7 +148,8 @@ class TestCharacterPSDRegistry:
         assert CharacterPSDRegistry.get_mouth_layers("zunda") == {"n108", "n109"}
         assert CharacterPSDRegistry.get_mouth_layers("四国めたん") == {"n47", "n48"}
         assert CharacterPSDRegistry.get_mouth_layers("metan") == {"n47", "n48"}
-        assert CharacterPSDRegistry.get_mouth_layers("春日部つむぎ") == set()
+        assert CharacterPSDRegistry.get_mouth_layers("春日部つむぎ") == {"n53", "n54"}
+        assert CharacterPSDRegistry.get_mouth_layers("tsumugi") == {"n53", "n54"}
         assert CharacterPSDRegistry.get_mouth_layers("unknown") == set()
         assert CharacterPSDRegistry.get_mouth_layers("") == set()
 
