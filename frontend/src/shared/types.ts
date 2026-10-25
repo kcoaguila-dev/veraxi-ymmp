@@ -6,8 +6,10 @@ export type SubtitleStyle = 'default' | 'outlined';
 
 export interface DirectorScriptEntry {
   type?: string;
-  character: string;
-  text: string;
+  character?: string;
+  text?: string;
+  path?: string;
+  volume?: number;
   emotion?: Emotion;
   motion?: Motion;
   bgm?: string | null;
@@ -17,6 +19,7 @@ export interface DirectorScriptEntry {
   character_position?: CharacterPosition;
   subtitle_position?: SubtitlePosition;
   subtitle_style?: SubtitleStyle;
+  [key: string]: any;
 }
 
 export interface ProjectSummary {
