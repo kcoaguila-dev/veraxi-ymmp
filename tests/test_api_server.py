@@ -99,3 +99,38 @@ def test_api_youtube_schedule_validation(api_server):
         })
         assert res.status_code == 500
         assert "Scheduling requires private" in res.json()["error"]
+
+def test_api_integration_lifecycle(api_server, tmp_path):
+    # Unmocked test wrapping workspace_path correctly
+    def mock_wp(p):
+        return tmp_path / p
+
+    def mock_cwd():
+        return tmp_path
+
+    with patch("veraxi_ymmp.api_server.workspace_path", side_effect=mock_wp),          patch("veraxi_ymmp.mcp_server.workspace_path", side_effect=mock_wp),          patch("pathlib.Path.cwd", side_effect=mock_cwd):
+
+        # 1. Create project
+        res_create = requests.post(f"{api_server}/api/projects", json={"name": "integration_test"})
+        assert res_create.status_code == 200
+        assert res_create.json()["success"] is True
+
+        # 2. List projects to verify it was created
+        res_list = requests.get(f"{api_server}/api/projects")
+        assert res_list.status_code == 200
+        projects = res_list.json()["projects"]
+        assert any(p["name"] == "integration_test" for p in projects)
+
+        # 3. Save a script to the project
+        valid_script = [{"character": "ずんだもん", "text": "こんにちは", "emotion": "normal", "motion": "none", "character_position": "center", "subtitle_position": "bottom_center", "subtitle_style": "outlined", "bgm": None, "sfx": None, "image": None}]
+        res_save = requests.put(f"{api_server}/api/projects/integration_test/script", json={
+            "script": valid_script
+        })
+        assert res_save.status_code == 200
+        assert res_save.json()["success"] is True
+
+        # 4. Load the project and verify the script persisted correctly
+        res_load = requests.get(f"{api_server}/api/projects/integration_test")
+        assert res_load.status_code == 200
+        data = res_load.json()
+        assert data.get("script") == valid_script

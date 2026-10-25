@@ -44,7 +44,7 @@ export const YoutubePublish: React.FC = () => {
         description,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         privacy_status: privacyStatus,
-        publish_at: publishAt || undefined,
+        publish_at: publishAt ? new Date(publishAt).toISOString() : undefined,
         mock_upload: mockUpload
       };
       const res = await api.uploadToYoutube(activeProjectName, payload);

@@ -177,7 +177,10 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  const refreshMedia = () => setMediaCacheBust(Date.now());
+  const refreshMedia = () => {
+    setMediaCacheBust(Date.now());
+    if (activeProjectName) setActiveProject(activeProjectName);
+  };
 
   const value: StudioState = {
     projects,
