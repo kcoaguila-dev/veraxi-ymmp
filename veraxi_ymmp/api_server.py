@@ -28,6 +28,12 @@ from veraxi_ymmp.script import split_long_script_entries
 _pipeline_status: Dict[str, Any] = {}
 _pipeline_lock = threading.Lock()
 
+
+def _project_rel_path(project_name: str) -> str:
+    if ".." in project_name or "/" in project_name or "\\" in project_name:
+        raise ValueError("Invalid project name")
+    return f"projects/{project_name}"
+
 class APIHandler(http.server.SimpleHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self.send_response(200, "ok")
@@ -67,7 +73,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             match = re.match(r'^/api/projects/([^/]+)$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
-                return self.send_json(200, load_project(project_name))
+                return self.send_json(200, load_project(_project_rel_path(project_name)))
 
             match = re.match(r'^/api/projects/([^/]+)/status$', path)
             if match:
@@ -89,7 +95,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
     def serve_media_file(self, project_name: str, filename: str) -> None:
         try:
-            proj_dir = workspace_path(project_name)
+            proj_dir = workspace_path(_project_rel_path(project_name))
             file_path = (proj_dir / filename).resolve()
 
             if not str(file_path).startswith(str(proj_dir.resolve())):
@@ -162,9 +168,10 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if path == '/api/projects':
                 name = body.get("name", "Untitled")
                 # Basic protection
-                if ".." in name or "/" in name:
+                try:
+                    proj_path = workspace_path(_project_rel_path(name))
+                except ValueError:
                     return self.send_json(400, {"error": "Invalid project name"})
-                proj_path = workspace_path(name)
                 proj_path.mkdir(parents=True, exist_ok=True)
                 script_path = proj_path / "script.json"
                 if not script_path.exists():
@@ -180,7 +187,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
                 try:
                     res = audition_voice(text, speaker_id, speed)
-                    wav_path = Path(res["wav_path"])
+                    wav_path = Path(res["path"])
                     if wav_path.exists():
                         self.send_response(200)
                         self.send_header('Content-Type', 'audio/wav')
@@ -189,6 +196,10 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                         self.end_headers()
                         with open(wav_path, 'rb') as f:
                             self.wfile.write(f.read())
+                        try:
+                            wav_path.unlink()
+                        except:
+                            pass
                         return
                     else:
                         return self.send_json(500, {"error": "WAV file not found"})
@@ -220,8 +231,10 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                                 "message": msg
                             }
                     try:
-                        res_json = run_pipeline(project_name, use_tts=use_tts)
-                        res = json.loads(res_json)
+                        from veraxi_ymmp.pipeline import ProjectPipeline
+                        import dataclasses
+                        res_obj = ProjectPipeline(use_tts=use_tts, progress_callback=cb).run(workspace_path(_project_rel_path(project_name)))
+                        res = dataclasses.asdict(res_obj)
                         with _pipeline_lock:
                             _pipeline_status[project_name] = {
                                 "status": "complete",
@@ -243,7 +256,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
                 try:
-                    return self.send_json(200, launch_ymm4_desktop(project_name))
+                    return self.send_json(200, launch_ymm4_desktop(_project_rel_path(project_name)))
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
 
@@ -251,7 +264,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
                 try:
-                    return self.send_json(200, normalize_project_audio(project_name))
+                    return self.send_json(200, normalize_project_audio(_project_rel_path(project_name)))
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
 
@@ -259,8 +272,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
                 try:
-                    res = json.loads(generate_thumbnail_tool(project_name))
-                    return self.send_json(200, res)
+                    thumb_path = generate_thumbnail_tool(_project_rel_path(project_name))
+                    return self.send_json(200, {"success": True, "thumbnail_path": thumb_path})
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
 
@@ -269,7 +282,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 project_name = urllib.parse.unquote(match.group(1))
                 try:
                     return self.send_json(200, upload_project_to_youtube(
-                        project_dir=project_name,
+                        project_dir=_project_rel_path(project_name),
                         title=body.get("title", project_name),
                         privacy_status=body.get("privacy_status", "private"),
                         description=body.get("description", ""),
@@ -306,7 +319,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 script_json = json.dumps(script) if script is not None else "[]"
                 broll_json = json.dumps(broll_manifest) if broll_manifest is not None else None
 
-                res = save_project_script(project_name, script_json, broll_json)
+                res = save_project_script(_project_rel_path(project_name), script_json, broll_json)
                 if not res.get("success"):
                     return self.send_json(422, res)
                 return self.send_json(200, res)

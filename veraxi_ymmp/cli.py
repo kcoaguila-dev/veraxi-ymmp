@@ -287,6 +287,14 @@ def _cmd_export_spec(argv: List[str]) -> None:
     else:
         print(out_content)
 
+def _cmd_serve(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Start the veraxi-ymmp API server for the Studio frontend.")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
+    args = parser.parse_args(argv)
+
+    from veraxi_ymmp.api_server import serve
+    serve(port=args.port)
+
 def main() -> None:
     """Main entry point for the CLI."""
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
@@ -583,11 +591,3 @@ def _compile(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     main()
-
-def _cmd_serve(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(description="Start the veraxi-ymmp API server for the Studio frontend.")
-    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
-    args = parser.parse_args(argv)
-
-    from veraxi_ymmp.api_server import serve
-    serve(port=args.port)
