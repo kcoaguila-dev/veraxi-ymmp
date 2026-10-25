@@ -47,30 +47,40 @@ def _is_background_clip(ic: Any) -> bool:
     )
 
 
-def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, int, int, int] = (0, 128, 0, 255)) -> ImageClip:
+def create_speech_bubble(
+    text: str,
+    duration: float,
+    border_color: Tuple[int, int, int, int] = (0, 128, 0, 255),
+    is_vertical: bool = False,
+) -> ImageClip:
     """Creates a beautiful white speech bubble with a dynamic border, drop shadow, and wrapped black text."""
+    target_canvas_w = 980 if is_vertical else 1920
+    target_canvas_h = 320 if is_vertical else 360
+    target_wrap_w = 16 if is_vertical else 20
+    target_font_size = 46 if is_vertical else 52
+
     geom = calculate_speech_plate_geometry(
         text=text,
-        font_size=52,
-        canvas_w=1920,
-        canvas_h=360,
-        wrap_width=20,
+        font_size=target_font_size,
+        canvas_w=target_canvas_w,
+        canvas_h=target_canvas_h,
+        wrap_width=target_wrap_w,
         spacing=12,
         auto_scale_down=True,
     )
-    effective_canvas_h = max(360, int(geom.box_h) + 80)
-    if effective_canvas_h != 360:
+    effective_canvas_h = max(target_canvas_h, int(geom.box_h) + 80)
+    if effective_canvas_h != target_canvas_h:
         geom = calculate_speech_plate_geometry(
             text=text,
-            font_size=52,
-            canvas_w=1920,
+            font_size=target_font_size,
+            canvas_w=target_canvas_w,
             canvas_h=effective_canvas_h,
-            wrap_width=20,
+            wrap_width=target_wrap_w,
             spacing=12,
             auto_scale_down=True,
         )
     img = draw_rounded_speech_bubble(
-        canvas_size=(1920, effective_canvas_h),
+        canvas_size=(target_canvas_w, effective_canvas_h),
         geometry=geom,
         border_color=border_color,
         fill_color=(255, 255, 255, 248),
@@ -92,7 +102,10 @@ def create_speech_bubble(text: str, duration: float, border_color: Tuple[int, in
             return 0.8 + (t / 0.15) * 0.2
         return 1.0
 
-    layout_y = int(round(1030.0 - geom.box_y - geom.box_h))
+    if is_vertical:
+        layout_y = 1380
+    else:
+        layout_y = int(round(1030.0 - geom.box_y - geom.box_h))
     setattr(clip, "layout_y", layout_y)
     setattr(clip, "geom", geom)
     return clip.with_effects([Resize(pop_in)])
@@ -114,6 +127,12 @@ class MoviePyRenderer:
             raise ValueError("TimelineIR must be provided to render")
         fps = self.ir.fps
         total_duration = self.ir.total_frames / fps
+        t_data = getattr(self.ir, "template_data", {})
+        tl = t_data.get("Timelines", [{}])[0] if t_data.get("Timelines") else t_data.get("Timeline", {})
+        v_info = tl.get("VideoInfo", {}) if isinstance(tl, dict) else {}
+        is_vertical = bool(v_info.get("Height", 1080) > v_info.get("Width", 1920))
+        target_w = 1080 if is_vertical else 1920
+        target_h = 1920 if is_vertical else 1080
 
         video_clips = []
         audio_clips = []
@@ -151,8 +170,8 @@ class MoviePyRenderer:
 
             border_color = get_char_color(vc.character)
 
-            bubble = create_speech_bubble(vc.text, dur, border_color).with_start(start_time)
-            bubble_y = getattr(bubble, "layout_y", 725)
+            bubble = create_speech_bubble(vc.text, dur, border_color, is_vertical=is_vertical).with_start(start_time)
+            bubble_y = getattr(bubble, "layout_y", 1380 if is_vertical else 725)
             bubble = bubble.with_position(("center", bubble_y))
             bubbles_list.append(bubble)
 
@@ -200,11 +219,17 @@ class MoviePyRenderer:
 
             if is_bg:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                img = img.resized((1920, 1080)).with_position("center")
+                if is_vertical:
+                    img = img.resized(height=1920).with_position("center")
+                else:
+                    img = img.resized((1920, 1080)).with_position("center")
                 bgs.append(img)
             else:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                img = img.resized((1920, 1080)).with_position("center")
+                if is_vertical:
+                    img = img.resized(width=980).with_position(("center", 200))
+                else:
+                    img = img.resized((1920, 1080)).with_position("center")
                 brolls.append(img)
 
 
@@ -232,20 +257,30 @@ class MoviePyRenderer:
 
         sorted_chars = sorted(unique_chars, key=char_sort_key)
 
-        if num_chars == 1:
-            x_offsets[sorted_chars[0]] = 'center'
-        elif num_chars == 2:
-            x_offsets[sorted_chars[0]] = 80   # Left (Metan)
-            x_offsets[sorted_chars[1]] = 1180 # Right (Zundamon, moved inward from 1450)
+        if is_vertical:
+            char_height = 800
+            y_pos = 1920 - char_height - 300
+            if num_chars == 1:
+                x_offsets[sorted_chars[0]] = 'center'
+            elif num_chars == 2:
+                x_offsets[sorted_chars[0]] = 30   # Left (Metan)
+                x_offsets[sorted_chars[1]] = 470  # Right (Zundamon)
+            else:
+                spacing = (1080 - 400) / max(num_chars - 1, 1)
+                for i, c in enumerate(sorted_chars):
+                    x_offsets[c] = int(i * spacing)
         else:
-            spacing = (1920 - 700) / (num_chars - 1)
-            for i, c in enumerate(sorted_chars):
-                x_offsets[c] = int(i * spacing)
-
-        # Medium Character Scale (Viral YouTube Style)
-        # Make characters very large to match Premiere XML output (YMM4 rival style)
-        char_height = 1250
-        y_pos = 1080 - char_height + 250 # Anchor to bottom, shift down slightly so they don't float
+            char_height = 1250
+            y_pos = 1080 - char_height + 250
+            if num_chars == 1:
+                x_offsets[sorted_chars[0]] = 'center'
+            elif num_chars == 2:
+                x_offsets[sorted_chars[0]] = 80   # Left (Metan)
+                x_offsets[sorted_chars[1]] = 1180 # Right (Zundamon)
+            else:
+                spacing = (1920 - 700) / (num_chars - 1)
+                for i, c in enumerate(sorted_chars):
+                    x_offsets[c] = int(i * spacing)
 
         broll_ranges = []
         for d_clip in self.ir.dynamic_image_clips:
@@ -296,15 +331,16 @@ class MoviePyRenderer:
 
             def make_bounce_offset(c_name: str, base_x: Union[str, int, float]) -> Callable[[float], Tuple[Union[str, int, float], float]]:
                 def get_bounce_offset(t: float) -> Tuple[Union[str, int, float], float]:
+                    bx: Union[str, int, float] = base_x
+                    by: float = float(y_pos)
                     if is_in_broll(t):
                         spk = get_active_speaker(t)
-                        if spk == c_name:
-                            bx: Union[str, int, float] = 1350
-                            by = 240.0
-                        else:
-                            return (-9999, -9999.0)
-                    else:
-                        bx, by = base_x, float(y_pos)
+                        if not is_vertical:
+                            if spk == c_name:
+                                bx = 1350
+                                by = 240.0
+                            else:
+                                return (-9999, -9999.0)
 
                     for st, et, emo, motion, char_speaker in talk_times:
                         if st <= t <= et and char_speaker == c_name:
@@ -347,7 +383,7 @@ class MoviePyRenderer:
 
             def make_mouth_mask(c_name: str, e_clips: Dict[str, Dict[str, Any]]) -> Callable[[float], np.ndarray]:
                 def get_mouth_mask(t: float) -> np.ndarray:
-                    if is_in_broll(t):
+                    if is_in_broll(t) and not is_vertical:
                         spk = get_active_speaker(t)
                         if spk != c_name:
                             h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
@@ -369,7 +405,7 @@ class MoviePyRenderer:
         video_clips.extend(bubbles_list)
 
         logger.info("Compositing video...")
-        final_video = CompositeVideoClip(video_clips, size=(1920, 1080)).with_duration(total_duration)
+        final_video = CompositeVideoClip(video_clips, size=(target_w, target_h)).with_duration(total_duration)
         # 6. Global Audio (BGM/SFX)
         from moviepy.audio.fx import AudioFadeOut
 

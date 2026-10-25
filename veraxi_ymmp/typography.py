@@ -258,10 +258,11 @@ def calculate_ymm4_subtitle_y(
     share the center coordinate DEFAULT_SUBTITLE_CENTER_Y (345.0).
     Guarantees >= 50px safe margin from the bottom of the canvas (+540.0) for all text lengths.
     """
+    base_center_y = 500.0 if canvas_h > 1080 else DEFAULT_SUBTITLE_CENTER_Y
     if box_h > 0.0:
         max_allowed_center_y = (canvas_h / 2.0) - bottom_safe_margin - (box_h / 2.0)
-        return float(min(DEFAULT_SUBTITLE_CENTER_Y, max_allowed_center_y))
-    return float(DEFAULT_SUBTITLE_CENTER_Y)
+        return float(min(base_center_y, max_allowed_center_y))
+    return float(base_center_y)
 
 
 def draw_rounded_speech_bubble(

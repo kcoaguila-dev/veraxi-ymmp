@@ -29,6 +29,8 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - **Hard Ceiling: Max 2 lines per speech bubble**: Dialogue cuts must NEVER produce 3 lines. 3 lines crowd the screen, obstruct character bodies, and risk vertical clipping.
   - **Character Length Ceiling: <= 35-40 characters per dialogue cut**: If an explanation contains compound thoughts or multiple sentences, split them into distinct, well-paced cuts (2-3 seconds each).
   - **Pronunciation & Interjection Rule**: NEVER start dialogue lines with bare `「ええ、」` (which causes OpenJTalk/VOICEVOX to assign an unnatural questioning Atamadaka pitch accent). Write natural character-themed affirmations such as `「はい、」`, `「その通りですわ、」`, `「そうですわね、」`, or `「まさにその通りなのだ！」`.
+  - **Grounded Staging Invariant**: NEVER use `"motion": "jump"` in technical or explanatory videos. Keep characters grounded (`"none"` or subtle `"nod"`). Expressiveness is carried by facial emotion keys and rapid camera cuts.
+  - **Clean Audio & Zero-SFX Invariant**: Zero cartoon slapstick SFX (`pon.wav` is banned). Zero murky or vocal BGM loops. Use only clean instrumental tracks (`assets/bgm/2_23_AM.mp3`) ducked low (<= 0.08) to preserve voice clarity.
   - **Concentric Subtitle Layout**: All speech bubble plates and VoiceItem subtitles must be aligned concentrically using `BasePoint: "CenterCenter"`.
 
 ### 2. Internal MP4 Render & Unified Project Pipeline

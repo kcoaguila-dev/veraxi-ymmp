@@ -541,14 +541,14 @@ def _compile(args: argparse.Namespace) -> None:
 
         # Auto-Export using YMM4 CLI
         if getattr(args, 'export_mp4', None):
-            import os
             import subprocess
             mp4_path = Path(args.export_mp4).resolve()
 
-            ymm4_exe_path = os.environ.get("YMM4_PATH")
+            from veraxi_ymmp.mcp_server import find_ymm4_executable
+            ymm4_exe_path = find_ymm4_executable()
             if not ymm4_exe_path:
-                print("Error: YMM4_PATH environment variable is not set.", file=sys.stderr)
-                print("Please set it to the path of your YukkuriMovieMaker.exe to use --export-mp4", file=sys.stderr)
+                print("Error: YMM4_PATH environment variable is not set and YukkuriMovieMaker.exe was not found.", file=sys.stderr)
+                print("Please install YMM4 in Documents, AppData, or Program Files, or set YMM4_PATH to use --export-mp4", file=sys.stderr)
                 sys.exit(1)
 
             ymm4_exe = Path(ymm4_exe_path)

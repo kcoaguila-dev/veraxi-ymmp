@@ -641,7 +641,7 @@ class CharacterPSDRegistry:
             return self._custom_characters[character].font_color
         return "#FF18181B"
 
-    def get_spatial_layout(self, character: str, has_broll: bool) -> Dict[str, Any]:
+    def get_spatial_layout(self, character: str, has_broll: bool, is_vertical: bool = False) -> Dict[str, Any]:
         """
         Returns spatial layout parameters (x, y, zoom, layer) for TachieItem,
         accounting for B-roll side-by-side positioning vs standard stage layout.
@@ -660,6 +660,13 @@ class CharacterPSDRegistry:
         is_zunda = "ずんだ" in char_lower or "zunda" in char_lower
         is_tsumugi = "つむぎ" in char_lower or "tsumugi" in char_lower
         t_layer = self.get_tachie_layer(character)
+        if is_vertical:
+            return {
+                "x": -220.0 if is_zunda else (0.0 if is_tsumugi else 220.0),
+                "y": 150.0 if is_zunda else (180.0 if is_tsumugi else 200.0),
+                "zoom": 55.0 if is_zunda else (50.0 if is_tsumugi else 48.0),
+                "layer": t_layer,
+            }
         if has_broll:
             return {
                 "x": 650.0,
@@ -680,6 +687,7 @@ class CharacterPSDRegistry:
         name: str,
         proto: Optional[Dict[str, Any]] = None,
         template_path: Optional[Path] = None,
+        is_vertical: bool = False,
     ) -> Dict[str, Any]:
         """
         Creates a complete YMM4 Character definition preserving all required plugin properties.
@@ -735,7 +743,7 @@ class CharacterPSDRegistry:
         c["StyleColor"] = s_color
         c["BasePoint"] = "CenterCenter"
         c["X"] = {"Values": [{"Value": 0.0}], "Span": 0.0, "AnimationType": "なし"}
-        c["Y"] = {"Values": [{"Value": DEFAULT_SUBTITLE_CENTER_Y}], "Span": 0.0, "AnimationType": "なし"}
+        c["Y"] = {"Values": [{"Value": 500.0 if is_vertical else DEFAULT_SUBTITLE_CENTER_Y}], "Span": 0.0, "AnimationType": "なし"}
         c["Bold"] = True
         c["IsJimakuVisible"] = True
         c["WordWrap"] = "NoWrap"

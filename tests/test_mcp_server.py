@@ -6,31 +6,30 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+
 import pytest
-pytest.importorskip("mcp")
-
 
 from veraxi_ymmp.mcp_server import (
-    list_projects,
-    load_project,
-    save_project_script,
-    upload_project_to_youtube
-)
-from veraxi_ymmp.mcp_server import (
+    audition_voice,
     compile_project,
     generate_thumbnail_tool,
+    get_voicevox_health,
     inspect_template,
+    launch_ymm4_desktop,
+    list_projects,
+    load_project,
+    normalize_project_audio,
     parse_json,
+    render_broll_slides,
     run_pipeline,
+    save_project_script,
+    upload_project_to_youtube,
     validate_script,
     workspace_path,
-    get_voicevox_health,
-    audition_voice,
-    render_broll_slides,
-    normalize_project_audio,
-    launch_ymm4_desktop
 )
 from veraxi_ymmp.pipeline import PipelineResult
+
+pytest.importorskip("mcp")
 
 
 def test_workspace_path_valid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -226,6 +225,29 @@ def test_launch_ymm4_desktop(mock_popen, monkeypatch: pytest.MonkeyPatch, tmp_pa
     res = launch_ymm4_desktop("testproj")
     assert res["launched"] is True
     assert res["executable"] == "fake_path.exe"
+    assert mock_popen.call_count >= 1
+    call_kwargs = mock_popen.call_args_list[0].kwargs
+    assert "cwd" in call_kwargs
+    assert call_kwargs.get("creationflags") != 0x00000008
+
+
+def test_find_ymm4_executable_auto_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from veraxi_ymmp.mcp_server import find_ymm4_executable
+
+    # When YMM4_PATH is set and exists
+    fake_exe = tmp_path / "YukkuriMovieMaker.exe"
+    fake_exe.touch()
+    monkeypatch.setenv("YMM4_PATH", str(fake_exe))
+    assert find_ymm4_executable() == str(fake_exe)
+
+    # When YMM4_PATH is empty, discover from Documents
+    monkeypatch.delenv("YMM4_PATH", raising=False)
+    fake_docs = tmp_path / "Documents" / "YukkuriMovieMaker_v4_Lite"
+    fake_docs.mkdir(parents=True)
+    target_exe = fake_docs / "YukkuriMovieMaker.exe"
+    target_exe.touch()
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    assert find_ymm4_executable() == str(target_exe)
 
 
 

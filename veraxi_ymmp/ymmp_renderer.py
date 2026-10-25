@@ -157,6 +157,7 @@ class YMMPRenderer:
         output_path = Path(output_path)
         output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
+
         effective_script_len = (
             script_len if script_len is not None else len(timeline_ir.voice_clips)
         )
@@ -272,6 +273,9 @@ class YMMPRenderer:
         if output_data is None:
             output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
+        timeline = get_timeline(output_data)
+        video_info = timeline.get("VideoInfo", {})
+        is_vertical = bool(video_info.get("Height", 1080) > video_info.get("Width", 1920))
         registry = self.psd_registry
 
         all_char_names = ["ずんだもん", "四国めたん", "春日部つむぎ"]
@@ -279,7 +283,7 @@ class YMMPRenderer:
             if c.character not in all_char_names:
                 all_char_names.append(c.character)
         output_data["Characters"] = [
-            registry.create_character_definition(name) for name in all_char_names
+            registry.create_character_definition(name, is_vertical=is_vertical) for name in all_char_names
         ]
 
         plates_dir = output_path.parent / "plates"
@@ -334,7 +338,14 @@ class YMMPRenderer:
                     cur_f = b_end_f
 
             plate_file = plates_dir / f"plate_{frm}_{char}.png"
-            plate_res = create_speech_plate(txt, char, plate_file)
+            plate_res = create_speech_plate(
+                txt,
+                char,
+                plate_file,
+                canvas_w=1080 if is_vertical else 1920,
+                bottom_safe_margin=330.0 if is_vertical else 50.0,
+                canvas_total_h=1920 if is_vertical else 1080,
+            )
             center_y = getattr(plate_res, "center_y", DEFAULT_SUBTITLE_CENTER_Y)
             voice_y = getattr(plate_res, "voice_y", center_y)
             items.append(
@@ -364,7 +375,7 @@ class YMMPRenderer:
         active_tachie_by_layer: Dict[int, Dict[str, Any]] = {}
 
         def add_or_coalesce_tachie(char_name: str, has_broll: bool, frm: int, lng: int) -> None:
-            layout = registry.get_spatial_layout(char_name, has_broll=has_broll)
+            layout = registry.get_spatial_layout(char_name, has_broll=has_broll, is_vertical=is_vertical)
             t_layer, x_val, y_val, zoom_val = (
                 layout["layer"],
                 layout["x"],
@@ -453,12 +464,16 @@ class YMMPRenderer:
         for d_img_clip in timeline_ir.dynamic_image_clips:
             if _is_background_clip(d_img_clip) or d_img_clip.length <= 0:
                 continue
+            b_y = -480.0 if is_vertical else 0.0
+            b_zoom = 75.0 if is_vertical else 100.0
             items.append(
                 _build_image_item(
                     d_img_clip.image_path.resolve(),
                     d_img_clip.start_frame,
                     d_img_clip.length,
                     layer=1,
+                    y=b_y,
+                    zoom=b_zoom,
                 )
             )
 
@@ -488,6 +503,11 @@ class YMMPRenderer:
 
         tl = get_timeline(output_data)
         tl["Items"], tl["Length"], tl["MaxLayer"] = items, timeline_ir.total_frames, 12
+        plates_layer7_or_8 = [it for it in items if "ImageItem" in it.get("$type", "") and it.get("Layer") in (7, 8)]
+        if plates_layer7_or_8:
+            first_p_y = plates_layer7_or_8[0]["Y"]["Values"][0]["Value"]
+            for ch in output_data.get("Characters", []):
+                ch["Y"] = {"Values": [{"Value": first_p_y}], "Span": 0.0, "AnimationType": "なし"}
         self._write_output(output_data, output_path, use_bom)
 
         has_voice_audio = bool(audio_files) or any(
@@ -531,13 +551,14 @@ class YMMPRenderer:
         if output_data is None:
             output_data = copy.deepcopy(self.template_data)
         audio_files = audio_files or []
+        timeline = get_timeline(output_data)
+        video_info = timeline.get("VideoInfo", {})
+        is_vertical = bool(video_info.get("Height", 1080) > video_info.get("Width", 1920))
         effective_script_len = (
             script_len if script_len is not None else len(timeline_ir.voice_clips)
         )
 
-        timeline = get_timeline(output_data)
-        video_info = timeline.get("VideoInfo", {})
-        if video_info.get("Height", 1080) > video_info.get("Width", 1920):
+        if is_vertical:
             sub_y, sub_size = 300.0, 100.0
             tachie_cfg = {"X": 0.0, "Y": 650.0, "Zoom": 80.0}
             broll_cfg = {"X": 0.0, "Y": -300.0, "Zoom": 120.0}
@@ -642,23 +663,6 @@ class YMMPRenderer:
                 )
             )
 
-            if not is_bg:
-                pon_path = str(Path(__file__).parent.parent / "assets" / "sfx" / "pon.wav")
-                items.append(
-                    {
-                        "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
-                        "FilePath": pon_path,
-                        "Volume": {"Values": [{"Value": 40.0}]},
-                        "Pan": {"Values": [{"Value": 0.0}]},
-                        "PlaybackRate": 100.0,
-                        "ContentOffset": "00:00:00",
-                        "Frame": d_img_clip.start_frame,
-                        "Length": 60,
-                        "Layer": 11,
-                        "Blend": "Normal",
-                        "VideoEffects": [],
-                    }
-                )
 
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
             is_looped = d_audio_clip.length == -1
