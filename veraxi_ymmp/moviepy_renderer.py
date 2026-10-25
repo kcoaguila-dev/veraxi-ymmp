@@ -227,7 +227,7 @@ class MoviePyRenderer:
             else:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
                 if is_vertical:
-                    img = img.resized(width=980).with_position(("center", 200))
+                    img = (img if getattr(img, "w", 0) == 1080 else img.resized(width=1080)).with_position(("center", 60))
                 else:
                     img = img.resized((1920, 1080)).with_position("center")
                 brolls.append(img)

@@ -100,3 +100,64 @@ def test_render_from_manifest_and_market_analysis_manifest(tmp_path: Path):
     for slide_path in generated:
         assert slide_path.exists()
         assert slide_path.stat().st_size > 0
+
+
+def test_vertical_mobile_broll_rendering_and_detection(tmp_path: Path):
+    """Ensures 9:16 mobile vertical mode renders 1080x720 cards and auto-detects vertical projects."""
+    from PIL import Image
+    from veraxi_ymmp.broll import (
+        detect_project_vertical,
+        VERTICAL_BROLL_WIDTH,
+        VERTICAL_BROLL_HEIGHT,
+    )
+
+    metric_out = tmp_path / "vert_metric.png"
+    render_metric_slide(
+        out_path=metric_out,
+        title="モバイル縦型メトリクス",
+        step_tag="01 • OVERVIEW",
+        hero_metric="Webサイトの75%が稼働",
+        status_pill="圧倒的なシェアと実績",
+        impact_tag="ポイント",
+        impact_text="WordPressなど主要CMSの基盤",
+        theme_color=ACCENT_BLUE,
+        is_vertical=True,
+    )
+    with Image.open(metric_out) as img:
+        assert img.size == (VERTICAL_BROLL_WIDTH, VERTICAL_BROLL_HEIGHT)
+
+    vs_out = tmp_path / "vert_vs.png"
+    render_vs_slide(
+        out_path=vs_out,
+        title="世代間の進化比較",
+        step_tag="",
+        hero_title="劇的な高速化と型安全",
+        hero_status="",
+        left_box=("旧世代 PHP 5", "実行速度が遅い", []),
+        right_box=("最新 PHP 8.x", "JITで2〜3倍高速", []),
+        bottom_tag="",
+        bottom_text="",
+        theme_color=ACCENT_GREEN,
+        is_vertical=True,
+    )
+    with Image.open(vs_out) as img:
+        assert img.size == (VERTICAL_BROLL_WIDTH, VERTICAL_BROLL_HEIGHT)
+
+    overview_out = tmp_path / "vert_overview.png"
+    render_overview_slide(
+        out_path=overview_out,
+        title="モバイル3大ポイント",
+        cards=[
+            ("01", "JITコンパイラ搭載", ACCENT_BLUE),
+            ("02", "Laravelエコシステム", ACCENT_RED),
+            ("03", "爆速デプロイと運用性", ACCENT_GREEN),
+        ],
+        theme_color=ACCENT_BLUE,
+        is_vertical=True,
+    )
+    with Image.open(overview_out) as img:
+        assert img.size == (VERTICAL_BROLL_WIDTH, VERTICAL_BROLL_HEIGHT)
+
+    assert detect_project_vertical(tmp_path, [{"is_vertical": True}]) is True
+    assert detect_project_vertical(tmp_path, [{"aspect_ratio": "9:16"}]) is True
+    assert detect_project_vertical(tmp_path, [{}]) is False
