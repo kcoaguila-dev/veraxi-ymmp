@@ -5,9 +5,7 @@ import socketserver
 import threading
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import os
-import io
+from typing import Any, Dict
 
 from veraxi_ymmp.logging import logger
 from veraxi_ymmp.mcp_server import (
@@ -24,7 +22,6 @@ from veraxi_ymmp.mcp_server import (
     generate_thumbnail_tool,
     workspace_path,
 )
-from veraxi_ymmp.pipeline import PipelineResult
 from veraxi_ymmp.script import split_long_script_entries
 
 # Global state for pipeline status
