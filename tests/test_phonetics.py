@@ -205,6 +205,43 @@ def test_normalize_kaname_reading() -> None:
     assert normalize_kaname_reading("要点") == "要点"
 
 
+def test_normalize_okonau_and_bun_and_ruby() -> None:
+    from veraxi_ymmp.phonetics import (
+        expand_phonetic_ruby,
+        normalize_bun_reading,
+        normalize_okonau_reading,
+        normalize_tts_text,
+        strip_phonetic_ruby,
+    )
+
+    # 行う (おこなう) vs 行く (いく)
+    assert (
+        normalize_tts_text("なお、投資はリスクを伴うため、最終判断は必ずご自身で行ってください。")
+        == "なお、投資はリスクを伴うため、最終判断は必ずご自身でおこなってください。"
+    )
+    assert (
+        normalize_tts_text("適切な対処を行って、安全なWeb環境を守っていきましょうね。")
+        == "適切な対処をおこなって、安全なWeb環境を守っていきましょうね。"
+    )
+    assert normalize_okonau_reading("病院へ行ってください。") == "病院へ行ってください。"
+    assert normalize_okonau_reading("見に行ってください。") == "見に行ってください。"
+
+    # 〜た分 (ぶん) vs 時間・熟語の分
+    assert (
+        normalize_tts_text("サーバーや半導体を買った分、将来の経費負担が重くのしかかるのだね。")
+        == "サーバーや半導体を買ったぶん、将来の経費負担が重くのしかかるのだね。"
+    )
+    assert normalize_bun_reading("その分リスクも高まります。") == "そのぶんリスクも高まります。"
+    assert normalize_bun_reading("わずか15分で悪用が始まります。") == "わずか15分で悪用が始まります。"
+    assert normalize_bun_reading("特定分野への集中を避ける。") == "特定分野への集中を避ける。"
+
+    # Inline furigana ruby {漢字|よみ}
+    raw_ruby = "最終判断は必ずご自身で{行って|おこなって}ください。"
+    assert strip_phonetic_ruby(raw_ruby) == "最終判断は必ずご自身で行ってください。"
+    assert expand_phonetic_ruby(raw_ruby) == "最終判断は必ずご自身でおこなってください。"
+    assert normalize_tts_text(raw_ruby) == "最終判断は必ずご自身でおこなってください。"
+
+
 
 def test_tune_audio_query_pitch() -> None:
     from veraxi_ymmp.phonetics import tune_audio_query_pitch

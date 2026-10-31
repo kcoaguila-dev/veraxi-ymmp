@@ -25,6 +25,29 @@ class AsyncYMMPCompiler(YMMPCompiler):
         audio_dir: Optional[Path] = None,
     ) -> None:
         """Synthesize all script entries asynchronously in parallel."""
+        async def _synthesize_line(t_text: str, spk_id: int):
+            res = await self.tts_backend.synthesize_async(t_text, spk_id)
+            if len(res) == 3:
+                wb, dur, aq = res
+            else:
+                wb, dur = res
+                aq = None
+            if getattr(self.config, "gain_stage_speech", True):
+                try:
+                    from .audio_normalizer import gain_stage_audio_bytes
+                    loop = asyncio.get_running_loop()
+                    wb = await loop.run_in_executor(
+                        None,
+                        gain_stage_audio_bytes,
+                        wb,
+                        getattr(self.config, "target_speech_lufs", -16.0),
+                        getattr(self.config, "target_speech_tp", -1.5),
+                        getattr(self.config, "audio_sample_rate", 48000),
+                    )
+                except Exception:
+                    pass
+            return wb, dur, aq
+
         tts_tasks = []
         for idx, line in enumerate(script):
             char_name = line.get("character")
@@ -35,7 +58,7 @@ class AsyncYMMPCompiler(YMMPCompiler):
                 speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
                 tts_text = normalize_tts_text(str(text))
                 if hasattr(self.tts_backend, "synthesize_async"):
-                    task = asyncio.create_task(self.tts_backend.synthesize_async(tts_text, speaker_id))
+                    task = asyncio.create_task(_synthesize_line(tts_text, speaker_id))
                     tts_tasks.append((idx, char_name, text, tts_text, task))
 
         if tts_tasks:

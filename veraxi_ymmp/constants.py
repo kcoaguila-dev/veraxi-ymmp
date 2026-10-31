@@ -21,7 +21,7 @@ DEFAULT_SPEAKER_MAP: Dict[str, int] = {
 
 # Default asset paths
 DEFAULT_TEMPLATE_PATH = "examples/full_template.ymmp"
-DEFAULT_BG_IMAGE_PATH = "assets/bg/clean_classroom.jpg"
+DEFAULT_BG_IMAGE_PATH = "assets/bg/classroom.jpg"
 DEFAULT_BGM_CANDIDATES = [
     "assets/bgm/2_23_AM.mp3",
     "assets/bgm/2_23_AM.m4a",
@@ -36,3 +36,8 @@ DEFAULT_SUBTITLE_SAFE_BOTTOM_MARGIN: float = 50.0
 DEFAULT_SUBTITLE_BOTTOM_EDGE_Y: float = (DEFAULT_CANVAS_HEIGHT / 2.0) - DEFAULT_SUBTITLE_SAFE_BOTTOM_MARGIN
 DEFAULT_SUBTITLE_CENTER_Y: float = 345.0
 KNOWN_CHARACTERS: tuple[str, ...] = ("ずんだもん", "四国めたん", "春日部つむぎ", "Zundamon")
+
+# Upstream audio gain staging targets (ITU-R BS.1770 / EBU R128)
+DEFAULT_SPEECH_TARGET_LUFS: float = -16.0
+DEFAULT_SPEECH_TARGET_TP: float = -1.5
+DEFAULT_AUDIO_SAMPLE_RATE: int = 48000

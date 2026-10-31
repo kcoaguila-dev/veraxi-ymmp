@@ -161,3 +161,55 @@ def test_vertical_mobile_broll_rendering_and_detection(tmp_path: Path):
     assert detect_project_vertical(tmp_path, [{"is_vertical": True}]) is True
     assert detect_project_vertical(tmp_path, [{"aspect_ratio": "9:16"}]) is True
     assert detect_project_vertical(tmp_path, [{}]) is False
+
+
+def test_render_vs_slide_rejection_on_empty_content(tmp_path: Path):
+    """Ensures VS slide raises ValueError when hero_title and comparison boxes are empty."""
+    out_file = tmp_path / "empty_vs.png"
+    with pytest.raises(ValueError, match="has no comparison information"):
+        render_vs_slide(
+            out_path=out_file,
+            title="空の比較スライド",
+            step_tag="",
+            hero_title="",
+            hero_status="",
+            left_box=("", "", []),
+            right_box=("", "", []),
+            bottom_tag="",
+            bottom_text="",
+        )
+
+
+def test_render_from_manifest_handles_vs_aliases_and_validates(tmp_path: Path):
+    """Ensures manifest handles 'left'/'right' and 'label'/'headline' aliases and rejects empty specs."""
+    manifest = [
+        {
+            "type": "vs",
+            "filename": "alias_vs.png",
+            "title": "エイリアステスト",
+            "hero_title": "AI台頭で激変",
+            "left": {
+                "label": "勝者",
+                "headline": "統合基盤",
+                "sub": "高収益維持"
+            },
+            "right": {
+                "label": "敗者",
+                "headline": "単機能ツール",
+                "sub": "解約率急増"
+            },
+            "bottom_text": "基幹を握る企業が勝つ"
+        }
+    ]
+    out = render_from_manifest(manifest, tmp_path)
+    assert len(out) == 1
+    assert out[0].exists()
+    assert out[0].stat().st_size > 0
+
+    # Test rejection of empty metric slide
+    with pytest.raises(ValueError, match="has no hero metric text"):
+        render_from_manifest([{"type": "metric", "filename": "bad.png", "title": "無効"}], tmp_path)
+
+    # Test rejection of empty overview slide
+    with pytest.raises(ValueError, match="has no cards"):
+        render_from_manifest([{"type": "overview", "filename": "bad_ov.png", "title": "無効", "cards": []}], tmp_path)

@@ -21,7 +21,7 @@
     "character": "Zundamon",
     "text": "AIがここまで自動で作ってくれるなんて、本当にすごい時代なのだ！",
     "emotion": "excited",
-    "motion": "shake",
+    "motion": "none",
     "bgm": "none",
     "sfx": "none",
     "image": null

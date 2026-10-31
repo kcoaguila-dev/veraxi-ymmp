@@ -371,7 +371,97 @@ def normalize_kaname_reading(text: str) -> str:
     return t
 
 
-def normalize_tts_text(text: str) -> str:
+DEFAULT_PHONETICS_DICT_PATH = Path(__file__).with_name("phonetics_dict.json")
+_RUBY_PATTERN = re.compile(r"[｛\{]([^｜\|\}｝]+)[｜\|]([^\}｝]+)[｝\}]")
+
+
+def strip_phonetic_ruby(text: str) -> str:
+    """Strips inline phonetic ruby notation `{漢字|よみ}` -> `漢字` for display subtitles."""
+    if not text:
+        return ""
+    return _RUBY_PATTERN.sub(r"\1", text)
+
+
+def expand_phonetic_ruby(text: str) -> str:
+    """Expands inline phonetic ruby notation `{漢字|よみ}` -> `よみ` for TTS synthesis."""
+    if not text:
+        return ""
+    return _RUBY_PATTERN.sub(r"\2", text)
+
+
+def load_phonetics_dict(
+    project_dir: Optional[Union[str, Path]] = None,
+) -> Dict[str, str]:
+    """Loads global `phonetics_dict.json` and merges optional project-level overrides."""
+    merged: Dict[str, str] = {}
+    candidates = [DEFAULT_PHONETICS_DICT_PATH]
+    if project_dir is not None:
+        candidates.append(Path(project_dir) / "phonetics_dict.json")
+
+    for p in candidates:
+        if p.exists() and p.is_file():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8-sig"))
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        if isinstance(k, str) and isinstance(v, str) and k:
+                            merged[k] = v
+            except Exception as exc:
+                logger.warning("Failed to load phonetics dictionary %s: %s", p, exc)
+    return merged
+
+
+def normalize_okonau_reading(text: str) -> str:
+    """
+    Normalizes occurrences of the verb '行う' (おこなう: to perform/conduct) so OpenJTalk
+    and pykakasi do not misread inflections like '行って' as 'いって' (to go).
+    Preserves directional '行く' when preceded by 'へ' or destination 'に'.
+    """
+    if not text or "行" not in text:
+        return text
+
+    t = re.sub(r"を行([っいうえおわ])", r"をおこな\1", text)
+    t = re.sub(
+        r"(ご自身で|自分で|慎重に|適切に|確実に|定期的に|厳格に|速やかに|直ちに|優先して|徹底して|継続して|共同で|手動で|自動で|無断で|独自に|判断で|責任で)行([っいうえおわ])",
+        r"\1おこな\2",
+        t,
+    )
+    t = re.sub(
+        r"(判断|対策|対処|検証|処理|投資|分析|取引|確認|見直し|点検|分散|移行|更新|修正|設定|テスト|チェック|審査|選定|計算|評価|議論|説明|解説|発表|報告|連絡|相談|契約|決済|売買|リバランス)([はもをがこそなど、\s][^。！？!?へに]{0,16}?)(?<![へに])行([っいうえおわ])",
+        r"\1\2おこな\3",
+        t,
+    )
+    t = re.sub(r"(?<![へに])行って(ください|下さい)", r"おこなって\1", t)
+    return t
+
+
+def normalize_bun_reading(text: str) -> str:
+    """
+    Normalizes occurrences of '分' meaning portion/amount/degree ('ぶん')
+    after past-tense verbs/adjectives or quantity nouns so OpenJTalk does not
+    misread them as 'ふん' (minute).
+    """
+    if not text or "分" not in text:
+        return text
+
+    t = re.sub(
+        r"([っいいしんでれけめげせてねべ]た|んだ|いだ)分(?![一-龥])",
+        r"\1ぶん",
+        text,
+    )
+    t = re.sub(
+        r"(その|この|どの|自分の|あなたの|人数|世帯|不足|余剰|増加|減少|相当|必要|過剰)分(?![一-龥])",
+        r"\1ぶん",
+        t,
+    )
+    return t
+
+
+def normalize_tts_text(
+    text: str,
+    custom_dict: Optional[Dict[str, str]] = None,
+    project_dir: Optional[Union[str, Path]] = None,
+) -> str:
     """
     Normalizes text for TTS speech synthesis (VOICEVOX / OpenJTalk).
 
@@ -386,15 +476,24 @@ def normalize_tts_text(text: str) -> str:
     """
     if not text:
         return ""
+    normalized = expand_phonetic_ruby(text)
+    pdict = load_phonetics_dict(project_dir=project_dir)
+    if custom_dict:
+        pdict.update(custom_dict)
+    for surface in sorted(pdict.keys(), key=len, reverse=True):
+        if surface in normalized:
+            normalized = normalized.replace(surface, pdict[surface])
     # Replace sentence-initial or clause-initial 'ええ' / 'エエ' with 'えー'
     # e.g. "ええ、" -> "えー、", "ええ。" -> "えー。", "ええ " -> "えー "
-    normalized = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", text)
+    normalized = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", normalized)
     # Also after sentence-ending punctuation (e.g. "はい。ええ、そうです")
     normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
     # '何でも' (which OpenJTalk parses as 'なにでも') must be pronounced 'なんでも'
     normalized = normalized.replace("何でも", "なんでも")
     # '要' must be pronounced 'かなめ' in keystone/linchpin/noun positions
     normalized = normalize_kaname_reading(normalized)
+    normalized = normalize_okonau_reading(normalized)
+    normalized = normalize_bun_reading(normalized)
     return normalized
 
 

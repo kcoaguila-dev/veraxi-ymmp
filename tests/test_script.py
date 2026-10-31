@@ -90,7 +90,7 @@ def test_validate_director_script_invalid():
             validate_director_script(invalid_emotion)
 
     # Invalid motion types and values
-    for bad_motion in ["dance", 123, [], {}, None]:
+    for bad_motion in ["dance", "shake", 123, [], {}, None]:
         invalid_motion = [{
             "character": "A", "text": "Hello", "emotion": "neutral",
             "motion": bad_motion, "bgm": None, "sfx": None,

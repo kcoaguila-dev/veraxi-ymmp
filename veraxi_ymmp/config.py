@@ -18,6 +18,9 @@ from .constants import (
     DEFAULT_VOICEVOX_URL,
     DEFAULT_VOICEVOX_TIMEOUT,
     DEFAULT_SPEAKER_ID,
+    DEFAULT_SPEECH_TARGET_LUFS,
+    DEFAULT_SPEECH_TARGET_TP,
+    DEFAULT_AUDIO_SAMPLE_RATE,
 )
 
 
@@ -35,6 +38,10 @@ class CompilerConfig:
     use_cache: bool = True
     cache_dir: Optional[Path] = None
     use_bom: bool = False
+    gain_stage_speech: bool = True
+    target_speech_lufs: float = DEFAULT_SPEECH_TARGET_LUFS
+    target_speech_tp: float = DEFAULT_SPEECH_TARGET_TP
+    audio_sample_rate: int = DEFAULT_AUDIO_SAMPLE_RATE
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> "CompilerConfig":
@@ -55,6 +62,12 @@ class CompilerConfig:
 
         if hasattr(args, 'no_cache') and args.no_cache:
             config.use_cache = False
+
+        if hasattr(args, 'no_gain_stage') and args.no_gain_stage:
+            config.gain_stage_speech = False
+
+        if hasattr(args, 'target_speech_lufs') and args.target_speech_lufs is not None:
+            config.target_speech_lufs = float(args.target_speech_lufs)
 
         # Optional args for cache dir (could be added to CLI later)
         if hasattr(args, 'cache_dir') and args.cache_dir:

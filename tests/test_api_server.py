@@ -280,3 +280,33 @@ def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
         # Verify disk script is restored
         restored_data = json.loads((proj_dir / "script.json").read_text(encoding="utf-8"))
         assert restored_data[0]["text"] == "初期バージョンなのだ！"
+
+
+def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
+    # 1. GET /api/youtube/auth/status
+    with patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": False}):
+        res = requests.get(f"{api_server}/api/youtube/auth/status")
+        assert res.status_code == 200
+        assert res.json()["authenticated"] is False
+
+    # 2. POST /api/youtube/auth/client-secrets with invalid data
+    res_bad = requests.post(f"{api_server}/api/youtube/auth/client-secrets", json={"bad": "data"})
+    assert res_bad.status_code == 400
+
+    # 3. POST /api/youtube/auth/client-secrets with valid data
+    with patch("veraxi_ymmp.youtube_auth.save_client_secrets") as mock_save, \
+         patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
+        res_ok = requests.post(
+            f"{api_server}/api/youtube/auth/client-secrets",
+            json={"installed": {"client_id": "test_id", "client_secret": "test_secret"}}
+        )
+        assert res_ok.status_code == 200
+        assert res_ok.json()["status"]["has_client_secrets"] is True
+        mock_save.assert_called_once()
+
+    # 4. POST /api/youtube/auth/revoke
+    with patch("veraxi_ymmp.youtube_auth.revoke_token", return_value=True), \
+         patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
+        res_rev = requests.post(f"{api_server}/api/youtube/auth/revoke")
+        assert res_rev.status_code == 200
+        assert res_rev.json()["success"] is True

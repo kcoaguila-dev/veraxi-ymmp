@@ -27,7 +27,7 @@ def get_director_script_schema() -> Dict[str, Any]:
                 },
                 "motion": {
                     "type": "string",
-                    "enum": ["none", "jump", "shake", "nod"],
+                    "enum": ["none", "jump", "nod"],
                     "default": "none"
                 },
                 "bgm": {

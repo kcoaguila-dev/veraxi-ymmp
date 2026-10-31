@@ -351,6 +351,15 @@ class ProjectPipeline:
                 logger.error(err_msg)
                 result.errors.append(err_msg)
 
+        # 5b. Copy-paste YouTube title / description / credits (youtube_metadata.txt)
+        try:
+            from .youtube_metadata import generate_project_youtube_metadata
+
+            generate_project_youtube_metadata(proj_dir, timeline_ir=result.timeline_ir)
+            logger.info(f"YouTube metadata ready at: {proj_dir / 'youtube_metadata.txt'}")
+        except Exception as e:
+            logger.warning(f"Failed generating YouTube metadata: {e}")
+
         # 6. YouTube Publishing Automation
         if upload_to_youtube:
             logger.info("--- [5/5] YouTube Publishing Automation ---")

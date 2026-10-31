@@ -1,5 +1,5 @@
 export type Emotion = 'normal' | 'neutral' | 'happy' | 'angry' | 'sad' | 'surprised' | 'confused' | 'scared' | 'excited' | 'disgusted' | 'smug' | 'crying' | 'blushing';
-export type Motion = 'none' | 'jump' | 'shake' | 'nod';
+export type Motion = 'none' | 'jump' | 'nod';
 export type CharacterPosition = 'left' | 'center' | 'right';
 export type SubtitlePosition = 'top_center' | 'center' | 'bottom_center';
 export type SubtitleStyle = 'default' | 'outlined';
@@ -70,4 +70,21 @@ export interface VoicevoxHealth {
   available: boolean;
   url: string;
   speakers: any[];
+}
+
+export interface YoutubeAuthStatus {
+  has_client_secrets: boolean;
+  has_token: boolean;
+  authenticated: boolean;
+  expired: boolean;
+  scopes: string[];
+  client_secrets_path: string | null;
+  token_path: string | null;
+  channel?: {
+    id: string;
+    title: string;
+    custom_url?: string;
+    subscriber_count?: number;
+    video_count?: number;
+  };
 }

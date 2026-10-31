@@ -38,6 +38,7 @@ def _cmd_run(argv: List[str]) -> None:
     parser.add_argument("--mock-upload", action="store_true", help="Run YouTube upload in offline mock mode")
     parser.add_argument("--publish-at", type=str, default=None, help="Scheduled publication timestamp (ISO-8601 string, requires privacy=private)")
     parser.add_argument("--privacy", choices=["private", "unlisted", "public"], default="private", help="Video privacy status (default: private)")
+    parser.add_argument("--no-gain-stage", action="store_true", help="Disable upstream speech gain staging (-16.0 LUFS)")
     parser.add_argument("--normalize", "--normalize-loudness", action="store_true", dest="normalize", help="Normalize audio loudness to YouTube -14.0 LUFS standard before uploading")
 
     args = parser.parse_args(argv)
@@ -361,6 +362,7 @@ def main() -> None:
 
     # New architecture arguments
     parser.add_argument("--no-cache", action="store_true", help="Disable TTS caching")
+    parser.add_argument("--no-gain-stage", action="store_true", help="Disable upstream speech gain staging (-16.0 LUFS)")
     parser.add_argument("--cache-dir", type=str, help="Directory for disk caching")
     parser.add_argument("--async", dest="use_async", action="store_true", help="Use async compilation for parallel TTS")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")

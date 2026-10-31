@@ -21,7 +21,7 @@
     "character": "Zundamon",
     "text": "そしてこっちは可愛い犬なのだ！",
     "emotion": "happy",
-    "motion": "shake",
+    "motion": "none",
     "bgm": "none",
     "sfx": "none",
     "image": "assets/dog.jpg"

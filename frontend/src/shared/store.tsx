@@ -120,7 +120,12 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const data = await api.getProject(name);
       setProjectData(data);
       setIsDirty(false);
-      setPipelineStatus({ status: 'idle' });
+      try {
+        const initialStatus = await api.getPipelineStatus(name);
+        setPipelineStatus(initialStatus);
+      } catch {
+        setPipelineStatus({ status: 'idle' });
+      }
       setMediaCacheBust(Date.now());
     } catch (e) {
       console.error('Failed to load project data', e);

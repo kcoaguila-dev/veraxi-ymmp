@@ -1,6 +1,6 @@
 import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
-  YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry
+  YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus
 } from './types.ts';
 
 export class APIError extends Error {
@@ -113,5 +113,29 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
+  }),
+
+  getYoutubeAuthStatus: (includeChannel: boolean = true) =>
+    fetchAPI<YoutubeAuthStatus>(`/api/youtube/auth/status?include_channel=${includeChannel ? '1' : '0'}`),
+
+  saveYoutubeClientSecrets: (clientSecrets: any) => // pragma: allowlist secret
+    fetchAPI<{ success: boolean; status: YoutubeAuthStatus }>('/api/youtube/auth/client-secrets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: typeof clientSecrets === 'string' // pragma: allowlist secret
+        ? JSON.stringify({ client_secrets_json: clientSecrets }) // pragma: allowlist secret
+        : JSON.stringify(clientSecrets)
+    }),
+
+  connectYoutubeAuth: () =>
+    fetchAPI<{ success: boolean; status: YoutubeAuthStatus }>('/api/youtube/auth/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }),
+
+  revokeYoutubeAuth: () =>
+    fetchAPI<{ success: boolean; status: YoutubeAuthStatus }>('/api/youtube/auth/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
 };

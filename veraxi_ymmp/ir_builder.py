@@ -31,7 +31,7 @@ from .ir import (
     VoiceClip,
 )
 from .logging import logger
-from .phonetics import normalize_tts_text
+from .phonetics import normalize_tts_text, strip_phonetic_ruby
 from .script import DirectorScriptEntry, WriterScriptEntry
 from .template import get_timeline
 from .utils import normalize_japanese_typography
@@ -142,15 +142,21 @@ class TimelineIRBuilder:
             except Exception as exc:
                 logger.debug(f"Failed to read cached audio query from {query_path}: {exc}")
 
-        tts_text = normalize_tts_text(text)
+        tts_text = normalize_tts_text(text, project_dir=audio_dir.parent)
         meta_path = audio_dir / f"{idx:03d}_{safe_char_name}.meta.json"
         is_cache_valid = False
+        should_gain_stage = getattr(self.config, "gain_stage_speech", True)
+        target_lufs = getattr(self.config, "target_speech_lufs", -16.0)
+        target_tp = getattr(self.config, "target_speech_tp", -1.5)
+        sample_rate = getattr(self.config, "audio_sample_rate", 48000)
+
         if out_path.exists() and meta_path.exists():
             try:
                 with open(meta_path, "r", encoding="utf-8") as mf:
                     meta = json.load(mf)
                 if meta.get("tts_text") == tts_text and meta.get("speaker_id") == speaker_id:
-                    is_cache_valid = True
+                    if not should_gain_stage or meta.get("gain_staged"):
+                        is_cache_valid = True
             except Exception as exc:
                 logger.debug(f"Failed to read audio meta from {meta_path}: {exc}")
                 is_cache_valid = False
@@ -200,10 +206,36 @@ class TimelineIRBuilder:
         with open(out_path, "wb") as f:
             f.write(wav_bytes)
 
+        gain_staged = False
+        if should_gain_stage:
+            try:
+                from .audio_normalizer import gain_stage_audio_file
+                gain_stage_audio_file(
+                    out_path,
+                    target_i=target_lufs,
+                    target_tp=target_tp,
+                    sample_rate=sample_rate,
+                )
+                gain_staged = True
+            except Exception as exc:
+                logger.debug(f"Upstream gain staging skipped for {out_path}: {exc}")
+
+        try:
+            with wave.open(str(out_path), "rb") as wav:
+                duration = wav.getnframes() / float(wav.getframerate())
+        except Exception as exc:
+            logger.debug(f"Failed to read WAV duration from {out_path}: {exc}")
+
         try:
             with open(meta_path, "w", encoding="utf-8") as mf:
                 json.dump(
-                    {"text": text, "tts_text": tts_text, "speaker_id": speaker_id},
+                    {
+                        "text": text,
+                        "tts_text": tts_text,
+                        "speaker_id": speaker_id,
+                        "gain_staged": gain_staged,
+                        "target_lufs": target_lufs,
+                    },
                     mf,
                     ensure_ascii=False,
                     indent=2,
@@ -310,7 +342,18 @@ class TimelineIRBuilder:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
-            text = normalize_japanese_typography(str(entry_dict.get("text", "")))
+            raw_text = str(entry_dict.get("text", ""))
+            text = normalize_japanese_typography(strip_phonetic_ruby(raw_text))
+            explicit_tts = (
+                entry_dict.get("tts_text")
+                or entry_dict.get("pronunciation")
+                or entry_dict.get("reading")
+            )
+            tts_source = (
+                normalize_japanese_typography(str(explicit_tts))
+                if explicit_tts
+                else normalize_japanese_typography(raw_text)
+            )
             if not char_name:
                 continue
 
@@ -346,7 +389,7 @@ class TimelineIRBuilder:
                 if not self.tts_backend.is_available():
                     raise RuntimeError("TTS Backend not reachable")
                 length, audio_path, audio_query = self.synthesize_audio(
-                    idx, char_name, text, audio_dir
+                    idx, char_name, tts_source, audio_dir
                 )
             else:
                 # Check for existing audio file in audio_dir to get accurate length and query
@@ -379,7 +422,9 @@ class TimelineIRBuilder:
             else:
                 length = self.calculate_placeholder_length(text)
 
-            hatsuon = self.convert_hatsuon(text)
+            hatsuon = self.convert_hatsuon(
+                normalize_tts_text(tts_source, project_dir=audio_dir.parent)
+            )
 
             voice_clips.append(
                 VoiceClip(
@@ -407,6 +452,14 @@ class TimelineIRBuilder:
                     img_path = audio_dir.parent / img_name
                 if not img_path.exists() and (audio_dir.parent / "broll" / img_name).exists():
                     img_path = audio_dir.parent / "broll" / img_name
+                if not img_path.exists():
+                    try:
+                        from .official_assets import OfficialAssetRegistry
+                        cand = OfficialAssetRegistry.resolve_asset(img_name, base_dir=audio_dir.parent)
+                        if cand.is_file():
+                            img_path = cand
+                    except Exception as e:
+                        logger.debug(f"OfficialAssetRegistry resolution failed for {img_name}: {e}")
                 if img_path.exists():
                     resolved_img = img_path.resolve()
                     for prev_clip in reversed(dynamic_image_clips):

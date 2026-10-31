@@ -2,19 +2,45 @@
 from __future__ import annotations
 import argparse
 import sys
-import os
 from pathlib import Path
 from typing import Any, List, Optional
 from .logging import logger
 
 def _cmd_youtube_upload(args: argparse.Namespace) -> None:
     """Handle the 'youtube upload' subcommand."""
-    video_path = Path(args.video_path)
-    if not video_path.exists() or not video_path.is_file():
-        logger.error(f"Video file not found or is not a regular file: {video_path}")
+    target_path = Path(args.video_path)
+    if not target_path.exists():
+        logger.error(f"Path not found: {target_path}")
         sys.exit(1)
 
-    title = args.title if args.title is not None else video_path.stem
+    video_path: Optional[Path] = None
+    thumbnail_path: Optional[Path] = None
+
+    if target_path.is_dir():
+        # Resolve project directory artifacts
+        candidates = ["final_video_youtube.mp4", "final_video.mp4", "qa_test.mp4"]
+        for cand in candidates:
+            cand_path = target_path / cand
+            if cand_path.exists() and cand_path.is_file():
+                video_path = cand_path
+                break
+        if not video_path:
+            # Fallback to any .mp4 file in directory
+            mp4s = list(target_path.glob("*.mp4"))
+            if mp4s:
+                video_path = mp4s[0]
+
+        if not video_path:
+            logger.error(f"No video file found in project directory: {target_path}")
+            sys.exit(1)
+
+        auto_thumb = target_path / "thumbnail.png"
+        if auto_thumb.exists() and auto_thumb.is_file():
+            thumbnail_path = auto_thumb
+    else:
+        video_path = target_path
+
+    title = args.title if args.title is not None else (target_path.name if target_path.is_dir() else video_path.stem)
     description = args.description or ""
     if isinstance(args.tags, str) and args.tags:
         tags = [t.strip() for t in args.tags.split(",") if t.strip()]
@@ -23,12 +49,12 @@ def _cmd_youtube_upload(args: argparse.Namespace) -> None:
     else:
         tags = []
 
-    thumbnail_path: Optional[Path] = None
     if args.thumbnail:
-        thumbnail_path = Path(args.thumbnail)
-        if not thumbnail_path.exists() or not thumbnail_path.is_file():
-            logger.error(f"Thumbnail file not found or is not a regular file: {thumbnail_path}")
+        explicit_thumb = Path(args.thumbnail)
+        if not explicit_thumb.exists() or not explicit_thumb.is_file():
+            logger.error(f"Thumbnail file not found or is not a regular file: {explicit_thumb}")
             sys.exit(1)
+        thumbnail_path = explicit_thumb
 
     from .ports import VideoPublishMetadata, VideoPublisher
 
@@ -202,19 +228,47 @@ def _cmd_youtube_qa(args: argparse.Namespace) -> None:
 
 def _cmd_youtube_auth(args: argparse.Namespace) -> None:
     """Handle the 'youtube auth' subcommand."""
-    from .youtube_auth import authenticate_youtube
+    from .youtube_auth import (
+        authenticate_youtube,
+        get_auth_status,
+        resolve_client_secrets_path,
+        revoke_token,
+        save_client_secrets,
+    )
 
-    client_secrets = args.client_secrets
-    if not client_secrets:
-        client_secrets = os.getenv("VERAXI_YOUTUBE_CLIENT_SECRETS")
+    if getattr(args, "status", False):
+        status = get_auth_status()
+        import json
+        print(json.dumps(status, indent=2))
+        sys.exit(0 if status.get("authenticated") else 1)
 
-    if not client_secrets:
+    if getattr(args, "revoke", False):
+        revoked = revoke_token()
+        if revoked:
+            logger.info("Successfully revoked YouTube token.")
+        else:
+            logger.info("No active token found to revoke.")
+        sys.exit(0)
+
+    client_secrets_path: Optional[Path] = None
+    if args.client_secrets:
+        cs_p = Path(args.client_secrets)
+        if cs_p.exists():
+            # Automatically save a copy to default location for GUI/future CLI reuse
+            try:
+                save_client_secrets(cs_p.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.debug(f"Could not persist client_secrets to default location: {e}")
+            client_secrets_path = cs_p
+    else:
+        client_secrets_path = resolve_client_secrets_path()
+
+    if not client_secrets_path or not client_secrets_path.exists():
         logger.error(
-            "Missing client secrets file. Provide --client-secrets or set VERAXI_YOUTUBE_CLIENT_SECRETS env variable."
+            "Missing client secrets file. Provide --client-secrets or save client_secrets.json to ~/.veraxi-ymmp/client_secrets.json"
         )
         sys.exit(1)
 
-    client_secrets_path = Path(client_secrets)
     token_out_path = Path(args.token_out) if args.token_out else None
 
     try:
@@ -482,6 +536,8 @@ def run(argv: List[str]) -> None:
     parser_auth.add_argument("--token-out", type=str, help="Path to save the generated token (defaults to ~/.veraxi-ymmp/youtube_token.json)")
     parser_auth.add_argument("--monetary", action="store_true", help="Include yt-analytics-monetary.readonly scope")
     parser_auth.add_argument("--no-browser", action="store_true", help="Run console auth flow without opening a browser")
+    parser_auth.add_argument("--status", action="store_true", help="Check and print current authentication status as JSON")
+    parser_auth.add_argument("--revoke", action="store_true", help="Revoke and delete the current saved token")
 
     # Subcommand: stats
     parser_stats = subparsers.add_parser(

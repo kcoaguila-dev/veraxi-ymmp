@@ -233,6 +233,17 @@ class MoviePyRenderer:
                 brolls.append(img)
 
 
+        # Base Background (Layer 0) - ensure default classroom background is always present under slides
+        from .constants import DEFAULT_BG_IMAGE_PATH
+        default_bg_path = Path(DEFAULT_BG_IMAGE_PATH)
+        if default_bg_path.exists():
+            bg_img = ImageClip(str(default_bg_path)).with_duration(total_duration)
+            if is_vertical:
+                bg_img = bg_img.resized(height=1920).with_position("center")
+            else:
+                bg_img = bg_img.resized((1920, 1080)).with_position("center")
+            video_clips.insert(0, bg_img)
+
         video_clips.extend(bgs)
         video_clips.extend(brolls)
 
@@ -346,11 +357,6 @@ class MoviePyRenderer:
                         if st <= t <= et and char_speaker == c_name:
                             if motion == "jump":
                                 by += max(-20.0, -40.0 * abs(math.sin(math.pi * (t - st) / 0.5)))
-                            elif motion == "shake":
-                                if t - st < 1.0:
-                                    if isinstance(bx, (int, float)):
-                                        bx += 10.0 if int((t - st) * 30) % 2 == 0 else -2.0
-                                    by += 10.0 if int((t - st) * 30 + 1) % 2 == 0 else -2.0
                             return (bx, by)
                     return (bx, by)
                 return get_bounce_offset

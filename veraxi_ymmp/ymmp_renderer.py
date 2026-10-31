@@ -615,14 +615,6 @@ class YMMPRenderer:
                         "Height": 50.0,
                     }
                 )
-            elif clip.motion == "shake":
-                effects.append(
-                    {
-                        "$type": "YukkuriMovieMaker.Project.Effects.ShakeEffect, YukkuriMovieMaker",
-                        "Amount": 20.0,
-                        "Interval": 1.0,
-                    }
-                )
             new_item["VideoEffects"] = effects
 
             items.append(new_item)

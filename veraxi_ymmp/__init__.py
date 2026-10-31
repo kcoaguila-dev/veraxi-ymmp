@@ -43,6 +43,12 @@ from .pipeline import PipelineResult, ProjectPipeline
 from .audio_normalizer import normalize_video_audio
 
 from . import broll
+from .official_assets import (
+    OfficialSourceCitation,
+    OfficialAssetRegistry,
+    render_official_image_slide,
+    render_official_data_slide,
+)
 from .thumbnail import (
     ThumbnailConfig,
     generate_thumbnail,
@@ -79,6 +85,10 @@ __all__ = [
     "generate_thumbnail",
     "auto_extract_thumbnail_config",
     "generate_project_thumbnail",
+    "OfficialSourceCitation",
+    "OfficialAssetRegistry",
+    "render_official_image_slide",
+    "render_official_data_slide",
 ]
 
 __version__ = "0.1.0"
