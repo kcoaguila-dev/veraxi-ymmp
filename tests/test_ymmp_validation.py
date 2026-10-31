@@ -235,7 +235,7 @@ def test_validation_fails_on_background_on_layer1(base_valid_ymmp):
     # Ensures background images are never placed on Layer 1 (floating background bug)
     base_valid_ymmp["Timeline"]["Items"].append({
         "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-        "FilePath": "assets/bg/clean_classroom.jpg",
+        "FilePath": "assets/bg/classroom.jpg",
         "Layer": 1,
         "Frame": 0,
         "Length": 90,

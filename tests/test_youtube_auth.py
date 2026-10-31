@@ -20,14 +20,14 @@ from veraxi_ymmp.youtube_auth import (
 def mock_flow():
     with patch("veraxi_ymmp.youtube_auth.InstalledAppFlow") as mock:
         flow_instance = MagicMock()
-        mock.from_client_secrets_file.return_value = flow_instance
+        mock.from_client_secrets_file.return_value = flow_instance  # pragma: allowlist secret
         yield flow_instance
 
 
 @pytest.fixture
 def dummy_secrets(tmp_path: Path) -> Path:
-    p = tmp_path / "client_secrets.json"
-    p.write_text('{"installed": {"client_id": "test_id", "client_secret": "test_secret"}}')
+    p = tmp_path / "client_secrets.json"  # pragma: allowlist secret
+    p.write_text('{"installed": {"client_id": "test_id", "client_secret": "test_secret"}}')  # pragma: allowlist secret
     return p
 
 
@@ -38,7 +38,7 @@ def dummy_token_data():
         "refresh_token": "test_refresh_token",
         "token_uri": "https://oauth2.googleapis.com/token",
         "client_id": "test_id",
-        "client_secret": "test_secret",
+        "client_secret": "test_secret",  # pragma: allowlist secret
         "scopes": ["https://www.googleapis.com/auth/youtube.upload"],
     }
 
@@ -52,13 +52,13 @@ def test_auth_flow_writes_token_to_tmp_path(mock_flow, dummy_secrets, tmp_path: 
     mock_creds.refresh_token = "fake_refresh_token"
     mock_creds.token_uri = "https://oauth2.googleapis.com/token"
     mock_creds.client_id = "test_id"
-    mock_creds.client_secret = "test_secret"
+    mock_creds.client_secret = "test_secret"  # pragma: allowlist secret
     mock_creds.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
 
     mock_flow.run_local_server.return_value = mock_creds
 
     result_path = authenticate_youtube(
-        client_secrets_path=dummy_secrets,
+        client_secrets_path=dummy_secrets,  # pragma: allowlist secret
         token_out_path=token_out,
     )
 
@@ -79,13 +79,13 @@ def test_auth_flow_no_browser(mock_flow, dummy_secrets, tmp_path: Path):
     mock_creds.refresh_token = "fake_refresh_token_console"
     mock_creds.token_uri = "https://oauth2.googleapis.com/token"
     mock_creds.client_id = "test_id"
-    mock_creds.client_secret = "test_secret"
+    mock_creds.client_secret = "test_secret"  # pragma: allowlist secret
     mock_creds.scopes = []
 
     mock_flow.run_console.return_value = mock_creds
 
     authenticate_youtube(
-        client_secrets_path=dummy_secrets,
+        client_secrets_path=dummy_secrets,  # pragma: allowlist secret
         token_out_path=token_out,
         no_browser=True,
     )
@@ -129,7 +129,7 @@ def test_env_json_source_not_persisted(tmp_path: Path):
         refresh_token="old_refresh",
         token_uri="https://oauth2.googleapis.com/token",
         client_id="test_id",
-        client_secret="test_secret",
+        client_secret="test_secret",  # pragma: allowlist secret
     )
 
     with patch.object(Credentials, "expired", return_value=True, new_callable=PropertyMock) as mock_expired:
@@ -143,3 +143,49 @@ def test_env_json_source_not_persisted(tmp_path: Path):
 
             assert mock_refresh.called
             assert refreshed_creds.token == "new_memory_token"
+
+
+def test_save_and_resolve_client_secrets(tmp_path: Path):  # pragma: allowlist secret
+    """Test saving valid client secrets and erroring on invalid format."""
+    from veraxi_ymmp.youtube_auth import save_client_secrets, resolve_client_secrets_path  # pragma: allowlist secret
+
+    valid_dict = {"installed": {"client_id": "test_cid", "client_secret": "test_csec"}}  # pragma: allowlist secret
+    target = tmp_path / "secrets.json"
+    saved = save_client_secrets(valid_dict, target)  # pragma: allowlist secret
+    assert saved == target
+    assert target.exists()
+
+    # Valid JSON string
+    target2 = tmp_path / "secrets2.json"
+    save_client_secrets(json.dumps(valid_dict), target2)  # pragma: allowlist secret
+    assert target2.exists()
+
+    # Invalid JSON string or dict missing keys
+    with pytest.raises(ValueError):
+        save_client_secrets("invalid json", tmp_path / "bad.json")  # pragma: allowlist secret
+    with pytest.raises(ValueError):
+        save_client_secrets({"invalid": "format"}, tmp_path / "bad.json")  # pragma: allowlist secret
+
+    # Resolve client secrets
+    resolved = resolve_client_secrets_path(explicit_path=target)  # pragma: allowlist secret
+    assert resolved == target
+
+
+def test_auth_status_and_revoke(tmp_path: Path, dummy_token_data):
+    """Test get_auth_status and revoke_token."""
+    from veraxi_ymmp.youtube_auth import get_auth_status, revoke_token
+
+    tok_path = tmp_path / "tok.json"
+    tok_path.write_text(json.dumps(dummy_token_data), encoding="utf-8")
+
+    status = get_auth_status(token_path=tok_path)
+    assert status["has_token"] is True
+    assert status["authenticated"] is True
+    assert "https://www.googleapis.com/auth/youtube.upload" in status["scopes"]
+
+    # Revoke token
+    assert revoke_token(token_path=tok_path) is True
+    assert not tok_path.exists()
+    status_after = get_auth_status(token_path=tok_path)
+    assert status_after["has_token"] is False
+    assert status_after["authenticated"] is False

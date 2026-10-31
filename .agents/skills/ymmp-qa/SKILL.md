@@ -12,7 +12,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 
 ### 1. Script Generation & B-Roll Assets
 - Write the JSON script (e.g. `artifacts/script.json`).
-- Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"jump"` or `"shake"`) when appropriate.
+- Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"jump"` or `"nod"`) when appropriate.
 - Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
 - **B-Roll Presentation Boards Standard (`veraxi_ymmp.broll`)**:
   - Always use **Pro Dark Slate Theme** (`#0F172A` / `#1E293B`) for explanatory slides.

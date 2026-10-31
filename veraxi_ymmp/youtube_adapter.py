@@ -39,16 +39,8 @@ MAX_RETRY_DELAY: float = 60.0
 RETRYABLE_STATUS_CODES: set[int] = {500, 502, 503, 504}
 
 DEFAULT_RETENTION_CURVE: List[Tuple[float, float]] = [
-    (0.00, 1.00),
-    (0.05, 0.90),
-    (0.10, 0.85),
-    (0.20, 0.80),
-    (0.30, 0.77),
-    (0.40, 0.75),
-    (0.45, 0.65),  # -0.10 drop at 45%
-    (0.60, 0.60),
-    (0.80, 0.52),
-    (1.00, 0.40),
+    (0.00, 1.00), (0.05, 0.90), (0.10, 0.85), (0.20, 0.80), (0.30, 0.77),
+    (0.40, 0.75), (0.45, 0.65), (0.60, 0.60), (0.80, 0.52), (1.00, 0.40),
 ]
 
 
@@ -149,9 +141,12 @@ class YouTubeAdapter:
             if p.exists():
                 return p
 
-        default_path = Path.home() / ".veraxi-ymmp" / "youtube_token.json"
-        if default_path.exists():
-            return default_path
+        try:
+            default_path = Path.home() / ".veraxi-ymmp" / "youtube_token.json"
+            if default_path.exists():
+                return default_path
+        except (RuntimeError, KeyError):
+            pass
 
         return None
 
@@ -168,9 +163,19 @@ class YouTubeAdapter:
                 "Install them with: pip install google-api-python-client google-auth-oauthlib"
             ) from e
 
+        from .youtube_auth import refresh_credentials
+
+        # Helper to refresh and persist if needed
+        def _ensure_fresh(creds: Any, path: Optional[Path]) -> Any:
+            try:
+                return refresh_credentials(creds, path)
+            except Exception as ex:
+                logger.debug(f"Failed to refresh credentials: {ex}")
+                return creds
+
         # 1. Explicit token path
         if self.token_path and self.token_path.exists():
-            self._credentials = Credentials.from_authorized_user_file(str(self.token_path))
+            self._credentials = _ensure_fresh(Credentials.from_authorized_user_file(str(self.token_path)), self.token_path)
             return self._credentials
 
         # 2. Environment variable token path
@@ -178,7 +183,7 @@ class YouTubeAdapter:
         if env_token_path:
             p = Path(env_token_path)
             if p.exists():
-                self._credentials = Credentials.from_authorized_user_file(str(p))
+                self._credentials = _ensure_fresh(Credentials.from_authorized_user_file(str(p)), p)
                 return self._credentials
 
         # 3. Environment variable JSON string (for CI / headless containers)
@@ -189,10 +194,13 @@ class YouTubeAdapter:
             return self._credentials
 
         # 4. Default user directory fallback
-        default_home_token = Path.home() / ".veraxi-ymmp" / "youtube_token.json"
-        if default_home_token.exists():
-            self._credentials = Credentials.from_authorized_user_file(str(default_home_token))
-            return self._credentials
+        try:
+            default_home_token = Path.home() / ".veraxi-ymmp" / "youtube_token.json"
+            if default_home_token.exists():
+                self._credentials = _ensure_fresh(Credentials.from_authorized_user_file(str(default_home_token)), default_home_token)
+                return self._credentials
+        except (RuntimeError, KeyError):
+            pass
 
         raise ValueError(
             "YouTube credentials not found. Provide credentials, token_path, "

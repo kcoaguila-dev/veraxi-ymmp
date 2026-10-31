@@ -615,7 +615,7 @@ def test_youtube_auth_cli_parsing(capsys) -> None:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
-            assert args.client_secrets == "secrets.json"
+            assert args.client_secrets == "secrets.json"  # pragma: allowlist secret
             assert args.monetary is True
             assert args.no_browser is False
 
@@ -637,3 +637,43 @@ def test_youtube_channel_cli_parsing(capsys) -> None:
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
             assert args.mock is True
+
+def test_youtube_auth_status_and_revoke_cli_parsing() -> None:
+    from veraxi_ymmp.cli import main
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--status"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.status is True
+
+    with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--revoke"]):
+        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            args = mock_cmd.call_args[0][0]
+            assert args.revoke is True
+
+def test_youtube_upload_project_dir_cli(tmp_path: Path) -> None:
+    from veraxi_ymmp.cli_youtube import _cmd_youtube_upload
+    proj_dir = tmp_path / "test_project"
+    proj_dir.mkdir()
+    video_file = proj_dir / "final_video.mp4"
+    video_file.write_bytes(b"\x00" * 1024)
+    thumb_file = proj_dir / "thumbnail.png"
+    thumb_file.write_bytes(b"\x00" * 512)
+
+    class Args:
+        video_path = str(proj_dir)
+        title = None
+        description = None
+        tags = "tag1,tag2"
+        category_id = "28"
+        privacy = "unlisted"
+        publish_at = None
+        thumbnail = None
+        mock = True
+
+    with patch("sys.exit") as mock_exit:
+        _cmd_youtube_upload(Args())
+        mock_exit.assert_called_once_with(0)

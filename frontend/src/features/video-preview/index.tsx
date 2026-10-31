@@ -4,7 +4,7 @@ import { api } from '../../shared/api';
 import { LoudnessResult } from '../../shared/types';
 
 export const VideoPreview: React.FC = () => {
-  const { projectData, activeProjectName, mediaCacheBust, runPipeline } = useStudioStore();
+  const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus } = useStudioStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -93,7 +93,11 @@ export const VideoPreview: React.FC = () => {
           <h2 className="text-[15px] font-extrabold text-[#F8FAFC]">
             2. プレビュー確認
           </h2>
-          {videoSrc ? (
+          {pipelineStatus.status === 'running' ? (
+            <span className="text-[12px] font-semibold text-[#F59E0B] animate-pulse">
+              ⚡ 生成中 ({Math.round(pipelineStatus.progress || 0)}%)
+            </span>
+          ) : videoSrc ? (
             <span className="text-[12px] font-semibold text-[#34D399]">
               ✓ 生成完了 (qa_test.mp4)
             </span>
@@ -126,7 +130,30 @@ export const VideoPreview: React.FC = () => {
       {/* 16:9 Video Canvas (Matches SVG lines 228-260) */}
       <div className="px-5 pt-3.5 pb-2.5">
         <div className="relative w-full aspect-video rounded-[10px] bg-gradient-to-b from-[#1E293B] to-[#090D16] border-[1.5px] border-[#334155] overflow-hidden shadow-inner">
-          {videoSrc ? (
+          {pipelineStatus.status === 'running' ? (
+            <div className="flex flex-col items-center justify-center w-full h-full text-[#94A3B8] gap-3 p-6 text-center">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#34D399] animate-pulse">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#10B981] animate-ping" />
+                動画を自動生成中 ({Math.round(pipelineStatus.progress || 0)}%)
+              </div>
+              <div className="w-64 h-2 bg-[#1E293B] rounded-full overflow-hidden border border-[#334155]">
+                <div
+                  className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] transition-all duration-300"
+                  style={{ width: `${Math.max(5, Math.min(100, pipelineStatus.progress || 0))}%` }}
+                />
+              </div>
+              <div className="text-xs text-[#E2E8F0] font-medium">
+                {pipelineStatus.stage === 'synthesizing_audio' && '🎙️ VOICEVOX 音声合成中...'}
+                {pipelineStatus.stage === 'exporting_ymmp_and_xml' && '📦 YMM4 / Premiere プロジェクト書き出し中...'}
+                {pipelineStatus.stage === 'moviepy_rendering' && '🎬 プレビュー動画 (qa_test.mp4) をレンダリング中...'}
+                {!['synthesizing_audio', 'exporting_ymmp_and_xml', 'moviepy_rendering'].includes(pipelineStatus.stage || '') &&
+                  (pipelineStatus.message || '処理を実行中...')}
+              </div>
+              <div className="text-[11px] text-[#64748B]">
+                長編動画（約8分）のため、音声合成・レンダリング完了まで少々お待ちください
+              </div>
+            </div>
+          ) : videoSrc ? (
             <video
               ref={videoRef}
               className="w-full h-full object-contain cursor-pointer"

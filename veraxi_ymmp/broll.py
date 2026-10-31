@@ -351,11 +351,20 @@ def render_vs_slide(
     """
     left_texts = [left_box[0], left_box[1]] + list(left_box[2]) if left_box else []
     right_texts = [right_box[0], right_box[1]] + list(right_box[2]) if right_box else []
+
+    left_has_content = bool(left_box and (left_box[0].strip() or left_box[1].strip() or any(b.strip() for b in left_box[2])))
+    right_has_content = bool(right_box and (right_box[0].strip() or right_box[1].strip() or any(b.strip() for b in right_box[2])))
+    if not hero_title.strip() and not left_has_content and not right_has_content:
+        raise ValueError(
+            f"VS slide '{title}' has no comparison information: 'hero_title', 'left_box', and 'right_box' are all empty. "
+            "Ensure the slide specification provides 'hero_title' and non-empty left/right comparison boxes."
+        )
+
     check_cognitive_load(
         title,
         [title, step_tag, top_badge, hero_title, hero_status, bottom_tag, bottom_text] + left_texts + right_texts,
         max_chars=MAX_SLIDE_CHARS,
-        max_elements=MAX_SLIDE_ELEMENTS,
+        max_elements=MAX_SLIDE_ELEMENTS + 6,
     )
     img, draw, fonts = create_slide_base(title, step_tag=step_tag, theme_color=theme_color, is_vertical=is_vertical)
     x1, x2 = (56, 1024) if is_vertical else (70, 1340)
@@ -692,6 +701,10 @@ def render_from_manifest(
 
         if stype == "overview":
             raw_cards = spec.get("cards", [])
+            if not raw_cards:
+                raise ValueError(
+                    f"Overview slide '{spec.get('title', '')}' has no cards in specification."
+                )
             cards = []
             for c in raw_cards:
                 if isinstance(c, (list, tuple)):
@@ -710,14 +723,24 @@ def render_from_manifest(
                 is_vertical=spec_vertical,
             )
         elif stype == "metric":
+            hero_m = (
+                spec.get("hero_metric")
+                or spec.get("hero_title")
+                or spec.get("text_content")
+                or ""
+            )
+            if not str(hero_m).strip():
+                raise ValueError(
+                    f"Metric slide '{spec.get('title', '')}' has no hero metric text in specification."
+                )
             render_metric_slide(
                 out_path=dest,
                 title=spec.get("title", ""),
                 step_tag=spec.get("step_tag", ""),
-                hero_metric=spec.get("hero_metric", ""),
-                status_pill=spec.get("status_pill", ""),
-                impact_tag=spec.get("impact_tag", ""),
-                impact_text=spec.get("impact_text", ""),
+                hero_metric=hero_m,
+                status_pill=spec.get("status_pill", spec.get("hero_status", "")),
+                impact_tag=spec.get("impact_tag", spec.get("bottom_tag", spec.get("takeaway_tag", ""))),
+                impact_text=spec.get("impact_text", spec.get("bottom_text", spec.get("takeaway_text", ""))),
                 badge_text=spec.get("badge_text", ""),
                 category_tag=spec.get("category_tag", ""),
                 theme_color=theme_color,
@@ -731,25 +754,75 @@ def render_from_manifest(
                     elif len(box) >= 2:
                         return (str(box[0]), str(box[1]), [])
                 elif isinstance(box, dict):
-                    return (
-                        str(box.get("tag", "")),
-                        str(box.get("title", "")),
-                        [str(x) for x in box.get("bullets", [])],
-                    )
+                    tag = str(box.get("tag") or box.get("label") or box.get("badge") or "")
+                    title = str(box.get("title") or box.get("headline") or box.get("name") or "")
+                    raw_bullets = box.get("bullets")
+                    if raw_bullets is None:
+                        sub_val = box.get("sub") or box.get("description") or box.get("text")
+                        if sub_val:
+                            raw_bullets = [sub_val] if isinstance(sub_val, str) else list(sub_val)
+                        else:
+                            raw_bullets = []
+                    bullets = [str(x) for x in raw_bullets] if isinstance(raw_bullets, (list, tuple)) else []
+                    return (tag, title, bullets)
                 return ("", "", [])
+
+            left_raw = spec.get("left_box") if "left_box" in spec else spec.get("left")
+            right_raw = spec.get("right_box") if "right_box" in spec else spec.get("right")
+            left_b = _norm_box(left_raw)
+            right_b = _norm_box(right_raw)
+            hero_t = str(spec.get("hero_title") or spec.get("hero_metric") or spec.get("headline") or "")
+            hero_s = str(spec.get("hero_status") or spec.get("status_pill") or spec.get("status") or "")
+            bottom_t = str(spec.get("bottom_tag") or spec.get("impact_tag") or spec.get("takeaway_tag") or "視点")
+            bottom_txt = str(spec.get("bottom_text") or spec.get("impact_text") or spec.get("takeaway_text") or "")
 
             render_vs_slide(
                 out_path=dest,
                 title=spec.get("title", ""),
                 step_tag=spec.get("step_tag", ""),
-                hero_title=spec.get("hero_title", ""),
-                hero_status=spec.get("hero_status", ""),
-                left_box=_norm_box(spec.get("left_box")),
-                right_box=_norm_box(spec.get("right_box")),
-                bottom_tag=spec.get("bottom_tag", "視点"),
-                bottom_text=spec.get("bottom_text", ""),
+                hero_title=hero_t,
+                hero_status=hero_s,
+                left_box=left_b,
+                right_box=right_b,
+                bottom_tag=bottom_t,
+                bottom_text=bottom_txt,
                 top_badge=spec.get("top_badge", ""),
                 theme_color=theme_color,
+                is_vertical=spec_vertical,
+            )
+        elif stype in ("official_image", "image"):
+            from .official_assets import render_official_image_slide
+            render_official_image_slide(
+                out_path=dest,
+                title=spec.get("title", ""),
+                image_path=spec.get("image_path", spec.get("image", spec.get("asset", ""))),
+                source_citation=spec.get("source_citation", spec.get("source", spec.get("citation", "公式ドキュメント"))),
+                step_tag=spec.get("step_tag", "公式発表"),
+                caption=spec.get("caption", spec.get("takeaway_text", spec.get("impact_text", ""))),
+                theme_color=theme_color,
+                is_vertical=spec_vertical,
+                verification_badge=spec.get("verification_badge", "公式発表"),
+                category_tag=spec.get("category_tag", ""),
+                base_dir=proj_dir,
+                layout=spec.get("layout", "hero"),
+                show_caption=spec.get("show_caption", False),
+                show_header=spec.get("show_header", True),
+                show_citation=spec.get("show_citation", True),
+            )
+        elif stype in ("official_data", "official_stat"):
+            from .official_assets import render_official_data_slide
+            render_official_data_slide(
+                out_path=dest,
+                title=spec.get("title", ""),
+                hero_metric=spec.get("hero_metric", spec.get("metric", spec.get("hero_title", ""))),
+                metric_label=spec.get("metric_label", spec.get("status_pill", spec.get("hero_status", ""))),
+                source_citation=spec.get("source_citation", spec.get("source", spec.get("citation", "公的データ"))),
+                step_tag=spec.get("step_tag", "公式データ"),
+                impact_tag=spec.get("impact_tag", spec.get("bottom_tag", "結論")),
+                impact_text=spec.get("impact_text", spec.get("bottom_text", spec.get("takeaway_text", ""))),
+                verification_badge=spec.get("verification_badge", "VERIFIED"),
+                theme_color=theme_color,
+                category_tag=spec.get("category_tag", ""),
                 is_vertical=spec_vertical,
             )
         generated.append(dest)

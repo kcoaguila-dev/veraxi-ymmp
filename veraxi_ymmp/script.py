@@ -23,7 +23,7 @@ Emotion = Literal[
     "crying",
     "blushing",
 ]
-Motion = Literal["none", "jump", "shake", "nod"]
+Motion = Literal["none", "jump", "nod"]
 CharacterPosition = Literal["left", "center", "right"]
 SubtitlePosition = Literal["top_center", "center", "bottom_center"]
 SubtitleStyle = Literal["default", "outlined"]
@@ -43,7 +43,7 @@ VALID_EMOTIONS = {
     "crying",
     "blushing",
 }
-VALID_MOTIONS = {"none", "jump", "shake", "nod"}
+VALID_MOTIONS = {"none", "jump", "nod"}
 VALID_CHARACTER_POSITIONS = {"left", "center", "right"}
 VALID_SUBTITLE_POSITIONS = {"top_center", "center", "bottom_center"}
 VALID_SUBTITLE_STYLES = {"default", "outlined"}
@@ -385,7 +385,7 @@ def split_long_script_entries(
             if i > 0:
                 sub_entry.pop("image", None)
                 sub_entry.pop("sfx", None)
-                if sub_entry.get("motion") in ("jump", "shake"):
+                if sub_entry.get("motion") == "jump":
                     sub_entry["motion"] = "none"
             new_script.append(sub_entry)
 

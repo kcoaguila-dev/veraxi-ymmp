@@ -72,6 +72,19 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if path == '/api/voicevox/health':
                 return self.send_json(200, get_voicevox_health())
 
+            if path == '/api/youtube/auth/status':
+                from veraxi_ymmp.youtube_auth import get_auth_status
+                status = get_auth_status()
+                query = urllib.parse.parse_qs(parsed_path.query)
+                if query.get("include_channel", ["0"])[0] in ("1", "true") and status.get("authenticated"):
+                    try:
+                        from veraxi_ymmp.youtube_adapter import YouTubeAdapter
+                        adapter = YouTubeAdapter()
+                        status["channel"] = adapter.get_channel_info()
+                    except Exception as ex:
+                        logger.debug(f"Could not fetch channel info: {ex}")
+                return self.send_json(200, status)
+
             match = re.match(r'^/api/projects/([^/]+)$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -334,6 +347,39 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     ))
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
+
+            if path == '/api/youtube/auth/client-secrets':
+                from veraxi_ymmp.youtube_auth import save_client_secrets, get_auth_status
+                raw_secrets = body.get("client_secrets_json") or body.get("client_secrets") or body
+                try:
+                    save_client_secrets(raw_secrets)
+                    return self.send_json(200, {"success": True, "status": get_auth_status()})
+                except ValueError as ve:
+                    return self.send_json(400, {"error": str(ve)})
+                except Exception as ex:
+                    return self.send_json(500, {"error": str(ex)})
+
+            if path == '/api/youtube/auth/connect':
+                from veraxi_ymmp.youtube_auth import authenticate_youtube, resolve_client_secrets_path, get_auth_status
+                secrets_path = resolve_client_secrets_path()
+                if not secrets_path or not secrets_path.exists():
+                    return self.send_json(400, {"error": "client_secrets.json is not configured. Please save client secrets first."})
+                try:
+                    authenticate_youtube(client_secrets_path=secrets_path, no_browser=False)
+                    status = get_auth_status()
+                    try:
+                        from veraxi_ymmp.youtube_adapter import YouTubeAdapter
+                        status["channel"] = YouTubeAdapter().get_channel_info()
+                    except Exception as ch_err:
+                        logger.debug(f"Could not retrieve channel info after connect: {ch_err}")
+                    return self.send_json(200, {"success": True, "status": status})
+                except Exception as ex:
+                    return self.send_json(500, {"error": str(ex)})
+
+            if path == '/api/youtube/auth/revoke':
+                from veraxi_ymmp.youtube_auth import revoke_token, get_auth_status
+                revoked = revoke_token()
+                return self.send_json(200, {"success": revoked, "status": get_auth_status()})
 
             self.send_error(404, "Not Found")
         except Exception as e:
