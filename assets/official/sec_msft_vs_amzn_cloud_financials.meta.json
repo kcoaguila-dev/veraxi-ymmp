@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "image_path": "assets/official/sec_msft_vs_amzn_cloud_financials.png",
+  "image_sha256": "a5d0b0a3d7e4769fa1cb20adefb41b3319a999741e8050c8d9817af32ba1cb38",
+  "content_sha256": "",
+  "source_type": "sec_edgar",
+  "identifier": "SEC_MSFT_VS_AMZN_CLOUD_FINANCIALS",
+  "citation_label": "SEC Filing (sec_msft_vs_amzn_cloud_financials)",
+  "source_url": "",
+  "final_url": "",
+  "http_status": 200,
+  "verified": false,
+  "provenance": "synthetic",
+  "retrieved_at": "2026-11-04T13:17:03.440469+00:00",
+  "matched_text": "",
+  "metadata": {
+    "note": "Legacy procedural/PIL asset; requires capture command for live verification"
+  }
+}

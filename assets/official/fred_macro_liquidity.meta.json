@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "image_path": "assets/official/fred_macro_liquidity.png",
+  "image_sha256": "455c425ad3eaaf6c2856f0a07f06d27f5caf2ef358c57668816d5cc81898797c",
+  "content_sha256": "",
+  "source_type": "fred",
+  "identifier": "FRED_MACRO_LIQUIDITY",
+  "citation_label": "FRED Series (fred_macro_liquidity)",
+  "source_url": "",
+  "final_url": "",
+  "http_status": 200,
+  "verified": false,
+  "provenance": "synthetic",
+  "retrieved_at": "2026-11-04T13:17:03.126699+00:00",
+  "matched_text": "",
+  "metadata": {
+    "note": "Legacy procedural/PIL asset; requires capture command for live verification"
+  }
+}

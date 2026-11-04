@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "image_path": "assets/official/php.png",
+  "image_sha256": "dc4edb00820e700ae8ced583ad3dc7adcf0864dc2f19c1e790bbdebaad7f7d5f",
+  "content_sha256": "",
+  "source_type": "custom",
+  "identifier": "php",
+  "citation_label": "Primary Document (php)",
+  "source_url": "",
+  "final_url": "",
+  "http_status": 200,
+  "verified": false,
+  "provenance": "synthetic",
+  "retrieved_at": "2026-11-04T13:17:03.289291+00:00",
+  "matched_text": "",
+  "metadata": {
+    "note": "Legacy procedural/PIL asset; requires capture command for live verification"
+  }
+}

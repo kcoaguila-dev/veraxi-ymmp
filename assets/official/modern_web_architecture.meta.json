@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "image_path": "assets/official/modern_web_architecture.png",
+  "image_sha256": "c836d40bbbed3657f830aed5836597bc74f061fefa4fabdc2c001b4e813c4b7e",
+  "content_sha256": "",
+  "source_type": "custom",
+  "identifier": "modern_web_architecture",
+  "citation_label": "Primary Document (modern_web_architecture)",
+  "source_url": "",
+  "final_url": "",
+  "http_status": 200,
+  "verified": false,
+  "provenance": "synthetic",
+  "retrieved_at": "2026-11-04T13:17:03.219785+00:00",
+  "matched_text": "",
+  "metadata": {
+    "note": "Legacy procedural/PIL asset; requires capture command for live verification"
+  }
+}

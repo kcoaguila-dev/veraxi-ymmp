@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "image_path": "assets/official/cve_alert.png",
+  "image_sha256": "ca4aa6e1b6c7e6d2e20bb62e17f5d21ad3bddbdcf9c8805f3417d6e9703bab71",
+  "content_sha256": "",
+  "source_type": "government_stat",
+  "identifier": "CVE_ALERT",
+  "citation_label": "NVD Advisory (cve_alert)",
+  "source_url": "",
+  "final_url": "",
+  "http_status": 200,
+  "verified": false,
+  "provenance": "synthetic",
+  "retrieved_at": "2026-11-04T13:17:02.808346+00:00",
+  "matched_text": "",
+  "metadata": {
+    "note": "Legacy procedural/PIL asset; requires capture command for live verification"
+  }
+}

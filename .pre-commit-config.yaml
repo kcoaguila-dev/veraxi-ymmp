@@ -21,6 +21,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+        exclude: '\.meta\.json$'
   - repo: local
     hooks:
       - id: check-no-local-paths
