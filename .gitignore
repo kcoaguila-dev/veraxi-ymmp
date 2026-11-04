@@ -71,7 +71,8 @@ verification_frames/
 # Third-party copyrighted character art, backgrounds & BGM
 assets/faces/*/
 assets/bgm/
-assets/bg/
+assets/bg/*
+!assets/bg/default_dark.png
 assets/mogrt/
 
 

@@ -22,6 +22,10 @@ DEFAULT_SPEAKER_MAP: Dict[str, int] = {
 # Default asset paths
 DEFAULT_TEMPLATE_PATH = "examples/full_template.ymmp"
 DEFAULT_BG_IMAGE_PATH = "assets/bg/classroom.jpg"
+DEFAULT_BG_CANDIDATES = [
+    "assets/bg/classroom.jpg",
+    "assets/bg/default_dark.png",
+]
 DEFAULT_BGM_CANDIDATES = [
     "assets/bgm/2_23_AM.mp3",
     "assets/bgm/2_23_AM.m4a",

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union, cast
 
 import brotli
 
-from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_BGM_DUCKING_VOLUME, DEFAULT_SUBTITLE_CENTER_Y
+from .constants import (DEFAULT_BG_CANDIDATES, DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_BGM_DUCKING_VOLUME, DEFAULT_SUBTITLE_CENTER_Y)
 from .ir import TimelineIR
 from .phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
 from .ports import ExportResult
@@ -462,23 +462,23 @@ class YMMPRenderer:
                 )
                 items.append(
                     _build_image_item(
-                        bg_clip.image_path.resolve(),
-                        bg_clip.start_frame,
-                        bg_len,
-                        layer=0,
-                        zoom=187.5,
+                        bg_clip.image_path.resolve(), bg_clip.start_frame, bg_len, layer=0, zoom=187.5
                     )
                 )
         else:
             bg_candidate = Path(DEFAULT_BG_IMAGE_PATH).resolve()
+            if not bg_candidate.exists():
+                for cand in DEFAULT_BG_CANDIDATES:
+                    cand_p = Path(cand).resolve()
+                    if cand_p.exists():
+                        bg_candidate = cand_p
+                        break
             for gc in timeline_ir.global_clips:
                 ti = gc.template_item or {}
                 file_p = gc.file_path or ti.get("FilePath")
                 if file_p and any(k in file_p.lower() for k in ("bg", "room", "classroom")):
                     bg_candidate = Path(file_p).resolve()
-            items.append(
-                _build_image_item(bg_candidate, 0, timeline_ir.total_frames, layer=0, zoom=187.5)
-            )
+            items.append(_build_image_item(bg_candidate, 0, timeline_ir.total_frames, layer=0, zoom=187.5))
 
         # 4. Layer 1: B-Roll Images (Strictly exclude background clips and non-positive lengths)
         for d_img_clip in timeline_ir.dynamic_image_clips:
@@ -488,12 +488,7 @@ class YMMPRenderer:
             b_zoom = _get_vertical_broll_zoom(d_img_clip.image_path) if is_vertical else 100.0
             items.append(
                 _build_image_item(
-                    d_img_clip.image_path.resolve(),
-                    d_img_clip.start_frame,
-                    d_img_clip.length,
-                    layer=1,
-                    y=b_y,
-                    zoom=b_zoom,
+                    d_img_clip.image_path.resolve(), d_img_clip.start_frame, d_img_clip.length, layer=1, y=b_y, zoom=b_zoom
                 )
             )
 

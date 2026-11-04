@@ -13,6 +13,7 @@ if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
 
 from moviepy import (
     AudioFileClip,
+    ColorClip,
     CompositeAudioClip,
     CompositeVideoClip,
     ImageClip,
@@ -233,9 +234,15 @@ class MoviePyRenderer:
                 brolls.append(img)
 
 
-        # Base Background (Layer 0) - ensure default classroom background is always present under slides
-        from .constants import DEFAULT_BG_IMAGE_PATH
+        # Base Background (Layer 0) - ensure default background is always present under slides
+        from .constants import DEFAULT_BG_CANDIDATES, DEFAULT_BG_IMAGE_PATH
         default_bg_path = Path(DEFAULT_BG_IMAGE_PATH)
+        if not default_bg_path.exists():
+            for cand in DEFAULT_BG_CANDIDATES:
+                p = Path(cand)
+                if p.exists():
+                    default_bg_path = p
+                    break
         if default_bg_path.exists():
             bg_img = ImageClip(str(default_bg_path)).with_duration(total_duration)
             if is_vertical:
@@ -243,6 +250,11 @@ class MoviePyRenderer:
             else:
                 bg_img = bg_img.resized((1920, 1080)).with_position("center")
             video_clips.insert(0, bg_img)
+        else:
+            # Fallback to in-memory Pro Dark Slate (#0F172A) canvas
+            bg_size = (1080, 1920) if is_vertical else (1920, 1080)
+            fallback_bg = ColorClip(size=bg_size, color=(15, 23, 42), duration=total_duration).with_position("center")
+            video_clips.insert(0, fallback_bg)
 
         video_clips.extend(bgs)
         video_clips.extend(brolls)
