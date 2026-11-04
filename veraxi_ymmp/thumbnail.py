@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from .logging import logger
+from .thumbnail_composer import validate_thumbnail_visual_qa  # noqa: F401
+
 
 FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
 

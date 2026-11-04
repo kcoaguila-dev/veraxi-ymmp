@@ -68,6 +68,13 @@ scratch/
 verification_frames/
 .history/
 
+# Third-party copyrighted character art, backgrounds & BGM
+assets/faces/*/
+assets/bgm/
+assets/bg/
+assets/mogrt/
+
+
 # OS files
 .DS_Store
 Thumbs.db

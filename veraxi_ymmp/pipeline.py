@@ -112,6 +112,7 @@ class ProjectPipeline:
         language: str = "ja",
         normalize_loudness: bool = False,
         publisher: Optional[VideoPublisher] = None,
+        allow_synthetic: bool = False,
     ) -> PipelineResult:
         """Execute the end-to-end video synthesis pipeline for a project directory."""
         def _notify(stage: str, progress: float, message: str) -> None:
@@ -222,6 +223,31 @@ class ProjectPipeline:
         else:
             # If no B-Roll manifest exists, advance progress smoothly so the GUI doesn't stall
             _notify("rendering_broll", 0.10, "No B-Roll manifest found, skipping.")
+
+        # Fail-closed asset provenance & cryptographic verification guard
+        try:
+            from .asset_guard import verify_project_assets
+
+            broll_data = None
+            if broll_manifest_path.exists():
+                try:
+                    with open(broll_manifest_path, "r", encoding="utf-8-sig") as f:
+                        broll_data = json.load(f)
+                except Exception:
+                    broll_data = None
+
+            verify_project_assets(
+                project_dir=proj_dir,
+                script_entries=script_data if isinstance(script_data, list) else None,
+                broll_manifest=broll_data,
+                allow_synthetic=allow_synthetic,
+            )
+        except Exception as guard_err:
+            logger.error(f"Asset integrity check failed: {guard_err}")
+            result.errors.append(str(guard_err))
+            result.success = False
+            return result
+
 
         audio_dir = proj_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
@@ -503,6 +529,7 @@ def run_project(
     language: str = "ja",
     normalize_loudness: bool = False,
     publisher: Optional[VideoPublisher] = None,
+    allow_synthetic: bool = False,
 ) -> PipelineResult:
     """Convenience function running ProjectPipeline for a project directory."""
     pipeline = ProjectPipeline()
@@ -523,6 +550,7 @@ def run_project(
         language=language,
         normalize_loudness=normalize_loudness,
         publisher=publisher,
+        allow_synthetic=allow_synthetic,
     )
 
 

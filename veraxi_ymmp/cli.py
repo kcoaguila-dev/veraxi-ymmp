@@ -40,6 +40,7 @@ def _cmd_run(argv: List[str]) -> None:
     parser.add_argument("--privacy", choices=["private", "unlisted", "public"], default="private", help="Video privacy status (default: private)")
     parser.add_argument("--no-gain-stage", action="store_true", help="Disable upstream speech gain staging (-16.0 LUFS)")
     parser.add_argument("--normalize", "--normalize-loudness", action="store_true", dest="normalize", help="Normalize audio loudness to YouTube -14.0 LUFS standard before uploading")
+    parser.add_argument("--allow-synthetic", action="store_true", help="Allow synthetic unverified primary evidence assets (mock/CI testing only)")
 
     args = parser.parse_args(argv)
 
@@ -80,6 +81,7 @@ def _cmd_run(argv: List[str]) -> None:
         publish_at=args.publish_at,
         privacy_status=args.privacy,
         normalize_loudness=args.normalize,
+        allow_synthetic=args.allow_synthetic,
     )
     if not result.success:
         for err in result.errors:
@@ -338,13 +340,26 @@ def _cmd_serve(argv: list[str]) -> None:
     from veraxi_ymmp.api_server import serve
     serve(port=args.port)
 
+def _cmd_capture_sec(argv: list[str]) -> None:
+    """Capture and highlight an SEC filing passage (alias to 'capture --source sec')."""
+    from .cli_capture import cmd_capture_sec
+    cmd_capture_sec(argv)
+
+
+def _cmd_capture(argv: list[str]) -> None:
+    """Capture and highlight an official document passage from SEC or FRED."""
+    from .cli_capture import cmd_capture
+    cmd_capture(argv)
+
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture"}:
         subcmd = sys.argv[1]
         sub_argv = sys.argv[2:]
         if subcmd == "run":
@@ -363,6 +378,10 @@ def main() -> None:
             _cmd_validate(sub_argv)
         elif subcmd == "serve":
             _cmd_serve(sub_argv)
+        elif subcmd == "capture":
+            _cmd_capture(sub_argv)
+        elif subcmd == "capture-sec":
+            _cmd_capture_sec(sub_argv)
         return
 
     parser = argparse.ArgumentParser(

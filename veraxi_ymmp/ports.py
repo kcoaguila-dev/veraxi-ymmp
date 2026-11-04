@@ -26,7 +26,7 @@ from typing import (
 )
 
 from .director import DirectorProvider
-from .facts import Claim, Evidence
+from .facts import Claim, Evidence, DocumentCaptureSpec, DocumentCaptureResult
 from .ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
@@ -209,6 +209,26 @@ class VideoAnalyticsProvider(Protocol):
         ...
 
 
+
+
+@runtime_checkable
+class OfficialDocumentCapturePort(Protocol):
+    """Protocol for capturing authoritative official documents with highlights and citations."""
+
+    def capture_document(
+        self,
+        spec: DocumentCaptureSpec,
+        output_path: Path,
+    ) -> DocumentCaptureResult:
+        """Capture a high-DPI document snapshot with highlighted passage."""
+        ...
+
+    def is_available(self) -> bool:
+        """Return True if capturing backend is available."""
+        ...
+
+
+
 __all__ = [
     "ExportResult",
     "TimelineExporter",
@@ -230,4 +250,5 @@ __all__ = [
     "PipelineProgressCallback",
     "VideoPublisher",
     "VideoAnalyticsProvider",
+    "OfficialDocumentCapturePort",
 ]

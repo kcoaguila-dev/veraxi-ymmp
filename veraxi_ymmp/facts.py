@@ -138,3 +138,113 @@ def claims_from_json(raw: str) -> List[Claim]:
 
 def load_claims(path: Path) -> List[Claim]:
     return claims_from_json(path.read_text(encoding="utf-8"))
+
+
+class DocumentSourceType(str, Enum):
+    """Type of official primary authority document source."""
+
+    SEC_EDGAR = "sec_edgar"
+    FRED = "fred"
+    GOVERNMENT_STAT = "government_stat"
+    CUSTOM = "custom"
+
+
+@dataclass
+class DocumentCaptureSpec:
+    """Specification for official document passage capture, highlighting, and citation."""
+
+    source_type: DocumentSourceType = DocumentSourceType.SEC_EDGAR
+    identifier: str = ""  # Ticker symbol (e.g. 'MSFT'), CIK ('0000789019'), or series ID ('WALCL')
+    target_text: str = ""  # Text, figure, or line-item substring to locate and highlight
+    document_url: str = ""  # Explicit URL to the document HTML or local path
+    citation_label: str = ""  # Authoritative citation display text
+    context_padding_px: int = 40  # Context padding around matched bounding box
+    highlight_color: str = "#fef08a"  # Fluorescent yellow highlight (#fef08a default)
+    device_scale_factor: int = 2  # High-DPI Retina multiplier (2x default for 4K video clarity)
+    source_params: Dict[str, Any] = field(default_factory=dict)
+
+
+class DocumentProvenance(str, Enum):
+    """Provenance origin of a captured document."""
+
+    LIVE = "live"
+    SYNTHETIC = "synthetic"
+
+
+@dataclass
+class DocumentCaptureResult:
+    """Result of an official document capture operation."""
+
+    success: bool
+    image_path: Path
+    citation_label: str
+    source_url: str
+    verified: bool = False
+    provenance: DocumentProvenance = DocumentProvenance.LIVE
+    error_message: str = ""
+    matched_text: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+
+@dataclass
+class ProvenanceRecord:
+    """Audit trail and cryptographic verification record stored alongside captured document images."""
+
+    schema_version: str
+    image_path: str
+    image_sha256: str
+    content_sha256: str
+    source_type: DocumentSourceType
+    identifier: str
+    citation_label: str
+    source_url: str
+    final_url: str
+    http_status: int
+    verified: bool
+    provenance: DocumentProvenance
+    retrieved_at: str
+    matched_text: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "image_path": self.image_path,
+            "image_sha256": self.image_sha256,
+            "content_sha256": self.content_sha256,
+            "source_type": self.source_type.value,
+            "identifier": self.identifier,
+            "citation_label": self.citation_label,
+            "source_url": self.source_url,
+            "final_url": self.final_url,
+            "http_status": self.http_status,
+            "verified": self.verified,
+            "provenance": self.provenance.value,
+            "retrieved_at": self.retrieved_at,
+            "matched_text": self.matched_text,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ProvenanceRecord:
+        schema_version = str(data.get("schema_version", ""))
+        if schema_version != "1.0":
+            raise ValueError(f"Unsupported provenance schema_version: {schema_version}")
+        return cls(
+            schema_version=schema_version,
+            image_path=str(data.get("image_path", "")),
+            image_sha256=str(data.get("image_sha256", "")),
+            content_sha256=str(data.get("content_sha256", "")),
+            source_type=DocumentSourceType(str(data.get("source_type", "sec_edgar"))),
+            identifier=str(data.get("identifier", "")),
+            citation_label=str(data.get("citation_label", "")),
+            source_url=str(data.get("source_url", "")),
+            final_url=str(data.get("final_url", "")),
+            http_status=int(data.get("http_status", 200)),
+            verified=bool(data.get("verified", False)),
+            provenance=DocumentProvenance(str(data.get("provenance", "synthetic"))),
+            retrieved_at=str(data.get("retrieved_at", "")),
+            matched_text=str(data.get("matched_text", "")),
+            metadata=dict(data.get("metadata", {})),
+        )

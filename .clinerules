@@ -61,7 +61,7 @@ When authoring dialogue, staging metadata, or generating video projects, you MUS
 - **Pro Dark Slate Theme:** `#0F172A` / `#1E293B`.
 - **Cognitive Load Ceiling:** Total characters across slide <= 100. Maximum 6 text elements. Zero nested bullets.
 - **Stage Convention:** Left Anchor (Explainer at `x=80`), Right Alternating (`x=1180`), center screen kept open for presentation slides.
-- **Clean Audio & Grounded Staging:** Grounded motions (`"none"` or `"nod"` — no `"jump"` in commentary). Clean instrumental BGM (`assets/bgm/2_23_AM.mp3` ducked to <= 0.08). Zero slapstick cartoon SFX (`pon.wav` banned).
+- **Clean Audio & Grounded Staging:** Grounded motions (`"none"` or `"nod"` — no `"jump"` in commentary). Clean instrumental BGM (e.g. configured `assets/bgm/2_23_AM.mp3` or project BGM ducked to <= 0.08). Zero slapstick cartoon SFX (`pon.wav` banned).
 - **YouTube Thumbnail:** 3-Split layout (character reaction right, high-contrast headline left, bottom-right timestamp safe zone protected).
 
 
