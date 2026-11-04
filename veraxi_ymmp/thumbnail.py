@@ -72,20 +72,52 @@ TOPIC_PRESETS: List[Dict[str, Any]] = [
         "title_line1": "コストコ",
         "title_line2": "ボロ儲け！？",
         "highlight_word": "ボロ儲け",
-        "sub_hook": "▶ 商品利益はまさかの「ほぼ0円」！？",
+        "sub_hook": "",
         "badge": "【超・裏事情】",
         "theme": "gold",
         "emotion": "surprised",
+    },
+    {
+        "keywords": ["capex", "rotation", "資金移動", "大移動", "ai投資", "電力"],
+        "title_line1": "半導体 vs 電力",
+        "title_line2": "勝つのはどっち！？",
+        "highlight_word": "勝つのはどっち！？",
+        "sub_hook": "",
+        "badge": "【大激変】",
+        "theme": "gold",
+        "emotion": "surprised",
+        "layout": "vs_duel",
+        "opponent_character": "四国めたん",
+        "left_label": "半導体・GPU",
+        "right_label": "電力・インフラ",
+        "speech_bubble": "",
+        "zabuton_color": "red",
     },
     {
         "keywords": ["market", "株価", "金利"],
         "title_line1": "株式市場",
         "title_line2": "大暴落！？",
         "highlight_word": "大暴落",
-        "sub_hook": "▶ 2026年、逃げ遅れたら全滅へ",
+        "sub_hook": "",
         "badge": "【緊急警告】",
         "theme": "red",
         "emotion": "surprised",
+    },
+    {
+        "keywords": ["msft", "amzn", "マイクロソフト", "アマゾン", "対決", "ai_war"],
+        "title_line1": "マイクロソフト vs アマゾン",
+        "title_line2": "勝つのはどっち！？",
+        "highlight_word": "勝つのはどっち！？",
+        "sub_hook": "▶ 4000億ドルのAI戦争で笑う企業・沈む企業",
+        "badge": "【宿命の対決】",
+        "theme": "gold",
+        "emotion": "surprised",
+        "layout": "vs_duel",
+        "opponent_character": "四国めたん",
+        "left_label": "マイクロソフト",
+        "right_label": "アマゾン",
+        "speech_bubble": "",
+        "zabuton_color": "red",
     },
 ]
 
@@ -106,6 +138,18 @@ class ThumbnailConfig:
     character_scale: float = 1.0
     width: int = 1920
     height: int = 1080
+    layout: str = "classic_split"
+    opponent_character: Optional[str] = None
+    opponent_emotion: str = "normal"
+    opponent_mouth_open: bool = False
+    left_label: str = ""
+    right_label: str = ""
+    vs_badge_text: str = "VS"
+    speech_bubble: str = ""
+    speech_bubble_char: str = "ずんだもん"
+    zabuton_color: Optional[str] = None
+    metric_highlight: str = ""
+    rotate_angle: float = -3.2
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -375,6 +419,16 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
 
     w, h = config.width, config.height
     theme_colors = THEMES.get(config.theme, THEMES["gold"])
+
+    if config.layout == "vs_duel":
+        from .thumbnail_composer import create_vs_duel_background, render_vs_duel_layout
+        left_c = (14, 165, 233)
+        right_c = (239, 68, 68) if config.theme != "cyan" else (245, 158, 11)
+        canvas = create_vs_duel_background(w, h, left_color=left_c, right_color=right_c)
+        font_path, font_index = find_best_font_path()
+        canvas = render_vs_duel_layout(canvas, config, font_path, font_index)
+        canvas.save(out_file, "PNG")
+        return out_file
 
     # 1. Base Canvas & Background
     if config.bg_path and Path(config.bg_path).exists():
@@ -664,6 +718,13 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
 
     for preset in TOPIC_PRESETS:
         if any(kw.lower() in combined_context for kw in preset["keywords"]):
+            extra_keys = {
+                k: preset[k] for k in [
+                    "layout", "opponent_character", "opponent_emotion",
+                    "left_label", "right_label", "speech_bubble",
+                    "zabuton_color", "rotate_angle"
+                ] if k in preset
+            }
             return ThumbnailConfig(
                 title_line1=preset["title_line1"],
                 title_line2=preset["title_line2"],
@@ -674,13 +735,14 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
                 emotion=preset.get("emotion", best_emotion),
                 theme=preset["theme"],
                 bg_path=None,
+                **extra_keys,
             )
 
     # General Fallback
     title1 = "ヤバすぎる"
     title2 = "衝撃の真実！？"
     highlight = "衝撃の真実"
-    sub_hook = "▶ 9割の日本人が知らない裏側"
+    sub_hook = ""
 
     if dir_name:
         clean_name = dir_name.replace("_", " ").title()
@@ -737,8 +799,12 @@ def auto_extract_variant_configs(project_dir_or_script: Union[str, Path, list, T
     base = project_dir_or_script if isinstance(project_dir_or_script, ThumbnailConfig) else auto_extract_thumbnail_config(project_dir_or_script)
     bd = base.to_dict()
     w_t2, w_hw = ("大損の罠！？", "大損の罠") if "大損" not in base.title_line2 else (base.title_line2, base.highlight_word)
-    cfg_a = ThumbnailConfig.from_dict({**bd, "theme": "gold", "emotion": "surprised", "mouth_open": True, "badge": base.badge or "【徹底解説】"})
-    cfg_b = ThumbnailConfig.from_dict({**bd, "theme": "red", "emotion": "angry", "mouth_open": False, "badge": "【緊急警告】", "title_line2": w_t2, "highlight_word": w_hw, "sub_hook": "▶ 騙されたら終わり！衝撃の真実"})
+    if base.layout == "vs_duel":
+        cfg_a = ThumbnailConfig.from_dict({**bd, "theme": "gold", "zabuton_color": "red", "speech_bubble": "", "badge": base.badge or "【宿命の対決】"})
+        cfg_b = ThumbnailConfig.from_dict({**bd, "theme": "red", "zabuton_color": "gold", "badge": "【緊急警告】", "title_line2": "完全敗北！？", "highlight_word": "完全敗北", "speech_bubble": "", "emotion": "angry"})
+    else:
+        cfg_a = ThumbnailConfig.from_dict({**bd, "theme": "gold", "emotion": "surprised", "mouth_open": True, "badge": base.badge or "【徹底解説】"})
+        cfg_b = ThumbnailConfig.from_dict({**bd, "theme": "red", "emotion": "angry", "mouth_open": False, "badge": "【緊急警告】", "title_line2": w_t2, "highlight_word": w_hw, "sub_hook": ""})
     return {"A": cfg_a, "B": cfg_b}
 
 

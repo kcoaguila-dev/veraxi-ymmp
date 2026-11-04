@@ -662,7 +662,7 @@ class CharacterPSDRegistry:
         t_layer = self.get_tachie_layer(character)
         if is_vertical:
             return {
-                "x": 220.0 if is_zunda else (0.0 if is_tsumugi else -220.0),
+                "x": 220.0 if is_zunda else (0.0 if (is_tsumugi and not has_broll) else (220.0 if is_tsumugi else -220.0)),
                 "y": 210.0 if is_zunda else (240.0 if is_tsumugi else 260.0),
                 "zoom": 55.0 if is_zunda else (50.0 if is_tsumugi else 48.0),
                 "layer": t_layer,
@@ -676,7 +676,7 @@ class CharacterPSDRegistry:
             }
         else:
             return {
-                "x": 550.0 if is_zunda else -550.0,
+                "x": 550.0 if (is_zunda or is_tsumugi) else -550.0,
                 "y": 220.0 if is_zunda else (260.0 if is_tsumugi else 300.0),
                 "zoom": 70.0 if is_zunda else (64.0 if is_tsumugi else 62.0),
                 "layer": t_layer,

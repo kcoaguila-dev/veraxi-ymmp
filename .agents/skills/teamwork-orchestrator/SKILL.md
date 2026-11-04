@@ -30,10 +30,21 @@ The Lead Orchestrator must not jump straight to generating code or assets.
 Subagent: **Script Specialist**
 1. Draft factual content into `WriterScript`.
 2. Enrich with staging metadata in `DirectorScript` (motions, emotions, B-roll triggers).
-3. Validate typography constraints:
+3. Enforce Cold Open & Hook Invariants:
+   - Zero-Greeting Cold Open: NEVER open with generic greetings (e.g. `「みんな、こんにちは」`, `「ごきげんよう」`).
+   - Character-Driven Hook: First 2-3 cuts keep `image: null` to avoid PowerPoint overload; slides enter as proof at Cut 4+.
+   - High-Stakes Hook: Open with the core conflict or cognitive dissonance.
+4. Enforce Character & Dialogue Invariants (Anti-AI-Slop):
+   - **ずんだもん (Chaotic Proxy):** Never write him as a B2B corporate consultant. He acts as the viewer's surrogate of greed, panic, shock, and naive misconceptions.
+   - **四国めたん (Sadistic Realist):** Never make her a passive 'Yes-Man' (`はい`, `その通りですわ` spam). She punctures delusions with dry wit, aristocratic calm, and financial ruthlessness.
+   - **春日部つむぎ (Trench Insider):** Never read PR bullet points. She brings developer gossip and server-room reality checks.
+   - **Rhythmic Syncopation:** Avoid uniform 30-38 char sentences. Inject 1-beat micro-reactions ($\le 12$ chars) for rapid ping-pong comedic timing.
+   - **Zero-Drop Ending:** NEVER close with generic 'subscribe/like/check description' goodbyes. End on high emotional stakes or an unresolved punchline.
+   - **Pricing Disambiguation:** Never quote naked SaaS prices (e.g. bare `月額30ドル`). Always specify target tier (`法人向け`), unit (`社員1人あたり`), and nature (`追加課金/アドオン`).
+5. Validate typography constraints:
    - Max 2 lines per speech bubble.
    - Max 35–40 characters per cut.
-   - Natural interjections (e.g., `「はい、」`, `「その通りですわ、」`).
+   - Natural interjections.
 
 ### Phase 3: Asset Creation & Sound Design
 Subagents: **Creative Designer** & **Pipeline Engineer** (Parallel Execution)

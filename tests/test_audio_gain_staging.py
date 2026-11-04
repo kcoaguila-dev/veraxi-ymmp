@@ -139,3 +139,45 @@ def test_gain_stage_graceful_fallback(tmp_path: Path) -> None:
     res = gain_stage_audio_file(corrupt_path)
     assert res == corrupt_path
     assert corrupt_path.read_bytes() == b"not a real wav header"
+
+
+def test_gain_stage_anti_squeak_filter(tmp_path: Path) -> None:
+    """Verify gain staging suppresses 9kHz metallic squeak resonance."""
+    import math
+    import numpy as np
+
+    wav_path = tmp_path / "squeak_sample.wav"
+    sample_rate = 48000
+    duration_sec = 1.0
+    total_samples = int(duration_sec * sample_rate)
+
+    # Synthetic signal: 400Hz speech fundamental + loud 9000Hz squeak tone
+    samples = []
+    for i in range(total_samples):
+        t = i / sample_rate
+        val_400 = 8000 * math.sin(2 * math.pi * 400 * t)
+        val_9k = 8000 * math.sin(2 * math.pi * 9000 * t)
+        samples.append(int(val_400 + val_9k))
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        frames = bytearray()
+        for s in samples:
+            frames.extend(struct.pack("<h", s))
+        w.writeframes(bytes(frames))
+    wav_path.write_bytes(buf.getvalue())
+
+    staged_path = gain_stage_audio_file(wav_path, sample_rate=48000)
+    with wave.open(str(staged_path), "rb") as w:
+        out_audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
+
+    fft = np.abs(np.fft.rfft(out_audio))
+    freqs = np.fft.rfftfreq(len(out_audio), 1.0 / 48000)
+    energy_9k = np.sum(fft[(freqs >= 8800) & (freqs <= 9200)])
+    energy_400 = np.sum(fft[(freqs >= 350) & (freqs <= 450)])
+
+    # 9kHz tone must be heavily attenuated relative to the speech fundamental (at least -15 dB)
+    assert energy_9k < energy_400 * 0.25

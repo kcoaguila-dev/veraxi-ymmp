@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union, cast
 
 import brotli
 
-from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_SUBTITLE_CENTER_Y
+from .constants import DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_BGM_DUCKING_VOLUME, DEFAULT_SUBTITLE_CENTER_Y
 from .ir import TimelineIR
 from .phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
 from .ports import ExportResult
@@ -441,7 +441,14 @@ class YMMPRenderer:
         for clip in timeline_ir.voice_clips:
             frm, lng = clip.start_frame, clip.length
             has_broll = any(s <= frm < e or s < frm + lng <= e for s, e in broll_intervals)
-            for c_name in [clip.character] if (has_broll and not is_vertical) else list(dict.fromkeys([c.character for c in timeline_ir.voice_clips])):
+            if has_broll and not is_vertical:
+                chars_to_add = [clip.character]
+            elif "春日部つむぎ" in [c.character for c in timeline_ir.voice_clips] and "ずんだもん" in [c.character for c in timeline_ir.voice_clips]:
+                active_right = "春日部つむぎ" if ("つむぎ" in clip.character or "tsumugi" in clip.character.lower()) else "ずんだもん"
+                chars_to_add = [c for c in ["四国めたん", active_right] if c in [c2.character for c2 in timeline_ir.voice_clips]]
+            else:
+                chars_to_add = list(dict.fromkeys([c.character for c in timeline_ir.voice_clips]))
+            for c_name in chars_to_add:
                 add_or_coalesce_tachie(c_name, has_broll, frm, lng)
 
         # 3. Layer 0: Background ImageItem
@@ -497,14 +504,21 @@ class YMMPRenderer:
             if cand_p.exists():
                 bgm_path = cand_p
                 break
+        bgm_volume = DEFAULT_BGM_DUCKING_VOLUME
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
             if d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower():
                 bgm_path = d_audio_clip.audio_path.resolve()
+                if d_audio_clip.volume is not None:
+                    bgm_volume = (
+                        d_audio_clip.volume * 100.0
+                        if d_audio_clip.volume <= 1.0
+                        else d_audio_clip.volume
+                    )
         items.append(
             {
                 "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
                 "FilePath": str(bgm_path),
-                "Volume": _anim_val(3.0),
+                "Volume": _anim_val(bgm_volume),
                 "Pan": {"Values": [{"Value": 0.0}]},
                 "PlaybackRate": 100.0,
                 "Layer": 3,
@@ -516,6 +530,7 @@ class YMMPRenderer:
 
         tl = get_timeline(output_data)
         tl["Items"], tl["Length"], tl["MaxLayer"] = items, timeline_ir.total_frames, 12
+        tl["CurrentFrame"] = 0
         plates_layer7_or_8 = [it for it in items if "ImageItem" in it.get("$type", "") and it.get("Layer") in (7, 8)]
         if plates_layer7_or_8:
             first_p_y = plates_layer7_or_8[0]["Y"]["Values"][0]["Value"]
@@ -671,7 +686,12 @@ class YMMPRenderer:
 
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
             is_looped = d_audio_clip.length == -1
-            volume = 3.0 if is_looped else 50.0
+            clip_vol = (
+                d_audio_clip.volume * 100.0
+                if d_audio_clip.volume <= 1.0
+                else d_audio_clip.volume
+            )
+            volume = clip_vol if is_looped else 50.0
             length = (
                 timeline_ir.total_frames - d_audio_clip.start_frame
                 if is_looped
@@ -699,6 +719,7 @@ class YMMPRenderer:
 
         timeline = get_timeline(output_data)
         timeline["Items"], timeline["Length"] = items, timeline_ir.total_frames
+        timeline["CurrentFrame"] = 0
 
         psd_path = os.environ.get("ZUNDAMON_PSD_PATH") or os.environ.get("VERAXI_ZUNDA_PSD")
         if psd_path:

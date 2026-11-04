@@ -110,7 +110,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
     valid_emotions = VALID_EMOTIONS
     valid_motions = VALID_MOTIONS
     required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx", "image"}
-    optional_keys = {"character_position", "subtitle_position", "subtitle_style"}
+    optional_keys = {"character_position", "subtitle_position", "subtitle_style", "bg"}
     expected_keys = required_keys | optional_keys
     valid_character_positions = VALID_CHARACTER_POSITIONS
     valid_subtitle_positions = VALID_SUBTITLE_POSITIONS

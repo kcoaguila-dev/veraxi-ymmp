@@ -596,6 +596,8 @@ def render_official_image_slide(
             cap_font = _fit_font(draw, caption, fonts["card_title"], max_width=x2 - (x1 + 36 + tag_w) - 20, base_size=32, min_size=20)
             draw.text((x1 + 36 + tag_w, (cap_y1 + cap_y2) / 2), caption, font=cap_font, fill=COLOR_TEXT_PRIMARY, anchor="lm")
 
+    if not is_vertical:
+        img.putalpha(255)
     out_file = Path(out_path).resolve()
     out_file.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_file)
@@ -689,6 +691,8 @@ def render_official_data_slide(
         f_imp = _fit_font(draw, impact_text, fonts["card_title"], max_width=x2 - text_x - 24, base_size=32, min_size=20)
         draw.text((text_x, cy), impact_text, font=f_imp, fill=COLOR_TEXT_PRIMARY, anchor="lm")
 
+    if not is_vertical:
+        img.putalpha(255)
     out_file = Path(out_path).resolve()
     out_file.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_file)

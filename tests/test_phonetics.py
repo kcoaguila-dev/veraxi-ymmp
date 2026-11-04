@@ -168,6 +168,11 @@ def test_normalize_tts_text() -> None:
     assert normalize_tts_text("永遠の愛") == "永遠の愛"
     assert normalize_tts_text("") == ""
 
+    # AI terms normalized to smooth katakana pronunciation to prevent pitch drop squeaks
+    assert normalize_tts_text("オープンAIへの高額な上納金") == "オープンエーアイへの高額な上納金"
+    assert normalize_tts_text("生成AIの発展") == "生成エーアイの発展"
+    assert normalize_tts_text("OpenAIの技術") == "オープンエーアイの技術"
+
     # '何でも' normalized to 'なんでも'
     assert normalize_tts_text("何でも買えば儲かる") == "なんでも買えば儲かる"
 
@@ -277,3 +282,29 @@ def test_tune_audio_query_pitch() -> None:
     phrase1 = tuned["accent_phrases"][1]
     assert phrase1["accent"] == 1
     assert phrase1["moras"][0]["pitch"] == 5.8
+
+    # Test extreme pitch clamp safeguard (> 6.02 log-F0)
+    extreme_query = {
+        "accent_phrases": [
+            {
+                "moras": [
+                    {"text": "ア", "pitch": 6.16, "vowel_length": 0.12},
+                    {"text": "イ", "pitch": 5.80, "vowel_length": 0.12},
+                ]
+            }
+        ]
+    }
+    tuned_extreme = tune_audio_query_pitch(extreme_query)
+    clamped_pitch = tuned_extreme["accent_phrases"][0]["moras"][0]["pitch"]
+    assert clamped_pitch <= 6.03
+    assert clamped_pitch < 6.16
+
+
+def test_normalize_tts_text_preserves_declarative_words() -> None:
+    from veraxi_ymmp.phonetics import normalize_tts_text
+
+    # With the declarative dictionary system (assets/dictionary/tts_dictionary.json),
+    # terms like '借り増し' and 'AIインフラ' are natively parsed by OpenJTalk/MeCab via /user_dict_word
+    # rather than mutating the source text with brittle regexes.
+    raw = "データセンターを借り増ししてまでAIインフラを急拡大していますの。"
+    assert normalize_tts_text(raw) == raw

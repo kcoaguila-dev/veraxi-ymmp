@@ -7,9 +7,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from google.oauth2.credentials import Credentials
 
-from veraxi_ymmp.youtube_auth import (
+google_auth = pytest.importorskip("google.oauth2.credentials")
+Credentials = google_auth.Credentials
+
+from veraxi_ymmp.youtube_auth import (  # noqa: E402
     authenticate_youtube,
     load_credentials,
     refresh_credentials,

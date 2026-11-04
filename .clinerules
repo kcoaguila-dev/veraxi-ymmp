@@ -1,0 +1,125 @@
+# veraxi-ymmp: Architectural Invariants & Agent Execution Rules (.clinerules)
+
+This file governs all autonomous coding and video production tasks within `veraxi-ymmp`. Every modification must comply with Clean Architecture boundaries, AST-enforced fitness rules, and audience retention invariants.
+
+---
+
+## 1. Architectural Philosophy & Non-Negotiable Invariants
+
+`veraxi-ymmp` strictly follows Clean Architecture (Ports & Adapters). Dependencies flow strictly inwards toward domain policies:
+
+1. **Domain Layer Purity (`veraxi_ymmp/ir.py`, `script.py`, `constants.py`):**
+   - Pure domain models MUST have **zero dependencies** on outer layers (`ports`, `pipeline`, `compiler`, adapters, `cli`, `mcp_server`).
+2. **Ports Layer Purity (`veraxi_ymmp/ports.py`):**
+   - Protocols (`TimelineExporter`, `TTSBackend`, `DirectorProvider`) may ONLY import from domain models or standard library. NEVER import concrete adapters or application services.
+3. **Adapter Isolation (Zero Cross-Adapter Imports):**
+   - Infrastructure adapters (`ymmp_renderer`, `premiere_exporter`, `moviepy_renderer`, `ae_renderer`, `srt_generator`, `voicevox`, `broll`, `thumbnail`, `cli_youtube`) MUST NEVER import from sibling adapters.
+   - Shared logic must reside in domain, ports, or shared utility modules (`typography.py`, `phonetics.py`).
+4. **Module Size Ceiling:**
+   - No Python module in `veraxi_ymmp/` may exceed **900 lines of code**. Refactor into cohesive submodules or strategies if approaching this ceiling.
+5. **Hygiene & Style:**
+   - ZERO wildcard imports (`from module import *` is banned).
+   - ZERO raw `print()` statements in library code (use `veraxi_ymmp.logging`).
+   - ZERO loose `.py` or `.jsx` scripts in repository root (all CLI commands live in `veraxi_ymmp/cli.py` or `scripts/`).
+   - Strict Mypy compliance (`disallow_untyped_defs = true`).
+
+---
+
+## 2. Security, Privacy & Local Path Guardrails
+
+The repository enforces automated AST and regex scanning via `scripts/check_no_local_paths.py`:
+
+- **Zero Hardcoded Local Paths:** NEVER commit paths containing user folders (`C:\Users\...`, `/Users/...`, `/home/...`). Use `Path.home()`, `Path.cwd()`, or relative paths.
+- **Zero OS Username Leaks:** NEVER hardcode the local machine username (`getpass.getuser()`).
+- **Zero Committed Secrets:** NEVER write API tokens (`ghp_`, `sk-`, `AKIA`) to disk. Use environment variables.
+
+---
+
+## 3. Video Production, Scriptwriting & Retention Rules (Anti-AI-Slop)
+
+When authoring dialogue, staging metadata, or generating video projects, you MUST follow these retention standards:
+
+### 3.1. 0-Second Cold Open Invariant (冒頭0秒コールドオープン原則)
+- **Zero Greetings:** NEVER begin with generic greetings (`「みんな、こんにちは」`, `「ごきげんよう」`, `「よろしく」`).
+- **In Media Res:** Start at 0.0s with high-stakes cognitive dissonance, shocking metrics, or contrarian conflict (The Public Illusion).
+- **No Early Slide Dump:** Cut 0–Cut 2 MUST NOT dump presentation slides (`"image": null`). The opening hook relies on character emotional confrontation. Structured data slides enter around Cut 4+.
+
+### 3.2. The 3 Character Archetypes
+- **ずんだもん (The Chaotic Proxy):** Represents the viewer's raw greed, panic, shock, and naive misconceptions. NEVER write him as a B2B corporate consultant or IT procurement analyst.
+- **四国めたん (The Sadistic Realist):** Cold, aristocratic intellectual who punctures Zundamon's naive illusions with dry sarcasm, financial realism, and ruthless calm. Banned 'Yes-Man Metan': she must not agree with Zundamon in >35% of cuts.
+- **春日部つむぎ (The Trench Insider):** High-energy gal bringing server-room reality, developer gossip, and contrarian whistleblower perspectives. NEVER a corporate PR brochure.
+
+### 3.3. Retention Golden Ratio & Pacing
+- **50/30/20 Ratio:** Main Explainer (めたん) 45%–55%, Lead Inquirer (ずんだもん) 30%–35%, Specialist (つむぎ) 15%–20% (hard ceiling <= 25%).
+- **Hook Protection:** 3rd character must NEVER speak in the first 3 cuts (first 10%).
+- **Mid-Roll Attention Spike:** 3rd character's first entrance must occur at the 30%–50% timeline mark to reset audience attention.
+- **Ping-Pong Rally (卓球ラリー原則):** Avoid uniform 30–38 char lines. Inject >= 5-10% 1-beat micro-reaction cuts (<= 12 chars, e.g. `「はぁ！？」`, `「正気なのだ！？」`).
+- **Zero-Drop Ending:** NEVER end with formulaic goodbyes (`「チャンネル登録と高評価もよろしく」`). End abruptly on high stakes or an unresolved punchline.
+- **Pricing Disambiguation:** Never quote naked SaaS prices (bare `月額30ドル` is banned). Always specify target tier, per-seat unit, and add-on nature.
+
+### 3.4. B-Roll Slides & Asset Standards
+- **Pro Dark Slate Theme:** `#0F172A` / `#1E293B`.
+- **Cognitive Load Ceiling:** Total characters across slide <= 100. Maximum 6 text elements. Zero nested bullets.
+- **Stage Convention:** Left Anchor (Explainer at `x=80`), Right Alternating (`x=1180`), center screen kept open for presentation slides.
+- **Clean Audio & Grounded Staging:** Grounded motions (`"none"` or `"nod"` — no `"jump"` in commentary). Clean instrumental BGM (`assets/bgm/2_23_AM.mp3` ducked to <= 0.08). Zero slapstick cartoon SFX (`pon.wav` banned).
+- **YouTube Thumbnail:** 3-Split layout (character reaction right, high-contrast headline left, bottom-right timestamp safe zone protected).
+
+
+---
+
+## 4. Multi-Agent Teamwork & Autonomous QA Protocol
+
+When handling complex tasks, invoke or coordinate with the available skills:
+- `teamwork-orchestrator`: Decouples tasks into Lead Orchestrator, Script Specialist, Creative Designer, Audio & Pipeline Engineer, and QA Sentinel.
+- `ymmp-qa`: Autonomous 5-step video QA loop. Never hand off unverified artifacts.
+- `frontend-design`: Dark Slate NLE studio aesthetic (`#0B0F19`, `#111827`, `#1F2937`) for veraxi Studio GUI.
+
+### Autonomous Handover Checklist
+Before declaring a video or feature complete:
+1. `pytest tests/test_architectural_fitness.py` passes completely.
+2. `python scripts/check_no_local_paths.py --all` passes with zero leaks.
+3. VoiceVox `.wav` files exist in `artifacts/audio/` or project `audio/`.
+4. Script pacing passes `veraxi-ymmp validate <script.json> --audit-pacing` with score >= 80/100.
+5. Thumbnail (`thumbnail.png`) exists and follows 3-split rule.
+
+---
+
+## 5. Development & Shell Invariants (Windows / PowerShell)
+
+- Working environment: Windows (`win32`) running PowerShell (`powershell.exe`).
+- PowerShell escape character is backtick (`` ` ``). Do not use backslash escapes in double quotes.
+- Quote literal paths and arguments using single quotes to avoid unintended shell expansion.
+- Always validate Python modifications with:
+  ```powershell
+  pytest tests/test_architectural_fitness.py -v
+  ruff check veraxi_ymmp/ tests/ scripts/
+  mypy veraxi_ymmp
+  python scripts/check_no_local_paths.py --all
+  ```
+
+---
+
+## 6. Token Optimization & Structural Inspection (Targeted Reads over Dumps)
+
+1. **Targeted Reads Strictly Enforced:**
+   - **Files >200 lines:** NEVER read in full. Always probe line numbers first and use `read_files` with `start_line` and `end_line`.
+   - **Files <=150 lines:** Single full reads are permitted ONLY when whole-file context is genuinely required for the task.
+   - **Probing Multiple Files:** Always batch commands in one turn (e.g. `ctags -x --kinds-python=fm file1.py file2.py`).
+
+2. **Pre-Read Inspection Hierarchy (Order of Preference):**
+   - **Tier 1 — Symbol & Line Index (Fastest, Default):**
+     `ctags -x --kinds-python=fm <file>`
+     *(Returns exact line numbers, symbol names, and signatures without dumping file bodies)*
+   - **Tier 2 — Pattern / Call-Site Search:**
+     `rg -n -C 2 'symbol_or_pattern' <path>` or native `search_codebase`.
+   - **Tier 3 — AST Structural Query (Complex AST only):**
+     - Classes: `ast-grep run -l python -p 'class $CLASS' <file>`
+     - Functions: `ast-grep run -l python -p 'def $FUNC($$$):' <file>`
+     *(Always use single quotes `'` in PowerShell to prevent `$VAR` interpolation)*
+
+3. **Strict Target Reads:**
+   - Once exact line numbers are identified via `ctags`, `rg`, or `ast-grep`, execute `read_files` strictly for the target slice (e.g., lines 110–160).
+
+4. **Context Window Hygiene:**
+   - NEVER dump multi-hundred line build logs, test artifacts, or raw `.ymmp` JSON outputs into conversation context.
+   - When a major milestone is completed or session context compounds significantly, summarize completed artifacts and immediate next steps for the user before proceeding.

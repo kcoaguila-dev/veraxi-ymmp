@@ -193,6 +193,10 @@ def _cmd_validate(argv: List[str]) -> None:
         description="Validate a script JSON file.",
     )
     parser.add_argument("script", type=str, help="Path to the script .json file")
+    parser.add_argument("--audit-pacing", action="store_true", help="Audit audience retention and pacing rules")
+    parser.add_argument("--audit-facts", action="store_true", help="Audit claims.json beside the script and write sources.md")
+    parser.add_argument("--draft-claims", action="store_true", help="Create/extend claims.json with draft claims for factual cuts (banter is skipped)")
+    parser.add_argument("--allow-unverified", action="store_true", help="Do not fail when fact-check gate blocks (recorded in output)")
     args = parser.parse_args(argv)
 
     script_path = Path(args.script)
@@ -201,7 +205,7 @@ def _cmd_validate(argv: List[str]) -> None:
         sys.exit(1)
 
     try:
-        with open(script_path, 'r', encoding='utf-8') as f:
+        with open(script_path, 'r', encoding='utf-8-sig') as f:
             script_data = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in script file: {e}", file=sys.stderr)
@@ -234,26 +238,64 @@ def _cmd_validate(argv: List[str]) -> None:
         if emotion is not None and emotion not in VALID_EMOTIONS:
             errors.append(f"Cut #{idx} ({char}): Invalid emotion '{emotion}'. Valid emotions are: [{', '.join(VALID_EMOTIONS)}]")
 
+    dialogue_entries = [
+        entry for entry in script_data
+        if isinstance(entry, dict) and not ("type" in entry and "character" not in entry)
+    ]
     try:
         from .script import validate_director_script
-        validate_director_script(script_data)
+        validate_director_script(dialogue_entries)
     except ValueError as e:
         if str(e) not in errors:
              errors.append(str(e))
 
-    if errors:
+    from .pacing import audit_script_pacing, format_pacing_report_markdown
+    pacing_report = audit_script_pacing(script_data)
+
+    pacing_warnings = [
+        f"[{v.rule_name}] {v.message} (Remedy: {v.remedy})"
+        for v in pacing_report.violations
+        if v.severity in {"ERROR", "WARNING"}
+    ]
+
+    if args.draft_claims:
+        from .fact_audit import draft_project_claims
+        ledger, added = draft_project_claims(script_path, script_data)
+        print(f"Claim ledger updated: {ledger} (+{added} draft claims; review kind/weight, then add evidence)")
+
+    facts_blocked = False
+    if args.audit_facts:
+        from .fact_audit import audit_project_facts
+        try:
+            outcome = audit_project_facts(script_path)
+        except FileNotFoundError as e:
+            errors.append(f"[FACTS] {e}")
+        else:
+            print(f"Fact dossier written: {outcome.report_path}")
+            for r in outcome.blockers:
+                errors.append(f"[FACTS] {r.claim.id} (cut {r.claim.cut_index}) {r.verdict.value}: {r.reason}")
+            facts_blocked = outcome.blocked and not args.allow_unverified
+            if outcome.blocked and args.allow_unverified:
+                print("WARNING: fact gate overridden by --allow-unverified")
+                errors = [e for e in errors if not e.startswith("[FACTS]")]
+
+    if errors or facts_blocked or (pacing_report.retention_score < 70):
         lines = [
             "================ LLM RE-PROMPT BLOCK (COPY & PASTE TO AI) ================",
-            "The script you provided failed schema validation with the following errors:"
+            "The script you provided failed schema or retention pacing validation with the following errors:"
         ]
         for error in errors:
-            lines.append(f"  - {error}")
+            lines.append(f"  - [SCHEMA] {error}")
+        for pw in pacing_warnings:
+            lines.append(f"  - [PACING] {pw}")
         lines.append("Please fix these specific entries while preserving the rest of the script, and return the complete corrected JSON block.")
         lines.append("==========================================================================")
         print("\n".join(lines))
         sys.exit(1)
     else:
-        print("Script validation passed!")
+        print("Script schema validation passed!")
+        print()
+        print(format_pacing_report_markdown(pacing_report))
 
 def _cmd_export_spec(argv: List[str]) -> None:
     """Export universal prompt markdown or JSON Schema."""
@@ -431,7 +473,7 @@ def _compile(args: argparse.Namespace) -> None:
 
     # Load script
     try:
-        with open(script_path, 'r', encoding='utf-8') as f:
+        with open(script_path, 'r', encoding='utf-8-sig') as f:
             script = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in script file: {e}", file=sys.stderr)

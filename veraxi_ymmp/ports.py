@@ -26,6 +26,7 @@ from typing import (
 )
 
 from .director import DirectorProvider
+from .facts import Claim, Evidence
 from .ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
@@ -52,6 +53,11 @@ class TTSBackend(Protocol):
     def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
         ...
 
+    async def synthesize_async(
+        self, text: str, speaker_id: int
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
+        ...
+
     def get_speakers(self) -> List[Dict[str, Any]]:
         ...
 
@@ -66,6 +72,11 @@ class NullTTSBackend:
         return {}
 
     def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+        return b"", 0.0, {}
+
+    async def synthesize_async(
+        self, text: str, speaker_id: int
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
         return b"", 0.0, {}
 
     def get_speakers(self) -> List[Dict[str, Any]]:
@@ -111,6 +122,15 @@ class TimelineExporter(Protocol):
         options: Optional[Dict[str, Any]] = None,
     ) -> ExportResult:
         """Export the given TimelineIR to output_path with optional exporter-specific options."""
+        ...
+
+
+@runtime_checkable
+class FactChecker(Protocol):
+    """Protocol for adapters that gather evidence for a claim (e.g. Veraxi MCP)."""
+
+    def check(self, claim: Claim) -> List[Evidence]:
+        """Return structured evidence (stance + verbatim quote + source) for the claim."""
         ...
 
 

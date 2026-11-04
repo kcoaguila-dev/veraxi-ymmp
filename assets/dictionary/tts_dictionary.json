@@ -1,0 +1,191 @@
+[
+  {
+    "surface": "借り増し",
+    "pronunciation": "カリマシ",
+    "accent_type": 0,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "AIインフラ",
+    "pronunciation": "エーアイインフラ",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "AIイノベーション",
+    "pronunciation": "エーアイイノベーション",
+    "accent_type": 6,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "AIモデル",
+    "pronunciation": "エーアイモデル",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "AWS",
+    "pronunciation": "エーダブリューエス",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Azure",
+    "pronunciation": "アジュール",
+    "accent_type": 2,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Copilot",
+    "pronunciation": "コパイロット",
+    "accent_type": 2,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Trainium",
+    "pronunciation": "トレニアム",
+    "accent_type": 2,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Inferentia",
+    "pronunciation": "インファレンシア",
+    "accent_type": 4,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Bedrock",
+    "pronunciation": "ベッドロック",
+    "accent_type": 3,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Claude",
+    "pronunciation": "クロード",
+    "accent_type": 1,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "Llama",
+    "pronunciation": "ラマ",
+    "accent_type": 1,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "SaaS",
+    "pronunciation": "サース",
+    "accent_type": 1,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "LLM",
+    "pronunciation": "エルエルエム",
+    "accent_type": 4,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "GPU",
+    "pronunciation": "ジーピーユー",
+    "accent_type": 4,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "OpenAI",
+    "pronunciation": "オープンエーアイ",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "大商い",
+    "pronunciation": "オオアキナイ",
+    "accent_type": 3,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "立ち行かない",
+    "pronunciation": "タチユカナイ",
+    "accent_type": 4,
+    "priority": 8,
+    "word_type": "VERB"
+  },
+  {
+    "surface": "真水",
+    "pronunciation": "マミズ",
+    "accent_type": 0,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "粗利",
+    "pronunciation": "アラリ",
+    "accent_type": 0,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "粗利益",
+    "pronunciation": "アラリエキ",
+    "accent_type": 3,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "減価償却",
+    "pronunciation": "ゲンカショウキャク",
+    "accent_type": 4,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "一角",
+    "pronunciation": "イッカク",
+    "accent_type": 0,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "角番",
+    "pronunciation": "カドバン",
+    "accent_type": 0,
+    "priority": 8,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "オープンAI",
+    "pronunciation": "オープンエーアイ",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "PROPER_NOUN"
+  },
+  {
+    "surface": "生成AI",
+    "pronunciation": "セイセイエーアイ",
+    "accent_type": 5,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  },
+  {
+    "surface": "AI",
+    "pronunciation": "エーアイ",
+    "accent_type": 0,
+    "priority": 9,
+    "word_type": "COMMON_NOUN"
+  }
+]

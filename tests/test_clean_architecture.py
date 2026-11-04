@@ -687,7 +687,7 @@ class TestDomainConstantsAndBrandColors:
         """Verify presence and type signatures of domain constants."""
         assert DEFAULT_CANVAS_WIDTH == 1920
         assert DEFAULT_CANVAS_HEIGHT == 1080
-        assert DEFAULT_BGM_DUCKING_VOLUME == 3.0
+        assert DEFAULT_BGM_DUCKING_VOLUME == 18.0
         assert DEFAULT_BG_FILL_ZOOM == 187.5
         assert isinstance(KNOWN_CHARACTERS, tuple)
         assert "ずんだもん" in KNOWN_CHARACTERS

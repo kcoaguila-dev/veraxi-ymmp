@@ -16,7 +16,7 @@ def mock_path_exists(monkeypatch):
     original_exists = pathlib.Path.exists
 
     def _mock_exists(self):
-        if "non/existent" in str(self):
+        if "non/existent" in Path(self).as_posix():
             return False
         if "ずんだもん" in str(self) or "audio_file.wav" in str(self) or "test.psd" in str(self) or "scratch_audio.wav" in str(self):
             return True

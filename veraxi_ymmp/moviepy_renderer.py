@@ -1,7 +1,6 @@
 import math
 import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
@@ -20,6 +19,7 @@ from moviepy import (
     VideoClip,
 )
 
+from .constants import DEFAULT_BGM_DUCKING_VOLUME
 from .ir import TimelineIR
 from .logging import logger
 from .phonetics import extract_phonetic_blocks
@@ -122,7 +122,7 @@ class MoviePyRenderer:
         self.fast_qa_duration: Optional[float] = fast_qa_duration
         self.final_video: Optional[Any] = None
 
-    def render(self, output_path: str) -> None:
+    def render(self, output_path: Optional[str] = None) -> None:
         if self.ir is None:
             raise ValueError("TimelineIR must be provided to render")
         fps = self.ir.fps
@@ -196,7 +196,7 @@ class MoviePyRenderer:
                 audio_clip = AudioFileClip(str(path))
                 if audio_clip.duration > total_duration:
                     audio_clip = audio_clip.subclipped(0, total_duration)
-                audio_clip = audio_clip.with_volume_scaled(0.03)
+                audio_clip = audio_clip.with_volume_scaled(DEFAULT_BGM_DUCKING_VOLUME / 100.0)
                 audio_clips.append(audio_clip.with_start(0))
             else:
                 img_clip = ImageClip(str(path)).with_duration(total_duration).with_position("center")
@@ -268,10 +268,34 @@ class MoviePyRenderer:
 
         sorted_chars = sorted(unique_chars, key=char_sort_key)
 
+        char_positions: Dict[str, str] = {}
+        for cclip in getattr(self.ir, "character_clips", []):
+            if cclip.character not in char_positions:
+                char_positions[cclip.character] = cclip.position
+
+        right_side_chars = [
+            c for c in unique_chars
+            if char_positions.get(c) == "right" or c in ["ずんだもん", "春日部つむぎ"]
+        ]
+        has_alternating_right = len(right_side_chars) > 1
+
+        def get_active_right_char(t: float) -> str:
+            active = right_side_chars[0] if right_side_chars else ""
+            for st, et, _, _, spk in talk_times:
+                if spk in right_side_chars:
+                    if st <= t:
+                        active = spk
+                    if st <= t <= et:
+                        return spk
+            return active
+
         if is_vertical:
             char_height = 800
             y_pos = 1920 - char_height - 300
-            if num_chars == 1:
+            if has_alternating_right:
+                for c in unique_chars:
+                    x_offsets[c] = 470 if c in right_side_chars else 30
+            elif num_chars == 1:
                 x_offsets[sorted_chars[0]] = 'center'
             elif num_chars == 2:
                 x_offsets[sorted_chars[0]] = 30   # Left (Metan)
@@ -283,7 +307,10 @@ class MoviePyRenderer:
         else:
             char_height = 1250
             y_pos = 1080 - char_height + 250
-            if num_chars == 1:
+            if has_alternating_right:
+                for c in unique_chars:
+                    x_offsets[c] = 1180 if c in right_side_chars else 80
+            elif num_chars == 1:
                 x_offsets[sorted_chars[0]] = 'center'
             elif num_chars == 2:
                 x_offsets[sorted_chars[0]] = 80   # Left (Metan)
@@ -352,6 +379,9 @@ class MoviePyRenderer:
                                 by = 240.0
                             else:
                                 return (-9999, -9999.0)
+                    elif has_alternating_right and c_name in right_side_chars:
+                        if get_active_right_char(t) != c_name:
+                            return (-9999, -9999.0)
 
                     for st, et, emo, motion, char_speaker in talk_times:
                         if st <= t <= et and char_speaker == c_name:
@@ -392,6 +422,10 @@ class MoviePyRenderer:
                     if is_in_broll(t) and not is_vertical:
                         spk = get_active_speaker(t)
                         if spk != c_name:
+                            h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
+                            return np.zeros((h, w), dtype=np.uint8)
+                    elif has_alternating_right and c_name in right_side_chars:
+                        if get_active_right_char(t) != c_name:
                             h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
                             return np.zeros((h, w), dtype=np.uint8)
                     emo = get_current_emotion(t, c_name)
@@ -440,6 +474,8 @@ class MoviePyRenderer:
         final_video = final_video.with_effects([FadeOut(2.0)])
 
         self.final_video = final_video
+        if output_path is None:
+            return
         logger.info(f"Writing to {output_path}...")
         # Fast QA override if requested
         if self.fast_qa_duration is not None:
@@ -450,13 +486,13 @@ class MoviePyRenderer:
             fps=30,
             codec="libx264",
             audio_codec="aac",
-            preset="ultrafast"
+            preset="ultrafast",
+            threads=6
         )
 
     def save_frame_at(self, t: float, output_path: str) -> None:
         if getattr(self, "final_video", None) is None:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                self.render(str(Path(tmp_dir) / "preview_dummy.mp4"))
+            self.render(None)
         assert self.final_video is not None
         self.final_video.save_frame(str(output_path), t=t)
 

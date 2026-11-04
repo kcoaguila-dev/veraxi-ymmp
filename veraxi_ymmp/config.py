@@ -21,6 +21,7 @@ from .constants import (
     DEFAULT_SPEECH_TARGET_LUFS,
     DEFAULT_SPEECH_TARGET_TP,
     DEFAULT_AUDIO_SAMPLE_RATE,
+    DEFAULT_BGM_DUCKING_VOLUME,
 )
 
 
@@ -42,6 +43,7 @@ class CompilerConfig:
     target_speech_lufs: float = DEFAULT_SPEECH_TARGET_LUFS
     target_speech_tp: float = DEFAULT_SPEECH_TARGET_TP
     audio_sample_rate: int = DEFAULT_AUDIO_SAMPLE_RATE
+    bgm_volume: float = DEFAULT_BGM_DUCKING_VOLUME
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> "CompilerConfig":

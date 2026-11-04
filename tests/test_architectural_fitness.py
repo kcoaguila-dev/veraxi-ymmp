@@ -337,6 +337,7 @@ def test_domain_layer_purity() -> None:
         "ir.py",
         "script.py",
         "constants.py",
+        "facts.py",
     ]
     forbidden_modules = [
         "voicevox",
@@ -386,10 +387,12 @@ def test_ports_layer_purity() -> None:
         "script",
         "constants",
         "director",
+        "facts",
         "veraxi_ymmp.ir",
         "veraxi_ymmp.script",
         "veraxi_ymmp.constants",
         "veraxi_ymmp.director",
+        "veraxi_ymmp.facts",
     }
     forbidden_adapters = {
         "voicevox",

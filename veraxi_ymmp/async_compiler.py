@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .compiler import CompilationResult, CompilerError, ScriptEntry, YMMPCompiler
 from .phonetics import normalize_tts_text
@@ -25,7 +25,9 @@ class AsyncYMMPCompiler(YMMPCompiler):
         audio_dir: Optional[Path] = None,
     ) -> None:
         """Synthesize all script entries asynchronously in parallel."""
-        async def _synthesize_line(t_text: str, spk_id: int):
+        async def _synthesize_line(t_text: str, spk_id: int) -> Tuple[bytes, float, Optional[Dict[str, Any]]]:
+            if not self.tts_backend:
+                return b"", 0.0, None
             res = await self.tts_backend.synthesize_async(t_text, spk_id)
             if len(res) == 3:
                 wb, dur, aq = res

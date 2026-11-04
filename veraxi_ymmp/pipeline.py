@@ -56,6 +56,7 @@ class PipelineResult:
     thumbnail_path: Optional[Path] = None
     srt_path: Optional[Path] = None
     upload_result: Optional[UploadResult] = None
+    pacing_report: Optional[Any] = None
     success: bool = True
     errors: List[str] = field(default_factory=list)
 
@@ -160,6 +161,21 @@ class ProjectPipeline:
                 validator(script_data)
             except ValueError as e:
                 logger.warning(f"Production script validation warning: {e}")
+
+        # Audience Retention Pacing Preflight
+        try:
+            from .pacing import audit_script_pacing
+            pacing_report = audit_script_pacing(script_data)
+            result.pacing_report = pacing_report
+            logger.info(
+                f"Audience Retention Pacing: Score {pacing_report.retention_score}/100 "
+                f"({pacing_report.num_characters} characters, healthy={pacing_report.is_healthy})"
+            )
+            for v in pacing_report.violations:
+                if v.severity in {"ERROR", "WARNING"}:
+                    logger.warning(f"[{v.rule_name}] {v.message} (Remedy: {v.remedy})")
+        except Exception as e:
+            logger.debug(f"Pacing preflight skipped: {e}")
 
         # Optional B-Roll manifest pre-step
         broll_manifest_path = proj_dir / "broll_manifest.json"

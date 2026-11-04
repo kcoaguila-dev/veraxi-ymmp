@@ -67,3 +67,56 @@ def test_synthesize_error(mock_post):
     client = VoicevoxClient()
     with pytest.raises(VoicevoxError, match="Failed to create audio_query:"):
         client.synthesize("こんにちは", 3)
+
+
+@patch('requests.get')
+@patch('requests.post')
+def test_sync_user_dictionary_success(mock_post, mock_get, tmp_path):
+    dict_file = tmp_path / "custom_dict.json"
+    dict_file.write_text('[{"surface": "AIインフラ", "pronunciation": "エーアイインフラ", "accent_type": 5}]', encoding='utf-8')
+
+    mock_get_res = Mock()
+    mock_get_res.status_code = 200
+    mock_get_res.json.return_value = {}
+    mock_get.return_value = mock_get_res
+
+    mock_post_res = Mock()
+    mock_post_res.status_code = 200
+    mock_post.return_value = mock_post_res
+
+    client = VoicevoxClient()
+    count = client.sync_user_dictionary(dictionary_path=dict_file)
+
+    assert count == 1
+    mock_post.assert_called_once()
+    assert client._dictionary_synced is True
+
+
+@patch('requests.get')
+@patch('requests.post')
+def test_sync_user_dictionary_skips_existing(mock_post, mock_get, tmp_path):
+    dict_file = tmp_path / "custom_dict.json"
+    dict_file.write_text('[{"surface": "AIインフラ", "pronunciation": "エーアイインフラ", "accent_type": 5}]', encoding='utf-8')
+
+    mock_get_res = Mock()
+    mock_get_res.status_code = 200
+    mock_get_res.json.return_value = {
+        "word-uuid-1": {
+            "surface": "AIインフラ",
+            "pronunciation": "エーアイインフラ"
+        }
+    }
+    mock_get.return_value = mock_get_res
+
+    client = VoicevoxClient()
+    count = client.sync_user_dictionary(dictionary_path=dict_file)
+
+    assert count == 0
+    mock_post.assert_not_called()
+    assert client._dictionary_synced is True
+
+
+def test_sync_user_dictionary_missing_file():
+    client = VoicevoxClient()
+    count = client.sync_user_dictionary(dictionary_path="nonexistent_dict.json")
+    assert count == 0

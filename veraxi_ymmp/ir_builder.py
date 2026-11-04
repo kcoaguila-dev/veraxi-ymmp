@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from .cache import TTSCache
 from .config import CompilerConfig
-from .constants import KNOWN_CHARACTERS
+from .constants import DEFAULT_BGM_DUCKING_VOLUME, KNOWN_CHARACTERS
 from .hatsuon import Hatsuon, HatsuonError
 from .ir import (
     CharacterClip,
@@ -284,7 +284,8 @@ class TimelineIRBuilder:
                     path = (audio_dir.parent.parent.parent / raw_p).resolve()
                 else:
                     path = raw_p.resolve()
-                vol = float(entry_dict.get("volume", 15)) / 100.0
+                default_bgm_vol = getattr(self.config, "bgm_volume", DEFAULT_BGM_DUCKING_VOLUME)
+                vol = float(entry_dict.get("volume", default_bgm_vol)) / 100.0
                 dynamic_audio_clips.append(
                     DynamicAudioClip(audio_path=path, start_frame=0, length=-1, volume=vol)
                 )
@@ -314,11 +315,18 @@ class TimelineIRBuilder:
             if bgm_name and bgm_name != "none" and bgm_name != "":
                 bgm_path = Path(str(bgm_name))
                 if bgm_path.exists():
+                    bgm_vol = entry_dict.get("bgm_volume")
+                    vol = (
+                        float(bgm_vol) / 100.0
+                        if bgm_vol is not None
+                        else getattr(self.config, "bgm_volume", DEFAULT_BGM_DUCKING_VOLUME) / 100.0
+                    )
                     dynamic_audio_clips.append(
                         DynamicAudioClip(
                             audio_path=bgm_path,
                             start_frame=current_frame,
                             length=-1,  # Special marker for "entire video"
+                            volume=vol,
                         )
                     )
                 else:

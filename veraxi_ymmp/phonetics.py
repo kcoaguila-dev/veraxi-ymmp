@@ -488,12 +488,16 @@ def normalize_tts_text(
     normalized = re.sub(r"^(ええ|エエ)([、,\s。！？!?]|$)", r"えー\2", normalized)
     # Also after sentence-ending punctuation (e.g. "はい。ええ、そうです")
     normalized = re.sub(r"([。！？!?]\s*)(ええ|エエ)([、,\s。！？!?]|$)", r"\1えー\3", normalized)
+    # Normalize common AI compound terms to prevent OpenJTalk pitch-drop squeaks
+    normalized = re.sub(r"(オープン|Open)\s*AI", r"オープンエーアイ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"生成\s*AI", r"生成エーアイ", normalized, flags=re.IGNORECASE)
     # '何でも' (which OpenJTalk parses as 'なにでも') must be pronounced 'なんでも'
     normalized = normalized.replace("何でも", "なんでも")
     # '要' must be pronounced 'かなめ' in keystone/linchpin/noun positions
     normalized = normalize_kaname_reading(normalized)
     normalized = normalize_okonau_reading(normalized)
     normalized = normalize_bun_reading(normalized)
+
     return normalized
 
 
@@ -518,4 +522,10 @@ def tune_audio_query_pitch(audio_query: Dict[str, Any]) -> Dict[str, Any]:
             moras[1]["pitch"] = round(moras[0]["pitch"] + 0.10, 3)
             moras[0]["vowel_length"] = 0.13
             moras[1]["vowel_length"] = 0.15
+
+        # Anti-glitch safeguard: clamp extreme pitch spikes (> 5.88 log-F0) that cause metallic squeaks
+        for m in moras:
+            current_pitch = m.get("pitch", 0.0)
+            if current_pitch > 5.88:
+                m["pitch"] = round(5.85 + (current_pitch - 5.88) * 0.15, 3)
     return audio_query

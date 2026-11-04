@@ -52,7 +52,13 @@ def gain_stage_audio_file(
 
     temp_out = dst if dst != src else src.with_name(f".tmp_norm_{src.name}")
 
+    # Broadcast dialogue acoustic chain:
+    # 1. highpass=f=70: Low-end rumble / plosive suppression
+    # 2. equalizer=f=9000: Narrow notch at 9 kHz to suppress vocoder metallic squeak
+    # 3. lowpass=f=8500: High-frequency synthesis artifact suppression
+    # 4. loudnorm: ITU-R BS.1770 / EBU R128 dialogue loudness normalization
     loudnorm_filter = (
+        f"highpass=f=70,equalizer=f=9000:t=q:w=1.5:g=-15,lowpass=f=8500,"
         f"loudnorm=I={target_i}:TP={target_tp}:LRA=11.0:print_format=summary"
     )
     cmd = [

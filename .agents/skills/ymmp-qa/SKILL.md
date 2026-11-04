@@ -12,12 +12,25 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 
 ### 1. Script Generation & B-Roll Assets
 - Write the JSON script (e.g. `artifacts/script.json`).
-- Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"jump"` or `"nod"`) when appropriate.
+- Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"none"` or `"nod"`) when appropriate.
 - Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
+- **Audience Retention & 3-Character Pacing Standard (`veraxi_ymmp.pacing`)**:
+  - Run script preflight validation: `veraxi-ymmp validate <script.json> --audit-pacing` (Retention Score must be $\ge 80/100$).
+  - **0-Second Cold Open & Zero-Greeting Invariant**:
+    - Strictly ZERO generic greetings (`「みんな、こんにちは」`, `「ごきげんよう」`, `「よろしく」`) in the first 3 dialogue cuts.
+    - **No Premature Slide Dump:** The opening hook window (first 2-3 cuts) strictly keeps `"image": null` so characters carry the emotional confrontation without slide clutter. Slides enter as evidence around Cut 4+ when transitioning to core data.
+    - Open In Media Res with high-stakes cognitive dissonance (The Public Illusion / Shocking Metric).
+  - **50/30/20 Retention Golden Ratio**: In 3-character casts, Main Explainer (四国めたん) holds 45%–55%, Lead Inquirer (ずんだもん) holds 30%–35%, and 3rd Specialist (春日部つむぎ) holds **15%–20%**. Hard ceiling $\le 25\%$ to prevent acoustic fatigue and group-banter derailment.
+  - **Hook Protection Rule**: 3rd character must NEVER speak in the opening hook (first 10% or first 3 cuts). Premise must be cleanly established by the core duo to prevent early viewer bounce.
+  - **Mid-Roll Attention Spike**: 3rd character's first entrance must occur during the mid-roll attention decay window (30%–50% timeline mark) to reset audience focus.
+  - **2-Position Stage Convention**: Screen layout strictly maintains Left Anchor (Explainer at `x=80`) and Right Alternating (Lead Inquirer $\leftrightarrow$ Guest Specialist at `x=1180`), keeping center screen open for presentation slides.
 - **B-Roll Presentation Boards Standard (`veraxi_ymmp.broll`)**:
   - Always use **Pro Dark Slate Theme** (`#0F172A` / `#1E293B`) for explanatory slides.
   - Apply **1-Slide-1-Impact Architecture** (VS comparisons, big impact metric, or 3-card overview).
   - Strictly **NO redundant category badges** (e.g. no `【マクロ経済】`), **NO English jargon** (`OVERVIEW`, `Higher for Longer`), **NO robotic brackets** (`【警告】`, `【急騰】`), and **NO premature conclusion labels** (`本日の結論` in video intro).
+  - Strictly **NO AI-slop presentation cliches**: Ban `「3つのポイント」`, `「3大視点」`, `「3大潮流」`, `「3大原則」`. Build narrative tension through dramatic contrast (世間の誤解 vs 冷酷な現場・決算の真実).
+  - Strictly **NO trailing dollar signs**: Write `2200億ドル` or `$220B`, never `2200億$`.
+  - Spoken dialogue: Always pronounce full names like `「マイクロソフト」` rather than abbreviations like `「MS」` or `「エムエス」`.
   - **Overview / Agenda Slides**: Strictly **single-line headlines only** (no sub-bullet points, no premature conclusion boxes). 4-5 second cuts only allow scanning 3 clear headlines without cognitive overload.
   - **Systematic Cognitive Load & Text Density Rule**:
     - Hard ceiling: **<= 100 characters total** across all text on any slide.
@@ -78,11 +91,6 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - **Character Cutout (白フチ)**: Clean white sticker rim stroke separating character from the dark blurred background.
 
 ### 5. Revision Loop
-- If the QA fails (e.g., subtitles cut off, pacing is too fast, thumbnail text overlaps), edit the configuration/script and re-verify.
-
-### 6. Final Output
-- ONLY when you visually confirm the `.mp4` and `thumbnail.png` look perfect, hand the project to the user.
-- Output paths to report:
-  - `final_video.ymmp`
-  - `thumbnail.png`
-  - `qa_test.mp4` / Premiere XML
+- If ANY QA check fails (missing audio, off-center text, overlapping characters, speech bubble outline mismatch), fix the script/code and re-render.
+- Re-inspect until the video is publication-ready.
+- Hand off the final artifacts to the user only after passing autonomous QA.

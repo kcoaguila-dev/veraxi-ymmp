@@ -12,7 +12,8 @@ from __future__ import annotations
 import io
 import asyncio
 import wave
-from typing import Any, Dict, List, Tuple, Union, cast
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import requests  # type: ignore
 
@@ -50,6 +51,7 @@ class VoicevoxClient:
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self._dictionary_synced = False
 
     async def is_available_async(self) -> bool:
         """Async check if the VOICEVOX server is running and accessible."""
@@ -129,9 +131,95 @@ class VoicevoxClient:
         except requests.exceptions.RequestException:
             return False
 
+    def sync_user_dictionary(
+        self, dictionary_path: Optional[Union[str, Path]] = None
+    ) -> int:
+        """
+        Synchronizes declarative user dictionary words into the running VOICEVOX engine.
+        Uses /user_dict and /user_dict_word to register proper pronunciations, accent types,
+        and POS types natively into OpenJTalk/MeCab.
+        """
+        import json
+        from pathlib import Path
+
+        if dictionary_path is None:
+            candidates = [
+                Path("assets/dictionary/tts_dictionary.json"),
+                Path(__file__).parent.parent / "assets" / "dictionary" / "tts_dictionary.json",
+            ]
+            for c in candidates:
+                if c.exists():
+                    dictionary_path = c
+                    break
+
+        if dictionary_path is None or not Path(dictionary_path).exists():
+            return 0
+
+        try:
+            with open(dictionary_path, "r", encoding="utf-8-sig") as f:
+                entries = json.load(f)
+            if not isinstance(entries, list):
+                return 0
+        except Exception as e:
+            logger.warning("Failed to read TTS dictionary %s: %s", dictionary_path, e)
+            return 0
+
+        try:
+            res = requests.get(f"{self.base_url}/user_dict", timeout=5)
+            existing_dict = res.json() if res.status_code == 200 else {}
+        except Exception:
+            return 0
+
+        existing_words = {
+            v.get("surface"): v.get("pronunciation")
+            for v in existing_dict.values()
+            if isinstance(v, dict)
+        }
+
+        synced_count = 0
+        for entry in entries:
+            surface = entry.get("surface")
+            pronunciation = entry.get("pronunciation")
+            if not surface or not pronunciation:
+                continue
+
+            if existing_words.get(surface) == pronunciation:
+                continue
+
+            params: Dict[str, Union[str, int]] = {
+                "surface": surface,
+                "pronunciation": pronunciation,
+                "accent_type": entry.get("accent_type", 0),
+                "priority": entry.get("priority", 8),
+            }
+            if "word_type" in entry:
+                params["word_type"] = entry["word_type"]
+
+            try:
+                post_res = requests.post(
+                    f"{self.base_url}/user_dict_word",
+                    params=params,
+                    timeout=5,
+                )
+                if post_res.status_code == 200:
+                    synced_count += 1
+            except Exception as reg_err:
+                logger.debug("Failed to register %s to VOICEVOX user_dict: %s", surface, reg_err)
+
+        self._dictionary_synced = True
+        if synced_count > 0:
+            logger.info("Synchronized %d words into VOICEVOX user dictionary.", synced_count)
+        return synced_count
+
     def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
         """Fetch AudioQuery dictionary for text without synthesizing audio."""
         from .phonetics import tune_audio_query_pitch
+
+        if not self._dictionary_synced and self.is_available():
+            try:
+                self.sync_user_dictionary()
+            except Exception as e:
+                logger.debug("User dictionary auto-sync skipped: %s", e)
 
         try:
             params: Dict[str, Union[str, int]] = {"text": text, "speaker": speaker_id}
