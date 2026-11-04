@@ -81,11 +81,11 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator must stru
 
 ## 3. Operational Command Reference
 
-- **Run full project pipeline:** `veraxi-ymmp run projects/<project_name>/`
+- **Run full project pipeline:** `veraxi-ymmp run projects/<project_name>/` (or `python -m veraxi_ymmp run ...`)
 - **Architectural Fitness Check:** `pytest tests/test_architectural_fitness.py`
 - **Privacy Check:** `python scripts/check_no_local_paths.py`
-- **Audience Retention Audit:** `veraxi-ymmp validate <script.json> --audit-pacing`
-- **Loudness Normalization:** `veraxi-ymmp normalize <video.mp4> -p youtube`
+- **Audience Retention Audit:** `veraxi-ymmp validate <script.json> --audit-pacing` (or `python -m veraxi_ymmp validate ...`)
+- **Loudness Normalization:** `veraxi-ymmp normalize <video.mp4> -p youtube` (or `python -m veraxi_ymmp normalize ...`)
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,13 @@ from veraxi_ymmp.ir import (
     TimelineIR,
     VoiceClip,
 )
-from veraxi_ymmp.moviepy_renderer import MoviePyRenderer, create_speech_bubble
+
+HAS_FFMPEG = shutil.which("ffmpeg") is not None
+if HAS_FFMPEG:
+    try:
+        from veraxi_ymmp.moviepy_renderer import MoviePyRenderer, create_speech_bubble
+    except Exception:
+        HAS_FFMPEG = False
 
 
 def test_ae_renderer_requires_ir(tmp_path: Path) -> None:
@@ -112,6 +119,7 @@ def test_ae_renderer_with_none_and_populated_audio_query(tmp_path: Path) -> None
     assert "sliderProp.setValueAtTime(" in content
 
 
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not found in PATH")
 def test_moviepy_create_speech_bubble() -> None:
     """create_speech_bubble produces a timed MoviePy clip with RGBA frame data."""
     clip = create_speech_bubble("テスト吹き出し字幕なのだ！", duration=1.5, border_color=(34, 197, 94, 255))

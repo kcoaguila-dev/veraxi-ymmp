@@ -474,11 +474,11 @@ class YMMPRenderer:
                         bg_candidate = cand_p
                         break
             for gc in timeline_ir.global_clips:
-                ti = gc.template_item or {}
-                file_p = gc.file_path or ti.get("FilePath")
+                file_p = gc.file_path or (gc.template_item or {}).get("FilePath")
                 if file_p and any(k in file_p.lower() for k in ("bg", "room", "classroom")):
                     bg_candidate = Path(file_p).resolve()
-            items.append(_build_image_item(bg_candidate, 0, timeline_ir.total_frames, layer=0, zoom=187.5))
+            if bg_candidate.exists():
+                items.append(_build_image_item(bg_candidate, 0, timeline_ir.total_frames, layer=0, zoom=187.5))
 
         # 4. Layer 1: B-Roll Images (Strictly exclude background clips and non-positive lengths)
         for d_img_clip in timeline_ir.dynamic_image_clips:

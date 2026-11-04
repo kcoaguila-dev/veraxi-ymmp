@@ -20,3 +20,9 @@ regexes = [
 paths = [
     '''scripts/check_no_local_paths\.py''',
 ]
+
+[allowlist]
+description = "Global allowlist for baseline files"
+paths = [
+    '''\.secrets\.baseline$''',
+]

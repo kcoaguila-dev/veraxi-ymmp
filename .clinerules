@@ -49,7 +49,7 @@ Before declaring a video or feature complete:
 1. `pytest tests/test_architectural_fitness.py` passes completely.
 2. `python scripts/check_no_local_paths.py --all` passes with zero leaks.
 3. VoiceVox `.wav` files exist in `artifacts/audio/` or project `audio/` (for media projects).
-4. Script pacing passes `veraxi-ymmp validate <script.json> --audit-pacing` with score >= 80/100 (for video projects).
+4. Script pacing passes `veraxi-ymmp validate <script.json> --audit-pacing` (or `python -m veraxi_ymmp validate ...`) with score >= 80/100 (for video projects).
 5. Thumbnail (`thumbnail.png`) exists and follows 3-split rule (for video projects).
 
 ---
@@ -60,7 +60,7 @@ Before declaring a video or feature complete:
    - **Never read files >150 lines in full.** Always search for the target symbol or line number first, then read only the target slice (`start_line`/`end_line`).
    - **Inspection Hierarchy:**
      - Tier 1: Symbol index (`ctags -x --kinds-python=fm <file>`)
-     - Tier 2: Search (`search_codebase`, `rg -n -C 2 'pattern' <path>`, or PowerShell `Select-String`)
+     - Tier 2: Search (`rg -n -C 2 'pattern' <path>` or PowerShell `Select-String`)
      - Tier 3: AST query (`ast-grep run -l python -p 'class $CLASS' <file>`)
 2. **Terminal Output Discipline:**
    - Always run tests and linters with quiet flags (`pytest -q`).
