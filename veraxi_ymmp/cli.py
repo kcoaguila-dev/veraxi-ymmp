@@ -200,6 +200,13 @@ def _cmd_validate(argv: List[str]) -> None:
     parser.add_argument("--audit-pacing", action="store_true", help="Audit audience retention and pacing rules")
     parser.add_argument("--audit-facts", action="store_true", help="Audit claims.json beside the script and write sources.md")
     parser.add_argument("--draft-claims", action="store_true", help="Create/extend claims.json with draft claims for factual cuts (banter is skipped)")
+    parser.add_argument(
+        "--epistemic-profile",
+        "--profile",
+        choices=["finance", "academic", "general", "lore"],
+        default=None,
+        help="Epistemic profile for primary authority allowlist (finance, academic, general, lore)",
+    )
     parser.add_argument("--allow-unverified", action="store_true", help="Do not fail when fact-check gate blocks (recorded in output)")
     args = parser.parse_args(argv)
 
@@ -264,14 +271,18 @@ def _cmd_validate(argv: List[str]) -> None:
 
     if args.draft_claims:
         from .fact_audit import draft_project_claims
-        ledger, added = draft_project_claims(script_path, script_data)
+        ledger, added = draft_project_claims(
+            script_path,
+            script_data,
+            extract_qualitative=bool(args.epistemic_profile and args.epistemic_profile != "finance"),
+        )
         print(f"Claim ledger updated: {ledger} (+{added} draft claims; review kind/weight, then add evidence)")
 
     facts_blocked = False
     if args.audit_facts:
         from .fact_audit import audit_project_facts
         try:
-            outcome = audit_project_facts(script_path)
+            outcome = audit_project_facts(script_path, profile=args.epistemic_profile)
         except FileNotFoundError as e:
             errors.append(f"[FACTS] {e}")
         else:
@@ -355,13 +366,38 @@ def _cmd_capture(argv: list[str]) -> None:
 
 
 
+def _cmd_ingest_script(argv: list[str]) -> None:
+    """Ingest NotebookLM markdown dialogue into validated script.json."""
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp ingest-script",
+        description="Ingest Markdown dialogue into validated DirectorScriptEntry JSON."
+    )
+    parser.add_argument("input_markdown", help="Path to input Markdown dialogue file")
+    parser.add_argument("-o", "--output", help="Path to write output script.json (default: beside input file)")
+    args = parser.parse_args(argv)
+
+    md_path = Path(args.input_markdown)
+    if not md_path.exists():
+        sys.stderr.write(f"Error: File not found: {md_path}\n")
+        sys.exit(1)
+
+    out_path = Path(args.output) if args.output else md_path.parent / "script.json"
+
+    from .script_ingest import parse_markdown_dialogue
+    content = md_path.read_text(encoding="utf-8")
+    script_entries = parse_markdown_dialogue(content)
+
+    out_path.write_text(json.dumps(script_entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    sys.stdout.write(f"Successfully ingested {len(script_entries)} cuts from {md_path} -> {out_path}\n")
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture", "ideate", "ingest-script"}:
         subcmd = sys.argv[1]
         sub_argv = sys.argv[2:]
         if subcmd == "run":
@@ -384,6 +420,11 @@ def main() -> None:
             _cmd_capture(sub_argv)
         elif subcmd == "capture-sec":
             _cmd_capture_sec(sub_argv)
+        elif subcmd == "ideate":
+            from .cli_ideate import cmd_ideate
+            cmd_ideate(sub_argv)
+        elif subcmd == "ingest-script":
+            _cmd_ingest_script(sub_argv)
         return
 
     parser = argparse.ArgumentParser(

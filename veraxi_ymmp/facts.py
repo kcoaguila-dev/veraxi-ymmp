@@ -16,10 +16,20 @@ from typing import Any, Dict, List, Sequence
 from urllib.parse import urlparse
 
 
+class EpistemicProfile(str, Enum):
+    """Domain epistemic profile defining the trust boundaries and allowed Tier 1 authorities."""
+
+    FINANCE = "finance"
+    ACADEMIC = "academic"
+    GENERAL = "general"
+    LORE = "lore"
+
+
 class ClaimKind(str, Enum):
     NUMBER = "number"
     DATE = "date"
     QUOTE = "quote"
+    FACT = "fact"
     CAUSAL = "causal"
     OPINION = "opinion"
     COMMENTARY = "commentary"  # jokes, banter, hyperbole, reactions: never fact-checked
@@ -73,6 +83,7 @@ class Claim:
     evidence: List[Evidence] = field(default_factory=list)
     derived: bool = False  # True when quantity is calculated/derived rather than quoted verbatim
     derivation: str = ""  # Mathematical formula or derivation explanation when derived is True
+    axiom: bool = False  # True for universal axioms / common knowledge bypass
 
 
 @dataclass
@@ -81,10 +92,11 @@ class ClaimResult:
     verdict: Verdict
     reason: str
     quote_errors: List[str] = field(default_factory=list)
+    grounding_score: float | None = None
 
 
-# Official primary authority domains permitted to qualify as Tier 1 evidence
-PRIMARY_AUTHORITY_HOSTS = frozenset({
+# Official primary authority domains permitted to qualify as Tier 1 evidence by profile
+FINANCE_AUTHORITY_HOSTS = frozenset({
     "sec.gov",
     "www.sec.gov",
     "fred.stlouisfed.org",
@@ -102,8 +114,72 @@ PRIMARY_AUTHORITY_HOSTS = frozenset({
     "www.treasury.gov",
 })
 
+ACADEMIC_AUTHORITY_HOSTS = frozenset({
+    "arxiv.org",
+    "www.arxiv.org",
+    "doi.org",
+    "nature.com",
+    "www.nature.com",
+    "science.org",
+    "www.science.org",
+    "cell.com",
+    "www.cell.com",
+    "thelancet.com",
+    "www.thelancet.com",
+    "ncbi.nlm.nih.gov",
+    "pubmed.ncbi.nlm.nih.gov",
+    "ieee.org",
+    "www.ieee.org",
+    "acm.org",
+    "www.acm.org",
+    "biorxiv.org",
+    "www.biorxiv.org",
+    "medrxiv.org",
+    "www.medrxiv.org",
+    "jst.go.jp",
+    "www.jst.go.jp",
+    "ci.nii.ac.jp",
+})
+
+GENERAL_AUTHORITY_HOSTS = frozenset({
+    "wikipedia.org",
+    "en.wikipedia.org",
+    "ja.wikipedia.org",
+    "wikidata.org",
+    "www.wikidata.org",
+    "reuters.com",
+    "www.reuters.com",
+    "apnews.com",
+    "afp.com",
+    "www.afp.com",
+    "nhk.or.jp",
+    "www3.nhk.or.jp",
+    "bbc.com",
+    "www.bbc.com",
+    "bbc.co.uk",
+    "www.bbc.co.uk",
+    "archive.org",
+    "web.archive.org",
+    "britannica.com",
+    "www.britannica.com",
+})
+
+LORE_AUTHORITY_HOSTS = frozenset({
+    "github.com",
+    "www.github.com",
+    "python.org",
+    "docs.python.org",
+    "mozilla.org",
+    "developer.mozilla.org",
+    "w3.org",
+    "www.w3.org",
+})
+
+PRIMARY_AUTHORITY_HOSTS = FINANCE_AUTHORITY_HOSTS
+
 
 PRIMARY_INSTITUTIONS: Dict[str, str] = {
+    # Financial / Macroeconomic / Regulatory
     "sec.gov": "sec",
     "stlouisfed.org": "federalreserve",
     "federalreserve.gov": "federalreserve",
@@ -117,6 +193,37 @@ PRIMARY_INSTITUTIONS: Dict[str, str] = {
     "worldbank.org": "worldbank",
     "oecd.org": "oecd",
     "bis.org": "bis",
+    # Academic & Science
+    "arxiv.org": "arxiv",
+    "doi.org": "doi",
+    "nature.com": "nature",
+    "science.org": "science",
+    "cell.com": "cell",
+    "thelancet.com": "thelancet",
+    "ncbi.nlm.nih.gov": "ncbi",
+    "pubmed.ncbi.nlm.nih.gov": "ncbi",
+    "ieee.org": "ieee",
+    "acm.org": "acm",
+    "jst.go.jp": "jst",
+    "ci.nii.ac.jp": "nii",
+    "biorxiv.org": "biorxiv",
+    "medrxiv.org": "medrxiv",
+    # General Explainer
+    "wikipedia.org": "wikipedia",
+    "wikidata.org": "wikidata",
+    "reuters.com": "reuters",
+    "apnews.com": "apnews",
+    "afp.com": "afp",
+    "nhk.or.jp": "nhk",
+    "bbc.com": "bbc",
+    "bbc.co.uk": "bbc",
+    "archive.org": "archive",
+    "britannica.com": "britannica",
+    # Lore / Tech
+    "github.com": "github",
+    "python.org": "python",
+    "mozilla.org": "mozilla",
+    "w3.org": "w3c",
 }
 
 
@@ -142,22 +249,28 @@ def canonical_institution(url: str) -> str:
         if clean_host == domain or clean_host.endswith("." + domain):
             return inst_key
 
-    # For other government agencies (.gov, .go.jp, .gov.uk), collapse subdomains to agency domain
+    # For other government and academic bodies (.gov, .go.jp, .gov.uk, .ac.jp, .ac.uk, .edu), collapse subdomains
     parts = clean_host.split(".")
-    if len(parts) >= 2 and (
-        clean_host.endswith(".gov") or clean_host.endswith(".go.jp") or clean_host.endswith(".gov.uk")
-    ):
-        if clean_host.endswith(".go.jp") or clean_host.endswith(".gov.uk"):
+    if len(parts) >= 2:
+        if (
+            clean_host.endswith(".go.jp")
+            or clean_host.endswith(".gov.uk")
+            or clean_host.endswith(".ac.jp")
+            or clean_host.endswith(".ac.uk")
+        ):
             if len(parts) >= 3:
                 return ".".join(parts[-3:])
-        else:
+        elif clean_host.endswith(".gov") or clean_host.endswith(".edu"):
             return ".".join(parts[-2:])
 
     return clean_host
 
 
-def is_primary_authority_url(url: str) -> bool:
-    """Return True if URL host is recognized as an official primary authority."""
+def is_primary_authority_url(
+    url: str,
+    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+) -> bool:
+    """Return True if URL host is recognized as an official primary authority for profile."""
     if not url:
         return False
     parsed = urlparse(url)
@@ -167,22 +280,106 @@ def is_primary_authority_url(url: str) -> bool:
     if not host:
         return False
     clean_host = host.removeprefix("www.")
-    if clean_host in PRIMARY_AUTHORITY_HOSTS or host in PRIMARY_AUTHORITY_HOSTS:
+
+    prof = EpistemicProfile(profile) if isinstance(profile, str) else profile
+
+    # Common official government registries are always Tier 1 across all profiles
+    if clean_host.endswith(".gov") or clean_host.endswith(".go.jp") or clean_host.endswith(".gov.uk"):
         return True
-    for domain in PRIMARY_INSTITUTIONS:
-        if clean_host == domain or clean_host.endswith("." + domain):
-            return True
-    return clean_host.endswith(".gov") or clean_host.endswith(".go.jp") or clean_host.endswith(".gov.uk")
+
+    # Tier 1 for finance: official institutional / central bank / regulatory authorities
+    if clean_host in FINANCE_AUTHORITY_HOSTS or host in FINANCE_AUTHORITY_HOSTS:
+        return True
+    finance_domains = (
+        "sec.gov",
+        "stlouisfed.org",
+        "federalreserve.gov",
+        "boj.or.jp",
+        "e-stat.go.jp",
+        "bls.gov",
+        "bea.gov",
+        "treasury.gov",
+        "census.gov",
+        "imf.org",
+        "worldbank.org",
+        "oecd.org",
+        "bis.org",
+    )
+    if any(clean_host == d or clean_host.endswith("." + d) for d in finance_domains):
+        return True
+
+    if prof == EpistemicProfile.FINANCE:
+        return False
+
+    # Tier 1 for academic: peer-reviewed journals, preprint archives, higher ed domains
+    if clean_host.endswith(".edu") or clean_host.endswith(".ac.jp") or clean_host.endswith(".ac.uk"):
+        return True
+    if clean_host in ACADEMIC_AUTHORITY_HOSTS or host in ACADEMIC_AUTHORITY_HOSTS:
+        return True
+    academic_domains = (
+        "arxiv.org",
+        "doi.org",
+        "nature.com",
+        "science.org",
+        "cell.com",
+        "thelancet.com",
+        "nih.gov",
+        "ieee.org",
+        "acm.org",
+        "jst.go.jp",
+        "ci.nii.ac.jp",
+        "biorxiv.org",
+        "medrxiv.org",
+    )
+    if any(clean_host == d or clean_host.endswith("." + d) for d in academic_domains):
+        return True
+
+    if prof == EpistemicProfile.ACADEMIC:
+        return False
+
+    # Tier 1 for general: encyclopedias, wire services, public archives
+    if clean_host in GENERAL_AUTHORITY_HOSTS or host in GENERAL_AUTHORITY_HOSTS:
+        return True
+    general_domains = (
+        "wikipedia.org",
+        "wikidata.org",
+        "reuters.com",
+        "apnews.com",
+        "afp.com",
+        "nhk.or.jp",
+        "bbc.com",
+        "bbc.co.uk",
+        "archive.org",
+        "britannica.com",
+    )
+    if any(clean_host == d or clean_host.endswith("." + d) for d in general_domains):
+        return True
+
+    if prof == EpistemicProfile.GENERAL:
+        return False
+
+    # Tier 1 for lore / tech: official source trees and language documentation
+    if clean_host in LORE_AUTHORITY_HOSTS or host in LORE_AUTHORITY_HOSTS:
+        return True
+    lore_domains = ("github.com", "python.org", "mozilla.org", "w3.org")
+    if any(clean_host == d or clean_host.endswith("." + d) for d in lore_domains):
+        return True
+
+    return False
 
 
-def enforce_source_tier(url: str, declared_tier: int = 2) -> int:
+def enforce_source_tier(
+    url: str,
+    declared_tier: int = 2,
+    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+) -> int:
     """Derive/enforce tier.
 
-    A source is only Tier 1 if its domain matches the primary authority allowlist.
+    A source is only Tier 1 if its domain matches the primary authority allowlist for profile.
     Adapters or prompts declaring Tier 1 for non-whitelisted sources are downgraded to Tier 2.
     """
     if declared_tier == 1:
-        if is_primary_authority_url(url):
+        if is_primary_authority_url(url, profile=profile):
             return 1
         return 2  # Downgrade non-whitelisted source to Tier 2
     return max(1, declared_tier)
@@ -236,6 +433,34 @@ def verify_quote_in_source(quote: str, source_text: str) -> bool:
         if cjk_q and cjk_q in cjk_src:
             return True
     return False
+
+
+
+def compute_deterministic_grounding(claim_text: str, context_text: str) -> float:
+    """Compute deterministic lexical grounding score (0.0 to 1.0) between claim and context.
+
+    Extracts substantive tokens (kanji compounds, katakana loanwords, numbers, latin terms),
+    and measures the fraction of key terms supported by the context passage.
+    Zero network cost, 100% offline, reproducible.
+    """
+    if not claim_text or not context_text:
+        return 0.0
+
+    norm_claim = unicodedata.normalize("NFKC", claim_text).lower()
+    norm_ctx = unicodedata.normalize("NFKC", context_text).lower()
+
+    # Extract substantive tokens
+    kanji_tokens = re.findall(r"[\u4e00-\u9fff]{2,}", norm_claim)
+    katakana_tokens = re.findall(r"[\u30a0-\u30ff]{2,}", norm_claim)
+    num_tokens = re.findall(r"\d+(?:\.\d+)?", norm_claim)
+    latin_tokens = re.findall(r"[a-z0-9_]{3,}", norm_claim)
+
+    all_tokens = list(dict.fromkeys(kanji_tokens + katakana_tokens + num_tokens + latin_tokens))
+    if not all_tokens:
+        return 1.0 if norm_claim in norm_ctx else 0.5
+
+    matched = sum(1 for t in all_tokens if t in norm_ctx)
+    return round(matched / len(all_tokens), 2)
 
 
 def primary_authority_key(e: Evidence) -> str:
@@ -388,8 +613,15 @@ def required_primary_sources(claim: Claim) -> int:
     return 2 if claim.weight is ClaimWeight.CENTRAL else 1
 
 
-def verdict_for(claim: Claim, quote_errors: Sequence[str] = ()) -> ClaimResult:
+def verdict_for(
+    claim: Claim,
+    quote_errors: Sequence[str] = (),
+    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+) -> ClaimResult:
     """Deterministic verdict. Any contradiction from tier<=2 refutes; missing proof is UNVERIFIED."""
+    if getattr(claim, "axiom", False):
+        return ClaimResult(claim, Verdict.SUPPORTED, "axiom / common knowledge")
+
     q_errors = list(quote_errors)
     if q_errors:
         return ClaimResult(
@@ -401,8 +633,9 @@ def verdict_for(claim: Claim, quote_errors: Sequence[str] = ()) -> ClaimResult:
     if claim.kind in NON_CHECKABLE_KINDS:
         return ClaimResult(claim, Verdict.OPINION, f"{claim.kind.value}; not fact-checked")
     contradicts = [
-        e for e in claim.evidence
-        if e.stance is Stance.CONTRADICTS and enforce_source_tier(e.url, e.tier) <= 2
+        e
+        for e in claim.evidence
+        if e.stance is Stance.CONTRADICTS and enforce_source_tier(e.url, e.tier, profile=profile) <= 2
     ]
     if contradicts:
         return ClaimResult(claim, Verdict.REFUTED, f"contradicted by {contradicts[0].url}")
@@ -411,8 +644,9 @@ def verdict_for(claim: Claim, quote_errors: Sequence[str] = ()) -> ClaimResult:
         # For central claims, check numbers strictly against verified primary evidence quotes
         if claim.weight is ClaimWeight.CENTRAL:
             primary_confirms = [
-                e for e in confirms
-                if enforce_source_tier(e.url, e.tier) == 1 and bool(e.source_id)
+                e
+                for e in confirms
+                if enforce_source_tier(e.url, e.tier, profile=profile) == 1 and bool(e.source_id)
             ]
             check_quotes = [e.quote for e in primary_confirms]
         else:
@@ -433,7 +667,7 @@ def verdict_for(claim: Claim, quote_errors: Sequence[str] = ()) -> ClaimResult:
         primary = {
             primary_authority_key(e)
             for e in confirms
-            if enforce_source_tier(e.url, e.tier) == 1 and bool(e.source_id)
+            if enforce_source_tier(e.url, e.tier, profile=profile) == 1 and bool(e.source_id)
         }
         if len(primary) >= need:
             return ClaimResult(claim, Verdict.SUPPORTED, f"{len(primary)} primary sources")
@@ -445,8 +679,11 @@ def verdict_for(claim: Claim, quote_errors: Sequence[str] = ()) -> ClaimResult:
     return ClaimResult(claim, Verdict.UNVERIFIED, "no confirming evidence with quote")
 
 
-def audit(claims: Sequence[Claim]) -> List[ClaimResult]:
-    return [verdict_for(c) for c in claims]
+def audit(
+    claims: Sequence[Claim],
+    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+) -> List[ClaimResult]:
+    return [verdict_for(c, profile=profile) for c in claims]
 
 
 def gate_failures(results: Sequence[ClaimResult]) -> List[ClaimResult]:
@@ -493,6 +730,7 @@ def claims_from_json(raw: str) -> List[Claim]:
                 evidence=ev,
                 derived=bool(d.get("derived", False)),
                 derivation=str(d.get("derivation", "")),
+                axiom=bool(d.get("axiom", d.get("common_knowledge", False))),
             )
         )
     return out
@@ -508,6 +746,7 @@ class DocumentSourceType(str, Enum):
     SEC_EDGAR = "sec_edgar"
     FRED = "fred"
     GOVERNMENT_STAT = "government_stat"
+    WEB = "web"
     CUSTOM = "custom"
 
 

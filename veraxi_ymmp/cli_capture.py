@@ -20,7 +20,7 @@ def cmd_capture(argv: list[str]) -> None:
     )
     parser.add_argument(
         "--source",
-        choices=["sec", "sec_edgar", "fred"],
+        choices=["sec", "sec_edgar", "fred", "web"],
         default="sec",
         help="Primary authority source (default: sec)",
     )
@@ -75,6 +75,14 @@ def cmd_capture(argv: list[str]) -> None:
         source_params = {
             "series_title": args.title,
             "units": args.units,
+        }
+    elif source_norm == "web":
+        source_type = DocumentSourceType.WEB
+        identifier = args.url or args.identifier
+        target_text = args.target_text
+        out_path = Path(args.out or "assets/official/web_cited_proof.png")
+        source_params = {
+            "title": args.title,
         }
     else:
         print(f"Unsupported document source: {args.source}", file=sys.stderr)

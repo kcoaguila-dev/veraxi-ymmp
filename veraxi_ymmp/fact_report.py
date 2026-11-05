@@ -93,10 +93,14 @@ def render_report(
     ]
     for r in results:
         c = r.claim
-        ev = "<br>".join(
-            f"“{_cell(e.quote)}” → {_loc(e)} [{_TIER.get(e.tier, 'Other')}, {e.stance.value}] {_badge_for_evidence(e, r.quote_errors)}"
-            for e in c.evidence
-        ) or "_none_"
+        grounding_str = f" [grounding: {int(r.grounding_score * 100)}%]" if r.grounding_score is not None else ""
+        if c.axiom and not c.evidence:
+            ev = "[✋ common knowledge axiom]"
+        else:
+            ev = "<br>".join(
+                f"“{_cell(e.quote)}” → {_loc(e)} [{_TIER.get(e.tier, 'Other')}, {e.stance.value}] {_badge_for_evidence(e, r.quote_errors)}{grounding_str}"
+                for e in c.evidence
+            ) or ("_none_" if not c.axiom else "[✋ common knowledge axiom]")
         weight_str = f"{c.weight.value}{f' (derived: {_cell(c.derivation)})' if c.derived and c.derivation else (' (derived)' if c.derived else '')}"
         lines.append(
             f"| {c.id} | {_fmt_time(times.get(c.cut_index))} | {c.cut_index} | {_cell(c.text)} "

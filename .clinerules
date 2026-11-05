@@ -39,6 +39,7 @@ The repository enforces automated AST and regex scanning via `scripts/check_no_l
 
 To protect context window limits and eliminate token bloat, domain-specific deep guidelines are decoupled into modular skills. Invoke or read the corresponding skill on demand:
 
+- **`editorial-dossier` (`.agents/skills/editorial-dossier/SKILL.md`):** Topic-agnostic editorial pre-production and NotebookLM copy-paste dossier generator covering 4 universal conflict archetypes (Post-Mortem, Myth vs Reality, David vs Goliath, Gold Rush) and anti-slop filters.
 - **`script-hygiene` (`.agents/skills/script-hygiene/SKILL.md`):** MANDATORY for dialogue authoring, pacing audits, cold opens, the 3 archetypes (Zundamon, Metan, Tsumugi), 50/30/20 ratio, dialogue ping-pong, Lehman macro causality, and anti-AI-slop rules.
 - **`teamwork-orchestrator` (`.agents/skills/teamwork-orchestrator/SKILL.md`):** Decouples complex multi-agent workflows into Lead Orchestrator, Script Specialist, Creative Designer, Audio & Pipeline Engineer, and QA Sentinel.
 - **`ymmp-qa` (`.agents/skills/ymmp-qa/SKILL.md`):** Autonomous 5-step video quality verification loop.

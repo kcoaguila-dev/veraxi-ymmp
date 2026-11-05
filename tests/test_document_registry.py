@@ -28,13 +28,17 @@ def test_registry_registration_and_lookup() -> None:
 
 
 def test_default_registry_contains_sec_and_fred() -> None:
-    """Verify default registry provides both SEC EDGAR and FRED adapters."""
+    """Verify default registry provides SEC EDGAR, FRED, and WEB adapters."""
     registry = get_default_document_registry(prefer_offline=True)
     assert registry.has(DocumentSourceType.SEC_EDGAR)
     assert registry.has(DocumentSourceType.FRED)
+    assert registry.has(DocumentSourceType.WEB)
 
     sec_adapter = registry.get(DocumentSourceType.SEC_EDGAR)
     assert isinstance(sec_adapter, EdgarDocumentCaptureAdapter)
 
     fred_adapter = registry.get(DocumentSourceType.FRED)
     assert isinstance(fred_adapter, FredDocumentCaptureAdapter)
+
+    web_adapter = registry.get(DocumentSourceType.WEB)
+    assert isinstance(web_adapter, OfficialDocumentCapturePort)

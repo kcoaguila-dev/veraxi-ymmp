@@ -14,8 +14,11 @@ from .fact_report import render_report
 from .facts import (
     ClaimResult,
     ClaimWeight,
+    EpistemicProfile,
+    Stance,
     canonical_institution,
     claims_to_json,
+    compute_deterministic_grounding,
     enforce_source_tier,
     gate_failures,
     load_claims,
@@ -135,6 +138,7 @@ def audit_project_facts(
     script_path: Path,
     title: str = "",
     cut_times: Optional[Dict[int, float]] = None,
+    profile: Optional[EpistemicProfile | str] = None,
 ) -> FactAuditOutcome:
     """Read `claims.json` beside the script, verify quotes against sources/, write `sources.md`, return outcome.
 
@@ -144,6 +148,21 @@ def audit_project_facts(
     claims_path = project_dir / CLAIMS_FILENAME
     if not claims_path.is_file():
         raise FileNotFoundError(f"No claim ledger found: {claims_path}")
+
+    # Resolve active epistemic profile
+    if profile is None:
+        for cfg_name in ("project.json", "config.json"):
+            cfg_file = project_dir / cfg_name
+            if cfg_file.is_file():
+                try:
+                    cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                    p_val = cfg_data.get("epistemic_profile") or cfg_data.get("profile")
+                    if p_val:
+                        profile = p_val
+                        break
+                except Exception:
+                    pass
+    active_profile = EpistemicProfile(profile) if profile else EpistemicProfile.FINANCE
 
     claims = load_claims(claims_path)
     sources = load_project_sources(project_dir)
@@ -170,7 +189,7 @@ def audit_project_facts(
                     quote_errors.append(
                         f"central claim source '{e.source_id}' has no registered origin URL (requires manifest.json or .meta.json)"
                     )
-                elif enforce_source_tier(src_url, 1) != 1:
+                elif enforce_source_tier(src_url, 1, profile=active_profile) != 1:
                     quote_errors.append(
                         f"central claim source '{e.source_id}' origin '{src_url}' is not a recognized Tier 1 primary authority"
                     )
@@ -201,7 +220,12 @@ def audit_project_facts(
             if not verify_quote_in_source(e.quote, src_text):
                 quote_errors.append(f"quote not found in stored source '{e.source_id}'")
 
-        res = verdict_for(c, quote_errors=quote_errors)
+        res = verdict_for(c, quote_errors=quote_errors, profile=active_profile)
+        if not quote_errors and c.evidence:
+            conf_quotes = [e.quote for e in c.evidence if e.stance is Stance.CONFIRMS and e.quote.strip()]
+            if conf_quotes:
+                merged_ctx = " ".join(conf_quotes)
+                res.grounding_score = compute_deterministic_grounding(c.text, merged_ctx)
         results.append(res)
 
     report_path = project_dir / REPORT_FILENAME
@@ -212,10 +236,15 @@ def audit_project_facts(
     return FactAuditOutcome(results, gate_failures(results), report_path)
 
 
-def draft_project_claims(script_path: Path, script: List[Dict[str, Any]]) -> Tuple[Path, int]:
+def draft_project_claims(
+    script_path: Path,
+    script: List[Dict[str, Any]],
+    extract_qualitative: bool = False,
+) -> Tuple[Path, int]:
     """Create or extend `claims.json` with draft claims; returns (path, number added)."""
     claims_path = script_path.parent / CLAIMS_FILENAME
     existing = load_claims(claims_path) if claims_path.is_file() else []
-    merged = extract_draft_claims(script, existing)
+    merged = extract_draft_claims(script, existing, extract_qualitative=extract_qualitative)
     claims_path.write_text(claims_to_json(merged), encoding="utf-8")
+    return claims_path, len(merged) - len(existing)
     return claims_path, len(merged) - len(existing)

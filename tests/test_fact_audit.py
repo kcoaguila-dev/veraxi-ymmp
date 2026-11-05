@@ -248,3 +248,65 @@ def test_central_claim_fails_closed_when_source_origin_not_tier1(tmp_path: Path)
     out = audit_project_facts(script)
     assert out.blocked
     assert any("is not a recognized Tier 1 primary authority" in b.reason for b in out.blockers)
+
+
+
+
+def test_project_audit_with_general_profile(tmp_path: Path) -> None:
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+    doc = sources_dir / "wiki_doc.txt"
+    doc.write_text("Python was created by Guido van Rossum and released in 1991.", encoding="utf-8")
+    meta = sources_dir / "wiki_doc.meta.json"
+    meta.write_text(json.dumps({"url": "https://en.wikipedia.org/wiki/Python_(programming_language)"}), encoding="utf-8")
+
+    from veraxi_ymmp.fact_audit import compute_file_sha256
+    digest = compute_file_sha256(doc)
+
+    ev = [{
+        "url": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+        "quote": "Python was created by Guido van Rossum",
+        "stance": "confirms",
+        "tier": 1,
+        "source_id": "wiki_doc",
+        "sha256": digest,
+    }]
+    # Minor claim with Wikipedia source
+    script = _write(tmp_path, [{"id": "c1", "cut_index": 1, "text": "Python created by Guido", "kind": "fact", "weight": "minor", "evidence": ev}])
+
+    # Under finance profile, audit passes for minor claim (Tier 2 allowed)
+    out_fin = audit_project_facts(script, profile="finance")
+    assert not out_fin.blocked
+    assert out_fin.results[0].grounding_score is not None
+
+    # For central claim, under finance profile it fails closed
+    script_central = _write(tmp_path, [{"id": "c1", "cut_index": 1, "text": "Python created by Guido", "kind": "fact", "weight": "central", "evidence": ev}])
+    out_central_fin = audit_project_facts(script_central, profile="finance")
+    assert out_central_fin.blocked
+    assert any("is not a recognized Tier 1 primary authority" in b.reason for b in out_central_fin.blockers)
+
+    # Now add second general source (Reuters) and audit with profile="general"
+    doc2 = sources_dir / "reuters_doc.txt"
+    doc2.write_text("Python created by Guido van Rossum gained popularity worldwide.", encoding="utf-8")
+    meta2 = sources_dir / "reuters_doc.meta.json"
+    meta2.write_text(json.dumps({"url": "https://www.reuters.com/technology/python-creator"}), encoding="utf-8")
+    digest2 = compute_file_sha256(doc2)
+    ev2 = {
+        "url": "https://www.reuters.com/technology/python-creator",
+        "quote": "Python created by Guido van Rossum",
+        "stance": "confirms",
+        "tier": 1,
+        "source_id": "reuters_doc",
+        "sha256": digest2,
+    }
+    script_central2 = _write(tmp_path, [{
+        "id": "c1",
+        "cut_index": 1,
+        "text": "Python created by Guido",
+        "kind": "fact",
+        "weight": "central",
+        "evidence": [ev[0], ev2],
+    }])
+    out_gen = audit_project_facts(script_central2, profile="general")
+    assert not out_gen.blocked
+    assert out_gen.results[0].verdict.value == "supported"

@@ -17,9 +17,11 @@ from .facts import Claim, ClaimKind, ClaimWeight
 _FACT_SIGNAL = re.compile(r"[0-9０-９]|[億兆万]|[%％]|ドル|円|年間|四半期|決算|シェア|倍")
 _REACTION_END = re.compile(r"[！？!?…]+$")
 _MAX_REACTION_LEN = 12
+_DECLARATIVE_JP_END = re.compile(r"(?:です|だ|である|ました|だった|となる|となった|と言われています|とされています)[。.]?$")
+_DECLARATIVE_EN_END = re.compile(r"[a-zA-Z0-9)]\.$")
 
 
-def classify_text(text: str) -> ClaimKind | None:
+def classify_text(text: str, extract_qualitative: bool = False) -> ClaimKind | None:
     """Return the claim kind, or None when the cut contains nothing to fact-check."""
     stripped = text.strip()
     if not stripped:
@@ -27,12 +29,19 @@ def classify_text(text: str) -> ClaimKind | None:
     # Short punctuated beats ("はぁ！？", "25兆円！？") echo a fact; the source cut owns it.
     if len(stripped) <= _MAX_REACTION_LEN and _REACTION_END.search(stripped):
         return ClaimKind.COMMENTARY
-    if not _FACT_SIGNAL.search(stripped):
-        return None
-    return ClaimKind.NUMBER
+    if _FACT_SIGNAL.search(stripped):
+        return ClaimKind.NUMBER
+    if extract_qualitative and len(stripped) >= 10:
+        if _DECLARATIVE_JP_END.search(stripped) or _DECLARATIVE_EN_END.search(stripped):
+            return ClaimKind.FACT
+    return None
 
 
-def extract_draft_claims(script: Sequence[Dict[str, Any]], existing: Sequence[Claim] = ()) -> List[Claim]:
+def extract_draft_claims(
+    script: Sequence[Dict[str, Any]],
+    existing: Sequence[Claim] = (),
+    extract_qualitative: bool = False,
+) -> List[Claim]:
     """Draft claims for factual dialogue cuts, keeping any existing human-curated claims.
 
     Existing claims win (by cut_index + text) so reviewed evidence is never overwritten.
@@ -44,8 +53,9 @@ def extract_draft_claims(script: Sequence[Dict[str, Any]], existing: Sequence[Cl
         text = entry.get("text")
         if not isinstance(text, str) or ("type" in entry and "character" not in entry):
             continue
-        if classify_text(text) is not ClaimKind.NUMBER or (idx, text) in known:
+        kind = classify_text(text, extract_qualitative=extract_qualitative)
+        if kind not in (ClaimKind.NUMBER, ClaimKind.FACT) or (idx, text) in known:
             continue
-        drafts.append(Claim(f"d{next_id:02d}", idx, text, ClaimKind.NUMBER, ClaimWeight.MINOR))
+        drafts.append(Claim(f"d{next_id:02d}", idx, text, kind, ClaimWeight.MINOR))
         next_id += 1
     return list(existing) + drafts

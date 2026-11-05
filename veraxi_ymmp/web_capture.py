@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+from PIL import Image, ImageDraw
+
+from .citation_card import BadgeKind, CitationCardRenderer, load_card_font
+from .facts import (
+    DocumentCaptureResult,
+    DocumentCaptureSpec,
+    DocumentProvenance,
+    is_primary_authority_url,
+)
 from .logging import logger
 
 
@@ -188,3 +197,158 @@ class HtmlHighlightCapturer:
                 matched_text="",
                 error_message=str(exc),
             )
+
+
+
+
+class WebDocumentCaptureAdapter:
+    """
+    Adapter implementing OfficialDocumentCapturePort for general web URLs & documentation.
+    Supports Playwright DOM element highlighting and offline high-fidelity synthetic fallback.
+    """
+
+    def __init__(self, prefer_offline: bool = False) -> None:
+        self.prefer_offline = prefer_offline
+        self._capturer = HtmlHighlightCapturer()
+        self._renderer = CitationCardRenderer()
+
+    def is_available(self) -> bool:
+        """Return True if capture adapter is ready (Playwright or synthetic fallback)."""
+        return True
+
+    def is_playwright_installed(self) -> bool:
+        """Check whether Playwright package and browser are available."""
+        return self._capturer.is_available()
+
+    def capture_document(
+        self,
+        spec: DocumentCaptureSpec,
+        output_path: Path,
+    ) -> DocumentCaptureResult:
+        """
+        Capture general web document passage with highlighting and authoritative framing.
+        In live mode (prefer_offline=False), uses Playwright to capture and highlight the passage.
+        In offline mode (prefer_offline=True), generates an explicitly labeled synthetic mock document.
+        """
+        out_p = Path(output_path).resolve()
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        url = spec.document_url or spec.identifier
+        citation = spec.citation_label or (f"Web Source | {url}" if url else "Web Document Citation")
+
+        if not self.prefer_offline:
+            if not url:
+                return DocumentCaptureResult(
+                    success=False,
+                    image_path=out_p,
+                    citation_label=citation,
+                    source_url="",
+                    error_message="document_url or identifier must be provided for web capture",
+                )
+            if not self._capturer.is_available():
+                return DocumentCaptureResult(
+                    success=False,
+                    image_path=out_p,
+                    citation_label=citation,
+                    source_url=url,
+                    error_message="Playwright is not installed. Run 'pip install playwright && playwright install chromium'",
+                )
+
+            raw_tmp = out_p.with_suffix(".raw.png")
+            dom_res = self._capturer.capture_highlight(
+                document_url=url,
+                target_text=spec.target_text,
+                out_image_path=raw_tmp,
+                context_padding_px=spec.context_padding_px,
+                highlight_color=spec.highlight_color,
+                device_scale_factor=spec.device_scale_factor,
+            )
+            if not dom_res.success:
+                return DocumentCaptureResult(
+                    success=False,
+                    image_path=out_p,
+                    citation_label=citation,
+                    source_url=url,
+                    error_message=dom_res.error_message,
+                )
+
+            verified = is_primary_authority_url(url, profile="general")
+            badge_kind = BadgeKind.VERIFIED_PRIMARY if verified else BadgeKind.UNVERIFIED_SOURCE
+            self._renderer.render_card(
+                raw_image_path=raw_tmp,
+                out_path=out_p,
+                agency_title="WEB SOURCE DOCUMENT ARCHIVE",
+                header_meta=url,
+                entity_title=citation,
+                subtitle="PRIMARY DOCUMENT PASSAGE",
+                citation_label=citation,
+                badge_kind=badge_kind,
+            )
+            if raw_tmp.exists():
+                try:
+                    raw_tmp.unlink()
+                except Exception:
+                    pass
+
+            return DocumentCaptureResult(
+                success=True,
+                image_path=out_p,
+                citation_label=citation,
+                source_url=url,
+                verified=verified,
+                provenance=DocumentProvenance.LIVE,
+                matched_text=dom_res.matched_text,
+                metadata={
+                    "content_sha256": dom_res.content_sha256,
+                    "retrieved_at": dom_res.retrieved_at,
+                    "final_url": dom_res.final_url,
+                },
+            )
+
+        # Offline synthetic canvas fallback
+        verified = is_primary_authority_url(url, profile="general") if url else False
+        mock_raw = out_p.with_suffix(".mock.png")
+
+        # Draw clean synthetic document excerpt
+        mock_img = Image.new("RGBA", (1100, 480), (255, 255, 255, 255))
+        d = ImageDraw.Draw(mock_img)
+        f_title = load_card_font(24, bold=True)
+        f_body = load_card_font(18, bold=False)
+        f_highlight = load_card_font(20, bold=True)
+
+        d.text((40, 40), citation, font=f_title, fill=(15, 23, 42, 255))
+        d.line([(40, 80), (1060, 80)], fill=(226, 232, 240, 255), width=2)
+        d.text((40, 110), "Primary document excerpt & highlighted citation:", font=f_body, fill=(71, 85, 105, 255))
+
+        target_display = spec.target_text or "General web documentation excerpt"
+        d.rounded_rectangle([40, 160, 1060, 240], radius=8, fill=(254, 240, 138, 255), outline=(202, 138, 4, 255), width=2)
+        d.text((60, 185), f'"{target_display}"', font=f_highlight, fill=(113, 63, 18, 255))
+
+        d.text((40, 280), f"Source URL: {url}", font=f_body, fill=(100, 116, 139, 255))
+        mock_img.save(mock_raw)
+
+        self._renderer.render_card(
+            raw_image_path=mock_raw,
+            out_path=out_p,
+            agency_title="WEB SOURCE ARCHIVE",
+            header_meta=url,
+            entity_title=citation,
+            subtitle="SYNTHETIC CITATION PREVIEW",
+            citation_label=citation,
+            badge_kind=BadgeKind.SYNTHETIC_MOCK,
+        )
+        if mock_raw.exists():
+            try:
+                mock_raw.unlink()
+            except Exception:
+                pass
+
+        return DocumentCaptureResult(
+            success=True,
+            image_path=out_p,
+            citation_label=citation,
+            source_url=url,
+            verified=False,
+            provenance=DocumentProvenance.SYNTHETIC,
+            matched_text=spec.target_text,
+        )

@@ -359,6 +359,70 @@ def test_year_fallback_when_only_year_present() -> None:
     nums = extract_claim_numbers("The financial crisis began in 2008")
     assert nums == ["2008"]
 
+
+
+def test_epistemic_profiles_primary_authority_allowlist() -> None:
+    from veraxi_ymmp.facts import EpistemicProfile, is_primary_authority_url
+
+    # Finance: SEC/FRED are primary, Wikipedia and arXiv are NOT primary
+    assert is_primary_authority_url("https://www.sec.gov/edgar", EpistemicProfile.FINANCE) is True
+    assert is_primary_authority_url("https://fred.stlouisfed.org/series/GDP", EpistemicProfile.FINANCE) is True
+    assert is_primary_authority_url("https://arxiv.org/abs/2301.00001", EpistemicProfile.FINANCE) is False
+    assert is_primary_authority_url("https://en.wikipedia.org/wiki/Python", EpistemicProfile.FINANCE) is False
+
+    # Academic: arXiv, Nature, and .edu/.ac.jp are primary, Wikipedia is NOT
+    assert is_primary_authority_url("https://arxiv.org/abs/2301.00001", EpistemicProfile.ACADEMIC) is True
+    assert is_primary_authority_url("https://www.nature.com/articles/s41586", EpistemicProfile.ACADEMIC) is True
+    assert is_primary_authority_url("https://cs.stanford.edu/paper.pdf", EpistemicProfile.ACADEMIC) is True
+    assert is_primary_authority_url("https://en.wikipedia.org/wiki/Python", EpistemicProfile.ACADEMIC) is False
+
+    # General: Wikipedia, Reuters, BBC, and Archive.org are primary
+    assert is_primary_authority_url("https://en.wikipedia.org/wiki/Python", EpistemicProfile.GENERAL) is True
+    assert is_primary_authority_url("https://www.reuters.com/world/news", EpistemicProfile.GENERAL) is True
+    assert is_primary_authority_url("https://web.archive.org/web/2020/doc", EpistemicProfile.GENERAL) is True
+    # Unverified blog is still NOT primary in general profile
+    assert is_primary_authority_url("https://tech-rumor-blog.com/post", EpistemicProfile.GENERAL) is False
+
+    # Lore: GitHub and Python.org are primary
+    assert is_primary_authority_url("https://github.com/python/cpython", EpistemicProfile.LORE) is True
+    assert is_primary_authority_url("https://docs.python.org/3/whatsnew", EpistemicProfile.LORE) is True
+
+
+def test_central_claim_with_academic_and_general_profiles() -> None:
+    from veraxi_ymmp.facts import EpistemicProfile
+
+    # Academic central claim supported by 2 distinct academic authorities
+    e1 = Evidence(url="https://arxiv.org/abs/2301.00001", quote="Q1", stance=Stance.CONFIRMS, tier=1, source_id="s1")
+    e2 = Evidence(url="https://www.nature.com/articles/456", quote="Q1", stance=Stance.CONFIRMS, tier=1, source_id="s2")
+    c_acad = Claim("c1", 1, "Scientific discovery", weight=ClaimWeight.CENTRAL, evidence=[e1, e2])
+
+    # Fails under strict finance profile (arXiv and Nature are not finance primary authorities)
+    res_fin = verdict_for(c_acad, profile=EpistemicProfile.FINANCE)
+    assert res_fin.verdict is Verdict.UNVERIFIED
+
+    # Passes under academic profile
+    res_acad = verdict_for(c_acad, profile=EpistemicProfile.ACADEMIC)
+    assert res_acad.verdict is Verdict.SUPPORTED
+
+    # General central claim with Wikipedia and Reuters
+    e_wiki = Evidence(url="https://en.wikipedia.org/wiki/Event", quote="Q2", stance=Stance.CONFIRMS, tier=1, source_id="s3")
+    e_reuters = Evidence(url="https://www.reuters.com/news/123", quote="Q2", stance=Stance.CONFIRMS, tier=1, source_id="s4")
+    c_gen = Claim("c2", 2, "Historical event", weight=ClaimWeight.CENTRAL, evidence=[e_wiki, e_reuters])
+
+    # Fails under academic profile
+    assert verdict_for(c_gen, profile=EpistemicProfile.ACADEMIC).verdict is Verdict.UNVERIFIED
+    # Passes under general profile
+    assert verdict_for(c_gen, profile=EpistemicProfile.GENERAL).verdict is Verdict.SUPPORTED
+
+
+def test_axiom_common_knowledge_bypasses_disk_source() -> None:
+    # Universal common knowledge axiom passes without evidence
+    c_axiom = Claim("a1", 1, "Water boils at 100 degrees Celsius at 1 atm", axiom=True)
+    res = verdict_for(c_axiom)
+    assert res.verdict is Verdict.SUPPORTED
+    assert "axiom" in res.reason
+
+
     e_match = Evidence(url="u", quote="The financial crisis began in 2008", stance=Stance.CONFIRMS, tier=2)
     c_year_match = Claim("c1", 1, "The financial crisis began in 2008", kind=ClaimKind.NUMBER, evidence=[e_match])
     assert verdict_for(c_year_match).verdict is Verdict.SUPPORTED

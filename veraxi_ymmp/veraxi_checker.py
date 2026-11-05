@@ -9,9 +9,9 @@ evidence.
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import Any, List
 
-from .facts import Claim, Evidence, Stance
+from .facts import Claim, Evidence, Stance, compute_deterministic_grounding
 
 _PASSAGES = re.compile(r"\((\d+)\s+passages?\s+retrieved\)")
 _ROW = re.compile(r"^\|\s*(\d+)\s*\|(?P<doc>[^|]*)\|(?P<loc>[^|]*)\|(?P<quote>.*)\|\s*$")
@@ -53,3 +53,23 @@ class ManualChecker:
 
     def check(self, claim: Claim) -> List[Evidence]:
         return list(claim.evidence)
+
+
+def evaluate_grounding_safe(
+    claim_text: str,
+    context_text: str,
+    mcp_client: Any = None,
+) -> float:
+    """Safely evaluate grounding with Veraxi MCP if available, falling back to deterministic."""
+    if mcp_client is not None:
+        try:
+            if hasattr(mcp_client, "evaluate_grounding"):
+                res = mcp_client.evaluate_grounding(
+                    context_text=context_text,
+                    response_text=claim_text,
+                )
+                if isinstance(res, (int, float)):
+                    return float(res)
+        except Exception:
+            pass
+    return compute_deterministic_grounding(claim_text, context_text)

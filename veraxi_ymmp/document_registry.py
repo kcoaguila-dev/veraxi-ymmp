@@ -14,6 +14,7 @@ from .edgar_capture import EdgarDocumentCaptureAdapter
 from .facts import DocumentSourceType
 from .fred_capture import FredDocumentCaptureAdapter
 from .ports import OfficialDocumentCapturePort
+from .web_capture import WebDocumentCaptureAdapter
 
 
 class DocumentCaptureRegistry:
@@ -49,4 +50,5 @@ def get_default_document_registry(prefer_offline: bool = False) -> DocumentCaptu
     registry = DocumentCaptureRegistry()
     registry.register(DocumentSourceType.SEC_EDGAR, EdgarDocumentCaptureAdapter(prefer_offline=prefer_offline))
     registry.register(DocumentSourceType.FRED, FredDocumentCaptureAdapter(prefer_offline=prefer_offline))
+    registry.register(DocumentSourceType.WEB, WebDocumentCaptureAdapter(prefer_offline=prefer_offline))
     return registry
