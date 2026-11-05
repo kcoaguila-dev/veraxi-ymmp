@@ -23,6 +23,8 @@ def test_pipeline_full_orchestration_with_mocked_exporters(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
+    (proj_dir / "claims.json").write_text("[]", encoding="utf-8")
+
     dummy_ir = TimelineIR(
         fps=60,
         total_frames=90,
@@ -145,6 +147,8 @@ def test_pipeline_progress_callback(tmp_path: Path) -> None:
 
     with open(proj / "script.json", "w", encoding="utf-8") as f:
         json.dump([{"character": "ずんだもん", "text": "テスト"}], f)
+
+    (proj / "claims.json").write_text("[]", encoding="utf-8")
 
     pipeline.run(proj)
 

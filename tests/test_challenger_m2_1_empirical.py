@@ -105,6 +105,8 @@ def project_factory(tmp_path: Path):
         (proj / "script.json").write_text(
             json.dumps(entries, ensure_ascii=False), encoding="utf-8"
         )
+        (proj / "claims.json").write_text("[]", encoding="utf-8")
+
 
         # Video artifacts
         if with_final_video:

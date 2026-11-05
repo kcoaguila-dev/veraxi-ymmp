@@ -41,6 +41,7 @@ def _cmd_run(argv: List[str]) -> None:
     parser.add_argument("--no-gain-stage", action="store_true", help="Disable upstream speech gain staging (-16.0 LUFS)")
     parser.add_argument("--normalize", "--normalize-loudness", action="store_true", dest="normalize", help="Normalize audio loudness to YouTube -14.0 LUFS standard before uploading")
     parser.add_argument("--allow-synthetic", action="store_true", help="Allow synthetic unverified primary evidence assets (mock/CI testing only)")
+    parser.add_argument("--allow-unverified", action="store_true", help="Bypass fact-check gate blocking on missing or unverified claims")
 
     args = parser.parse_args(argv)
 
@@ -82,6 +83,7 @@ def _cmd_run(argv: List[str]) -> None:
         privacy_status=args.privacy,
         normalize_loudness=args.normalize,
         allow_synthetic=args.allow_synthetic,
+        allow_unverified=args.allow_unverified,
     )
     if not result.success:
         for err in result.errors:

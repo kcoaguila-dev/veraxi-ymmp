@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
-from .facts import ClaimResult, Evidence, Stance, Verdict, gate_failures
+from .facts import ClaimResult, ClaimWeight, Evidence, Stance, Verdict, gate_failures
 
 _BADGE = {
     Verdict.SUPPORTED: "✅ supported",
@@ -32,7 +32,24 @@ def _cell(text: str) -> str:
 
 
 def _loc(e: Evidence) -> str:
-    return f"{e.url}" + (f" (p.{e.page})" if e.page is not None else "")
+    parts: List[str] = []
+    if e.page is not None:
+        parts.append(f"p.{e.page}")
+    if e.source_id:
+        parts.append(f"source: {e.source_id}")
+    if parts:
+        return f"{e.url} ({', '.join(parts)})"
+    return f"{e.url}"
+
+
+def _badge_for_evidence(e: Evidence, quote_errors: Sequence[str]) -> str:
+    if not e.source_id:
+        if e.manual:
+            return "[✋ manual verified]"
+        return "[⚪ unlinked]"
+    if any(e.source_id in err for err in quote_errors):
+        return "[🔴 quote mismatch]"
+    return "[🟢 disk verified]"
 
 
 def bibliography(results: Sequence[ClaimResult]) -> List[Evidence]:
@@ -77,13 +94,37 @@ def render_report(
     for r in results:
         c = r.claim
         ev = "<br>".join(
-            f"“{_cell(e.quote)}” → {_loc(e)} [{_TIER.get(e.tier, 'Other')}, {e.stance.value}]"
+            f"“{_cell(e.quote)}” → {_loc(e)} [{_TIER.get(e.tier, 'Other')}, {e.stance.value}] {_badge_for_evidence(e, r.quote_errors)}"
             for e in c.evidence
         ) or "_none_"
+        weight_str = f"{c.weight.value}{f' (derived: {_cell(c.derivation)})' if c.derived and c.derivation else (' (derived)' if c.derived else '')}"
         lines.append(
             f"| {c.id} | {_fmt_time(times.get(c.cut_index))} | {c.cut_index} | {_cell(c.text)} "
-            f"| {c.weight.value} | {_BADGE[r.verdict]} | {ev} |"
+            f"| {weight_str} | {_BADGE[r.verdict]} | {ev} |"
         )
+
+    central_results = [r for r in results if r.claim.weight is ClaimWeight.CENTRAL]
+    if central_results:
+        lines += [
+            "",
+            "## Central Claim Stance Review (Human Checklist)",
+            "",
+            "> ⚠️ **Epistemic Invariant:** Disk verification confirms the quote appears verbatim in source text. "
+            "A human editor must verify that the source snippet genuinely supports the claim's interpretation.",
+            "",
+            "| Cut | ID | Claim Assertion | Confirmed Stance | Verbatim Quote in Source | Source / Location |",
+            "|---|---|---|---|---|---|",
+        ]
+        for r in central_results:
+            c = r.claim
+            if not c.evidence:
+                lines.append(f"| {c.cut_index} | {c.id} | {_cell(c.text)} | ⚠️ _no evidence_ | _none_ | _none_ |")
+            else:
+                for e in c.evidence:
+                    lines.append(
+                        f"| {c.cut_index} | {c.id} | {_cell(c.text)} | **{e.stance.value.upper()}** | "
+                        f"“{_cell(e.quote)}” | {_loc(e)} {_badge_for_evidence(e, r.quote_errors)} |"
+                    )
 
     lines += ["", "## Bibliography", ""]
     for i, e in enumerate(bibliography(results), 1):

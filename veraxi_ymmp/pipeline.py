@@ -57,6 +57,7 @@ class PipelineResult:
     srt_path: Optional[Path] = None
     upload_result: Optional[UploadResult] = None
     pacing_report: Optional[Any] = None
+    fact_audit_outcome: Optional[Any] = None
     success: bool = True
     errors: List[str] = field(default_factory=list)
 
@@ -113,6 +114,7 @@ class ProjectPipeline:
         normalize_loudness: bool = False,
         publisher: Optional[VideoPublisher] = None,
         allow_synthetic: bool = False,
+        allow_unverified: bool = False,
     ) -> PipelineResult:
         """Execute the end-to-end video synthesis pipeline for a project directory."""
         def _notify(stage: str, progress: float, message: str) -> None:
@@ -247,6 +249,47 @@ class ProjectPipeline:
             result.errors.append(str(guard_err))
             result.success = False
             return result
+
+        # Fail-closed Fact Ledger Audit & Quote Verification Gate
+        claims_path = proj_dir / "claims.json"
+        if not claims_path.is_file():
+            if not allow_unverified:
+                err_msg = (
+                    f"Fact-check gate failed: No claim ledger found at '{claims_path}'. "
+                    f"Every production project must have a claims.json (pass allow_unverified=True or --allow-unverified to bypass)."
+                )
+                logger.error(err_msg)
+                result.errors.append(err_msg)
+                result.success = False
+                return result
+            else:
+                logger.warning("Fact-check gate bypassed: No claims.json found, but allow_unverified=True.")
+        else:
+            try:
+                from .fact_audit import audit_project_facts
+
+                outcome = audit_project_facts(script_path, title=proj_dir.name)
+                result.fact_audit_outcome = outcome
+                if outcome.blocked and not allow_unverified:
+                    err_msg = f"Fact-check gate blocked project execution ({len(outcome.blockers)} blockers in claims.json):"
+                    logger.error(err_msg)
+                    result.errors.append(err_msg)
+                    for b in outcome.blockers:
+                        b_detail = f"[FACTS] {b.claim.id} (cut {b.claim.cut_index}) {b.verdict.value}: {b.reason}"
+                        logger.error(f"  - {b_detail}")
+                        result.errors.append(b_detail)
+                    result.success = False
+                    return result
+                elif outcome.blocked and allow_unverified:
+                    logger.warning(
+                        f"Fact-check gate has {len(outcome.blockers)} blockers, but overridden by allow_unverified=True."
+                    )
+            except Exception as fact_err:
+                logger.error(f"Fact audit failed with error: {fact_err}")
+                result.errors.append(f"Fact audit error: {fact_err}")
+                result.success = False
+                return result
+
 
 
         audio_dir = proj_dir / "audio"
@@ -530,6 +573,7 @@ def run_project(
     normalize_loudness: bool = False,
     publisher: Optional[VideoPublisher] = None,
     allow_synthetic: bool = False,
+    allow_unverified: bool = False,
 ) -> PipelineResult:
     """Convenience function running ProjectPipeline for a project directory."""
     pipeline = ProjectPipeline()
@@ -551,6 +595,7 @@ def run_project(
         normalize_loudness=normalize_loudness,
         publisher=publisher,
         allow_synthetic=allow_synthetic,
+        allow_unverified=allow_unverified,
     )
 
 
