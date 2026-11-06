@@ -19,6 +19,33 @@ from .voicevox import VoicevoxClient, VoicevoxError, NullTTSBackend, TTSBackend
 from .logging import setup_logging, logger
 from .script import validate_writer_script, validate_director_script, validate_director_against_writer
 
+def _cmd_render(argv: List[str]) -> None:
+    """Render a standalone production master video headlessly."""
+    from .pipeline import run_project
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp render",
+        description="Render a production master video headlessly from a project directory.",
+    )
+    parser.add_argument("project_dir", type=str, help="Path to project directory")
+    parser.add_argument("-o", "--output", type=str, default="final_video.mp4", help="Output video path (ignored, always outputs to project directory)")
+    parser.add_argument("--quality", choices=["high", "medium", "fast"], default="high", help="Quality preset (high/medium/fast)")
+    args = parser.parse_args(argv)
+
+    result = run_project(
+        project_path=args.project_dir,
+        do_premiere=False,
+        do_ymmp=False,
+        do_qa=False,
+        render_video=True,
+        do_thumbnail=False,
+        upload_to_youtube=False
+    )
+    if not result.success:
+        for err in result.errors:
+            print(f"Error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+
 def _cmd_run(argv: List[str]) -> None:
     """Run the end-to-end ProjectPipeline for a project directory."""
     from .pipeline import ProjectPipeline
@@ -32,6 +59,8 @@ def _cmd_run(argv: List[str]) -> None:
     parser.add_argument("--no-premiere", action="store_true", help="Skip Premiere XML export")
     parser.add_argument("--no-ymmp", action="store_true", help="Skip YMM4 export")
     parser.add_argument("--no-qa", action="store_true", help="Skip MoviePy QA render")
+    parser.add_argument("--render-video", "--full-render", action="store_true", dest="render_video", help="Render production master video headlessly")
+    parser.add_argument("--headless", action="store_true", help="Headless runner mode (skips YMM4 and Premiere, triggers --render-video)")
     parser.add_argument("--qa-duration", type=float, default=30.0, help="Duration for QA render in seconds")
     parser.add_argument("--no-thumbnail", action="store_true", help="Skip YouTube thumbnail generation")
     parser.add_argument("--upload-to-youtube", action="store_true", help="Upload video to YouTube upon pipeline completion")
@@ -44,6 +73,11 @@ def _cmd_run(argv: List[str]) -> None:
     parser.add_argument("--allow-unverified", action="store_true", help="Bypass fact-check gate blocking on missing or unverified claims")
 
     args = parser.parse_args(argv)
+
+    if args.headless:
+        args.no_ymmp = True
+        args.no_premiere = True
+        args.render_video = True
 
     import shutil
     from datetime import datetime
@@ -75,6 +109,7 @@ def _cmd_run(argv: List[str]) -> None:
         do_premiere=not args.no_premiere,
         do_ymmp=not args.no_ymmp,
         do_qa=not args.no_qa,
+        render_video=args.render_video,
         qa_duration=args.qa_duration,
         do_thumbnail=not args.no_thumbnail,
         upload_to_youtube=args.upload_to_youtube,
@@ -409,11 +444,13 @@ def main() -> None:
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture", "ideate", "ingest-script"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"run", "render", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture", "ideate", "ingest-script"}:
         subcmd = sys.argv[1]
         sub_argv = sys.argv[2:]
         if subcmd == "run":
             _cmd_run(sub_argv)
+        elif subcmd == "render":
+            _cmd_render(sub_argv)
         elif subcmd == "normalize":
             _cmd_normalize(sub_argv)
         elif subcmd == "broll":
