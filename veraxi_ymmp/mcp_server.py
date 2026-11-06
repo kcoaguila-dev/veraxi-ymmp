@@ -429,7 +429,7 @@ def spawn_interactive_desktop_process(cmd: str, cwd: Optional[str] = None) -> bo
         si.wShowWindow = 1       # SW_SHOWNORMAL
         pi = PROCESS_INFORMATION()
 
-        success = ctypes.windll.kernel32.CreateProcessW(
+        success = getattr(ctypes, "windll").kernel32.CreateProcessW(  # type: ignore[attr-defined]
             None,
             cmd,
             None,
@@ -442,8 +442,8 @@ def spawn_interactive_desktop_process(cmd: str, cwd: Optional[str] = None) -> bo
             ctypes.byref(pi),
         )
         if success:
-            ctypes.windll.kernel32.CloseHandle(pi.hProcess)
-            ctypes.windll.kernel32.CloseHandle(pi.hThread)
+            getattr(ctypes, "windll").kernel32.CloseHandle(pi.hProcess)  # type: ignore[attr-defined]
+            getattr(ctypes, "windll").kernel32.CloseHandle(pi.hThread)  # type: ignore[attr-defined]
             return True
     except Exception as e:
         logger.warning(f"spawn_interactive_desktop_process failed: {e}")
@@ -490,7 +490,7 @@ def launch_ymm4_desktop(project_dir: str) -> Dict[str, Any]:
             "cwd": ymm4_dir,
         }
         if os.name == "nt":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)  # type: ignore[attr-defined]
         cmd = [ymm4_path, resolved_ymmp]
         try:
             subprocess.Popen(cmd, **kwargs)

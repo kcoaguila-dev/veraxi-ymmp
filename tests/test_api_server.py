@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
+import veraxi_ymmp.youtube_auth
 from veraxi_ymmp.api_server import APIHandler
 from veraxi_ymmp.pipeline import PipelineResult
 
