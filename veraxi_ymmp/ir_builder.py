@@ -20,9 +20,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from .cache import TTSCache
 from .config import CompilerConfig
-from .constants import DEFAULT_BGM_DUCKING_VOLUME, KNOWN_CHARACTERS
+from .constants import (
+    DEFAULT_BGM_DUCKING_VOLUME,
+    DEFAULT_PUNCHLINE_PAUSE_SEC,
+    DEFAULT_SPEAKER_SPEED_MAP,
+    DEFAULT_SPEECH_PADDING_SEC,
+    KNOWN_CHARACTERS,
+)
 from .hatsuon import Hatsuon, HatsuonError
 from .ir import (
+    CameraShotIR,
     CharacterClip,
     DynamicAudioClip,
     DynamicImageClip,
@@ -33,9 +40,20 @@ from .ir import (
 from .logging import logger
 from .phonetics import normalize_tts_text, strip_phonetic_ruby
 from .script import DirectorScriptEntry, WriterScriptEntry
+from .sfx import ensure_tactile_sfx_suite
+from .staging import (
+    calculate_cut_padding,
+    detect_sfx_for_cut,
+    detect_slide_sfx,
+    resolve_camera_shot,
+)
 from .template import get_timeline
 from .utils import normalize_japanese_typography
 from .validation import sanitize_filename
+
+# Backwards compatibility aliases
+_calculate_cut_padding = calculate_cut_padding
+_resolve_camera_shot = resolve_camera_shot
 
 try:
     from .ports import TTSBackend
@@ -176,7 +194,7 @@ class TimelineIRBuilder:
             try:
                 with wave.open(str(out_path), "rb") as wav:
                     actual_duration = wav.getnframes() / float(wav.getframerate())
-                    return int((actual_duration + 0.3) * self.get_fps()), out_path, audio_query
+                    return int(actual_duration * self.get_fps()), out_path, audio_query
             except Exception as exc:
                 logger.debug(f"Failed to read WAV duration from {out_path}: {exc}")
                 return int(3.0 * self.get_fps()), out_path, audio_query
@@ -196,9 +214,17 @@ class TimelineIRBuilder:
         else:
             if self.tts_backend is None:
                 raise RuntimeError("TTS Backend not initialized")
+            speed_scale = getattr(self.config, "speaker_speed_map", {}).get(
+                char_name, DEFAULT_SPEAKER_SPEED_MAP.get(char_name, 1.0)
+            )
             try:
-                wav_bytes, duration, audio_query = self.tts_backend.synthesize(tts_text, speaker_id)
-                self.cache.set(tts_text, speaker_id, wav_bytes, duration)
+                wav_bytes, duration, audio_query = self.tts_backend.synthesize(
+                    tts_text, speaker_id, speed_scale=speed_scale
+                )
+            except TypeError:
+                wav_bytes, duration, audio_query = self.tts_backend.synthesize(
+                    tts_text, speaker_id
+                )
             except Exception as e:
                 raise RuntimeError(f"Synthesis failed for '{char_name}' on line '{text}': {e}")
 
@@ -265,10 +291,18 @@ class TimelineIRBuilder:
         current_frame = 0
         audio_files: List[Path] = []
         voice_clips: List[VoiceClip] = []
+        camera_shots: List[CameraShotIR] = []
         character_positions: Dict[str, str] = {}
         dynamic_image_clips: List[DynamicImageClip] = []
         dynamic_audio_clips: List[DynamicAudioClip] = []
         active_bg: Optional[DynamicImageClip] = None
+        prev_entry: Optional[Dict[str, Any]] = None
+
+        sfx_suite: Dict[str, Path] = {}
+        try:
+            sfx_suite = ensure_tactile_sfx_suite()
+        except Exception as exc:
+            logger.debug(f"Failed to load tactile SFX suite: {exc}")
 
         for idx, line in enumerate(script):
             entry_dict: Dict[str, Any] = cast(Dict[str, Any], line)
@@ -392,13 +426,15 @@ class TimelineIRBuilder:
 
             audio_path = None
             audio_query = None
+            actual_duration = 0.0
 
             if self.config.use_tts and self.tts_backend:
                 if not self.tts_backend.is_available():
                     raise RuntimeError("TTS Backend not reachable")
-                length, audio_path, audio_query = self.synthesize_audio(
+                raw_len, audio_path, audio_query = self.synthesize_audio(
                     idx, char_name, tts_source, audio_dir
                 )
+                actual_duration = raw_len / float(fps)
             else:
                 # Check for existing audio file in audio_dir to get accurate length and query
                 audio_filename = f"{idx:03d}_{sanitize_filename(char_name)}.wav"
@@ -420,13 +456,20 @@ class TimelineIRBuilder:
                             frames = wav.getnframes()
                             rate = wav.getframerate()
                             actual_duration = frames / float(rate)
-                            length = int((actual_duration + 0.3) * fps)  # Add 0.3s padding
                     except Exception as e:
                         logger.warning(f"Could not read wav length for {audio_filename}: {e}")
+
+            padding_sec = _calculate_cut_padding(
+                entry_dict,
+                prev_entry,
+                getattr(self.config, "inter_cut_padding_sec", DEFAULT_SPEECH_PADDING_SEC),
+                getattr(self.config, "punchline_pause_sec", DEFAULT_PUNCHLINE_PAUSE_SEC),
+            )
 
             if audio_path and audio_path.exists():
                 if audio_path not in audio_files:
                     audio_files.append(audio_path)
+                length = max(self.config.min_length_frames, int((actual_duration + padding_sec) * fps))
             else:
                 length = self.calculate_placeholder_length(text)
 
@@ -449,6 +492,31 @@ class TimelineIRBuilder:
                     audio_query=audio_query,
                 )
             )
+
+            has_slide = bool(
+                entry_dict.get("image")
+                and not any(k in str(entry_dict.get("image")).lower() for k in ("bg", "room", "classroom"))
+            )
+            camera_shot = _resolve_camera_shot(
+                entry=entry_dict,
+                cut_idx=len(voice_clips) - 1,
+                start_frame=current_frame,
+                length=length,
+                has_slide=has_slide,
+            )
+            camera_shots.append(camera_shot)
+
+            has_tactile_sfx = getattr(self.config, "enable_tactile_sfx", False)
+            if has_tactile_sfx:
+                dynamic_audio_clips.extend(
+                    detect_sfx_for_cut(
+                        entry=entry_dict,
+                        camera_shot=camera_shot,
+                        sfx_suite=sfx_suite,
+                        current_frame=current_frame,
+                        fps=fps,
+                    )
+                )
 
             def add_image_clip(img_name: str) -> None:
                 img_path = Path("artifacts/.user_uploaded") / img_name
@@ -489,6 +557,10 @@ class TimelineIRBuilder:
                             is_background=False,
                         )
                     )
+                    if has_tactile_sfx:
+                        slide_sfx = detect_slide_sfx(sfx_suite, current_frame, fps)
+                        if slide_sfx:
+                            dynamic_audio_clips.append(slide_sfx)
                 else:
                     msg = f"Image not found: {img_name}"
                     logger.warning(msg)
@@ -528,6 +600,7 @@ class TimelineIRBuilder:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
+            prev_entry = entry_dict
             current_frame += length
 
         total_frames = current_frame
@@ -573,6 +646,7 @@ class TimelineIRBuilder:
                 global_clips=global_clips,
                 dynamic_image_clips=dynamic_image_clips,
                 dynamic_audio_clips=dynamic_audio_clips,
+                camera_shots=camera_shots,
                 template_data=self.template_data,
             ),
             audio_files,

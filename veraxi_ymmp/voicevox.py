@@ -59,11 +59,18 @@ class VoicevoxClient:
         return await loop.run_in_executor(None, self.is_available)
 
     async def synthesize_async(
-        self, text: str, speaker_id: int
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
     ) -> Tuple[bytes, float, Dict[str, Any]]:
         """Async version of synthesize."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.synthesize, text, speaker_id)
+        return await loop.run_in_executor(
+            None, self.synthesize, text, speaker_id, speed_scale, clamp_silence
+        )
 
     def ensure_started(self) -> bool:
         """Attempts to start VOICEVOX if it's not currently available."""
@@ -229,13 +236,22 @@ class VoicevoxClient:
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to fetch audio_query: {e}")
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+    def synthesize(
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
         """
         Synthesize speech from text using a specific speaker.
 
         Args:
             text: Text to synthesize.
             speaker_id: ID of the speaker to use.
+            speed_scale: Optional speech speed multiplier (e.g. 1.18 for rapid ping-pong).
+            clamp_silence: If True, reduces leading and trailing phoneme silence to 0.02s.
 
         Returns:
             Tuple of (WAV audio bytes, duration in seconds, AudioQuery dictionary).
@@ -250,6 +266,13 @@ class VoicevoxClient:
             query_res = requests.post(f"{self.base_url}/audio_query", params=params, timeout=30)
             query_res.raise_for_status()
             audio_query = tune_audio_query_pitch(cast(Dict[str, Any], query_res.json()))
+            if speed_scale is not None and speed_scale > 0.0:
+                audio_query["speedScale"] = float(speed_scale)
+            if clamp_silence:
+                if "prePhonemeLength" in audio_query:
+                    audio_query["prePhonemeLength"] = min(float(audio_query["prePhonemeLength"]), 0.02)
+                if "postPhonemeLength" in audio_query:
+                    audio_query["postPhonemeLength"] = min(float(audio_query["postPhonemeLength"]), 0.02)
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to create audio_query: {e}")
 

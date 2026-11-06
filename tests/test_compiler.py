@@ -141,8 +141,8 @@ def test_compile_tts(tmp_path):
 
     # Assert proper speaker routing
     assert mock_client.synthesize.call_count == 2
-    mock_client.synthesize.assert_any_call("こんにちは", 10)
-    mock_client.synthesize.assert_any_call("こんばんは", 3)
+    assert any(c.args[:2] == ("こんにちは", 10) for c in mock_client.synthesize.mock_calls)
+    assert any(c.args[:2] == ("こんばんは", 3) for c in mock_client.synthesize.mock_calls)
 
 
 def test_compile_director_script(tmp_path):

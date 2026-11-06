@@ -30,3 +30,20 @@ def test_export_spec_json(capsys):
     assert "character" in schema["items"]["properties"]
     assert "text" in schema["items"]["properties"]
     assert "emotion" in schema["items"]["properties"]
+
+
+def test_export_spec_gemini_flash(capsys, tmp_path):
+    output_path = tmp_path / "gemini_prompt.md"
+    _cmd_export_spec(["--target", "gemini-flash", "--output", str(output_path)])
+
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+
+    assert "Role: Lead Scriptwriter & Staging Director" in content
+    assert "0-Second Cold Open Invariant" in content
+    assert "50 / 30 / 20 Rule" in content
+    assert "broll_manifest" in content
+    assert "ずんだもん" in content
+
+    out, err = capsys.readouterr()
+    assert f"Exported to {output_path}" in out

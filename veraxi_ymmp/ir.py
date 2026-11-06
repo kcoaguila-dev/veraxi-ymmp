@@ -54,6 +54,17 @@ class DynamicAudioClip(IRClip):
     audio_path: Path
     volume: float = 1.0
 
+
+@dataclass
+class CameraShotIR(IRClip):
+    """Represents a virtual camera framing, zoom, or punch-in across a duration."""
+    shot_type: str = "wide"  # "wide", "focus_left", "focus_right", "punch_in_reactor", "slide_focus"
+    zoom: float = 1.0        # 1.0 = standard 1080p, 1.22 = focus, 1.35 = panic close-up
+    pan_x: float = 0.0       # Pixel offset X from center
+    pan_y: float = 0.0       # Pixel offset Y from center
+    shake_frames: int = 0    # Camera shake frames on impact beats
+
+
 @dataclass
 class TimelineIR:
     fps: int
@@ -63,6 +74,7 @@ class TimelineIR:
     global_clips: List[GlobalClip] = field(default_factory=list)
     dynamic_image_clips: List[DynamicImageClip] = field(default_factory=list)
     dynamic_audio_clips: List[DynamicAudioClip] = field(default_factory=list)
+    camera_shots: List[CameraShotIR] = field(default_factory=list)
 
     # We still need to pass down the template data so the YMM4 renderer knows how to style things
     template_data: Dict[str, Any] = field(default_factory=dict)

@@ -168,8 +168,9 @@ class PremiereExporter:
 
         audio_tracks = []
         audio_tracks.append(SubElement(audio, 'track'))  # A1: BGM
+        audio_tracks.append(SubElement(audio, 'track'))  # A2: SFX
         for _ in unique_chars:
-            audio_tracks.append(SubElement(audio, 'track'))  # A2+: Voices
+            audio_tracks.append(SubElement(audio, 'track'))  # A3+: Voices
 
         return root, video_tracks, audio_tracks, total_frames, unique_chars
 
@@ -410,7 +411,8 @@ class PremiereExporter:
 
     def _populate_audio(self, audio_tracks: List[Element], unique_chars: List[str], total_frames: int) -> None:
         fps = self.fps
-        a1_track = audio_tracks[0]
+        a1_track = audio_tracks[0]  # A1: BGM
+        a2_track = audio_tracks[1]  # A2: SFX
 
         # Global clips audio (BGM)
         for i, gc in enumerate(self.ir.global_clips):
@@ -448,46 +450,60 @@ class PremiereExporter:
                 SubElement(param, 'name').text = "Level"
                 SubElement(param, 'value').text = "0.17"
 
-        # Dynamic BGM
+        # Dynamic Audio Clips (BGM on A1, SFX on A2)
         for i, ac in enumerate(self.ir.dynamic_audio_clips):
-            if ac.audio_path:
-                clip = SubElement(a1_track, 'clipitem', id=f"bgm_{i}")
-                SubElement(clip, 'name').text = "BGM"
-                SubElement(clip, 'duration').text = str(total_frames)
-                SubElement(clip, 'start').text = "0"
-                SubElement(clip, 'end').text = str(total_frames)
-                SubElement(clip, 'in').text = "0"
-                SubElement(clip, 'out').text = str(total_frames)
+            if not ac.audio_path:
+                continue
 
-                file = SubElement(clip, 'file', id=f"file_bgm_{i}")
-                SubElement(file, 'name').text = Path(ac.audio_path).name
-                SubElement(file, 'pathurl').text = f"file://localhost/{str(Path(ac.audio_path).absolute()).replace(os.sep, '/')}"
-                f_rate = SubElement(file, 'rate')
-                SubElement(f_rate, 'timebase').text = str(fps)
-                SubElement(f_rate, 'ntsc').text = 'FALSE'
-                media_elem = SubElement(file, 'media')
-                audio_elem = SubElement(media_elem, 'audio')
-                a_sc = SubElement(audio_elem, 'samplecharacteristics')
-                SubElement(a_sc, 'depth').text = '16'
-                SubElement(a_sc, 'samplerate').text = '48000'
-                SubElement(audio_elem, 'channelcount').text = '2'
+            is_bgm = ac.length == -1 or "bgm" in str(ac.audio_path).lower()
+            target_track = a1_track if is_bgm else a2_track
+            clip_name = "BGM" if is_bgm else "SFX"
+            clip_id = f"bgm_{i}" if is_bgm else f"sfx_{i}"
 
-                filter_elem = SubElement(clip, 'filter')
-                effect = SubElement(filter_elem, 'effect')
-                SubElement(effect, 'name').text = "Audio Levels"
-                SubElement(effect, 'effectid').text = "audiolevels"
-                SubElement(effect, 'effecttype').text = "audiolevels"
-                SubElement(effect, 'mediatype').text = "audio"
-                param = SubElement(effect, 'parameter')
-                SubElement(param, 'parameterid').text = "level"
-                SubElement(param, 'name').text = "Level"
-                SubElement(param, 'value').text = "0.17"
+            start_f = 0 if is_bgm else ac.start_frame
+            dur = total_frames if is_bgm else max(1, ac.length)
+            end_f = total_frames if is_bgm else start_f + dur
 
-        # Voices
+            clip = SubElement(target_track, 'clipitem', id=clip_id)
+            SubElement(clip, 'name').text = clip_name
+            SubElement(clip, 'duration').text = str(dur)
+            SubElement(clip, 'start').text = str(start_f)
+            SubElement(clip, 'end').text = str(end_f)
+            SubElement(clip, 'in').text = "0"
+            SubElement(clip, 'out').text = str(dur)
+
+            file = SubElement(clip, 'file', id=f"file_{clip_id}")
+            SubElement(file, 'name').text = Path(ac.audio_path).name
+            SubElement(file, 'pathurl').text = f"file://localhost/{str(Path(ac.audio_path).absolute()).replace(os.sep, '/')}"
+            f_rate = SubElement(file, 'rate')
+            SubElement(f_rate, 'timebase').text = str(fps)
+            SubElement(f_rate, 'ntsc').text = 'FALSE'
+            media_elem = SubElement(file, 'media')
+            audio_elem = SubElement(media_elem, 'audio')
+            a_sc = SubElement(audio_elem, 'samplecharacteristics')
+            SubElement(a_sc, 'depth').text = '16'
+            SubElement(a_sc, 'samplerate').text = '48000'
+            SubElement(audio_elem, 'channelcount').text = '2'
+
+            vol = ac.volume if ac.volume is not None else (0.17 if is_bgm else 0.5)
+            level_str = f"{vol:.2f}"
+
+            filter_elem = SubElement(clip, 'filter')
+            effect = SubElement(filter_elem, 'effect')
+            SubElement(effect, 'name').text = "Audio Levels"
+            SubElement(effect, 'effectid').text = "audiolevels"
+            SubElement(effect, 'effecttype').text = "audiolevels"
+            SubElement(effect, 'mediatype').text = "audio"
+            param = SubElement(effect, 'parameter')
+            SubElement(param, 'parameterid').text = "level"
+            SubElement(param, 'name').text = "Level"
+            SubElement(param, 'value').text = level_str
+
+        # Voices (A3+)
         for i, vc in enumerate(self.ir.voice_clips):
             if vc.audio_path:
                 char_idx = unique_chars.index(vc.character)
-                a_track = audio_tracks[1 + char_idx]
+                a_track = audio_tracks[2 + char_idx]
 
                 clip = SubElement(a_track, 'clipitem', id=f"voice_{i}")
                 SubElement(clip, 'name').text = f"Voice ({vc.character})"

@@ -22,6 +22,9 @@ from .constants import (
     DEFAULT_SPEECH_TARGET_TP,
     DEFAULT_AUDIO_SAMPLE_RATE,
     DEFAULT_BGM_DUCKING_VOLUME,
+    DEFAULT_SPEAKER_SPEED_MAP,
+    DEFAULT_SPEECH_PADDING_SEC,
+    DEFAULT_PUNCHLINE_PAUSE_SEC,
 )
 
 
@@ -36,6 +39,10 @@ class CompilerConfig:
     voicevox_timeout: int = DEFAULT_VOICEVOX_TIMEOUT
     default_speaker_id: int = DEFAULT_SPEAKER_ID
     speaker_map: Dict[str, int] = field(default_factory=dict)
+    speaker_speed_map: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_SPEAKER_SPEED_MAP))
+    inter_cut_padding_sec: float = DEFAULT_SPEECH_PADDING_SEC
+    punchline_pause_sec: float = DEFAULT_PUNCHLINE_PAUSE_SEC
+    enable_tactile_sfx: bool = False
     use_cache: bool = True
     cache_dir: Optional[Path] = None
     use_bom: bool = False

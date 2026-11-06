@@ -34,85 +34,18 @@ from .template import get_timeline
 from .typography import wrap_japanese
 from .utils import normalize_japanese_typography
 
+from .ymmp_utils import (
+    _anim_val,
+    _build_image_item,
+    _format_voice_duration,
+    _get_vertical_broll_zoom,
+    _is_background_clip,
+)
+
 if TYPE_CHECKING:
     pass
 
 ScriptEntry = Union[WriterScriptEntry, DirectorScriptEntry, Dict[str, Any]]
-
-
-def _anim_val(val: float, span: float = 0.0, anim_type: str = "なし") -> Dict[str, Any]:
-    """Create a standard YMM4 animated property dictionary."""
-    return {"Values": [{"Value": val}], "Span": span, "AnimationType": anim_type}
-
-
-def _format_voice_duration(sec: float) -> str:
-    """Format duration in seconds into YMM4 TimeSpan string (HH:MM:SS.fffffff)."""
-    hours = int(sec // 3600)
-    mins = int((sec % 3600) // 60)
-    secs = sec % 60
-    return f"{hours:02d}:{mins:02d}:{secs:09.6f}0"
-
-
-def _is_background_clip(ic: Any) -> bool:
-    """Return True if a dynamic image clip is a background rather than B-roll."""
-    if getattr(ic, "is_background", False) or getattr(ic, "is_bg", False):
-        return True
-    p_str = str(getattr(ic, "image_path", "")).lower()
-    return any(
-        k in p_str
-        for k in (
-            "assets/bg",
-            "assets\\bg",
-            "classroom",
-            "room",
-            "living_room",
-            "washitsu",
-            "clean_classroom",
-        )
-    )
-
-
-def _get_vertical_broll_zoom(img_path: Union[str, Path]) -> float:
-    """Calculate optimal YMM4 zoom for a B-roll image on a 1080x1920 vertical canvas."""
-    try:
-        from PIL import Image
-        with Image.open(img_path) as im:
-            w = im.size[0]
-            if w > 1080:
-                return round((1080.0 / float(w)) * 100.0, 2)
-    except Exception:
-        pass
-    return 100.0
-
-
-def _build_image_item(
-    file_path: Union[str, Path],
-    frame: int,
-    length: int,
-    layer: int,
-    x: float = 0.0,
-    y: float = 0.0,
-    zoom: Union[float, Dict[str, Any]] = 100.0,
-    animated_opacity_rot: bool = False,
-) -> Dict[str, Any]:
-    """Construct a YMM4 ImageItem dictionary."""
-    zoom_dict = zoom if isinstance(zoom, dict) else _anim_val(zoom)
-    opacity_dict = _anim_val(100.0) if animated_opacity_rot else {"Values": [{"Value": 100.0}]}
-    rot_dict = _anim_val(0.0) if animated_opacity_rot else {"Values": [{"Value": 0.0}]}
-    return {
-        "$type": "YukkuriMovieMaker.Project.Items.ImageItem, YukkuriMovieMaker",
-        "FilePath": str(file_path),
-        "X": _anim_val(x),
-        "Y": _anim_val(y),
-        "Opacity": opacity_dict,
-        "Zoom": zoom_dict,
-        "Rotation": rot_dict,
-        "Blend": "Normal",
-        "Layer": layer,
-        "Frame": frame,
-        "Length": length,
-        "VideoEffects": [],
-    }
 
 
 @dataclass
@@ -679,30 +612,65 @@ class YMMPRenderer:
             )
 
 
+        # 5. Layer 3: BGM AudioItem (if present in dynamic audio clips)
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
-            is_looped = d_audio_clip.length == -1
+            if d_audio_clip.audio_path and (d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower()):
+                clip_vol = (
+                    d_audio_clip.volume * 100.0
+                    if d_audio_clip.volume <= 1.0
+                    else d_audio_clip.volume
+                )
+                items.append(
+                    {
+                        "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+                        "FilePath": str(d_audio_clip.audio_path.resolve()),
+                        "Volume": _anim_val(clip_vol),
+                        "Pan": {"Values": [{"Value": 0.0}]},
+                        "PlaybackRate": 100.0,
+                        "Layer": 3,
+                        "Frame": 0,
+                        "Length": timeline_ir.total_frames,
+                        "IsLooped": True,
+                    }
+                )
+                break
+
+        # SFX items placed on dedicated non-overlapping layers (Layer 11+)
+        sfx_layer_busy_until: Dict[int, int] = {}
+        for d_audio_clip in timeline_ir.dynamic_audio_clips:
+            if not d_audio_clip.audio_path:
+                continue
+            is_looped = d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower()
+            if is_looped:
+                # Looped BGM was already configured above on Layer 3
+                continue
+
+            clip_start = d_audio_clip.start_frame
+            clip_len = max(1, d_audio_clip.length)
+            clip_end = clip_start + clip_len
+
+            # Greedy non-overlapping allocation starting from Layer 11
+            sfx_layer = 11
+            while sfx_layer in sfx_layer_busy_until and sfx_layer_busy_until[sfx_layer] > clip_start:
+                sfx_layer += 1
+            sfx_layer_busy_until[sfx_layer] = clip_end
+
             clip_vol = (
                 d_audio_clip.volume * 100.0
                 if d_audio_clip.volume <= 1.0
                 else d_audio_clip.volume
             )
-            volume = clip_vol if is_looped else 50.0
-            length = (
-                timeline_ir.total_frames - d_audio_clip.start_frame
-                if is_looped
-                else d_audio_clip.length
-            )
             items.append(
                 {
                     "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
                     "FilePath": str(d_audio_clip.audio_path.resolve()),
-                    "Volume": _anim_val(volume),
+                    "Volume": _anim_val(clip_vol),
                     "Pan": {"Values": [{"Value": 0.0}]},
                     "PlaybackRate": 100.0,
-                    "Layer": 5,
-                    "Frame": d_audio_clip.start_frame,
-                    "Length": length,
-                    "IsLooped": is_looped,
+                    "Layer": sfx_layer,
+                    "Frame": clip_start,
+                    "Length": clip_len,
+                    "IsLooped": False,
                 }
             )
 

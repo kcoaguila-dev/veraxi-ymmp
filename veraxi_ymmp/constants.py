@@ -45,3 +45,12 @@ KNOWN_CHARACTERS: tuple[str, ...] = ("ずんだもん", "四国めたん", "春�
 DEFAULT_SPEECH_TARGET_LUFS: float = -16.0
 DEFAULT_SPEECH_TARGET_TP: float = -1.5
 DEFAULT_AUDIO_SAMPLE_RATE: int = 48000
+
+# Audio tempo sculpting and zero-gap clamping defaults
+DEFAULT_SPEAKER_SPEED_MAP: Dict[str, float] = {
+    "ずんだもん": 1.18,
+    "四国めたん": 1.12,
+    "春日部つむぎ": 1.14,
+}
+DEFAULT_SPEECH_PADDING_SEC: float = 0.05
+DEFAULT_PUNCHLINE_PAUSE_SEC: float = 0.25

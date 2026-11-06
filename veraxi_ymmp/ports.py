@@ -50,11 +50,23 @@ class TTSBackend(Protocol):
     def is_available(self) -> bool:
         ...
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+    def synthesize(
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
         ...
 
     async def synthesize_async(
-        self, text: str, speaker_id: int
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
     ) -> Tuple[bytes, float, Dict[str, Any]]:
         ...
 
@@ -71,11 +83,23 @@ class NullTTSBackend:
     def get_audio_query(self, text: str, speaker_id: int) -> Dict[str, Any]:
         return {}
 
-    def synthesize(self, text: str, speaker_id: int) -> Tuple[bytes, float, Dict[str, Any]]:
+    def synthesize(
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
+    ) -> Tuple[bytes, float, Dict[str, Any]]:
         return b"", 0.0, {}
 
     async def synthesize_async(
-        self, text: str, speaker_id: int
+        self,
+        text: str,
+        speaker_id: int,
+        speed_scale: Optional[float] = None,
+        clamp_silence: bool = True,
+        **kwargs: Any,
     ) -> Tuple[bytes, float, Dict[str, Any]]:
         return b"", 0.0, {}
 

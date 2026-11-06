@@ -454,10 +454,68 @@ class MoviePyRenderer:
             c_mask = VideoClip(frame_function=make_mouth_mask(char, emotion_clips), is_mask=True).with_duration(total_duration)
             c_clip = c_clip.with_mask(c_mask).with_position(make_bounce_offset(char, x_offsets[char]))
             video_clips.append(c_clip)
-        video_clips.extend(bubbles_list)
 
-        logger.info("Compositing video...")
-        final_video = CompositeVideoClip(video_clips, size=(target_w, target_h)).with_duration(total_duration)
+        logger.info("Compositing scene elements...")
+        scene_video = CompositeVideoClip(video_clips, size=(target_w, target_h)).with_duration(total_duration)
+
+        # Apply Dynamic Virtual Camera Shot IR (Pan, Zoom, Punch-in, Shake)
+        camera_shots = getattr(self.ir, "camera_shots", [])
+        if camera_shots:
+            from PIL import Image
+
+            def get_active_camera_shot(t: float) -> Optional[Any]:
+                fr = int(t * fps)
+                for shot in camera_shots:
+                    if shot.start_frame <= fr < shot.start_frame + shot.length:
+                        return shot
+                return None
+
+            base_frame_fn = scene_video.frame_function
+
+            def camera_frame_fn(t: float) -> np.ndarray:
+                frame = cast(np.ndarray, base_frame_fn(t))
+                shot = get_active_camera_shot(t)
+                if shot is None or (shot.zoom <= 1.01 and shot.pan_x == 0.0 and shot.pan_y == 0.0):
+                    return frame
+
+                zoom = max(1.0, float(shot.zoom))
+                pan_x = float(shot.pan_x)
+                pan_y = float(shot.pan_y)
+
+                if getattr(shot, "shake_frames", 0) > 0:
+                    fr = int(t * fps)
+                    elapsed_fr = fr - shot.start_frame
+                    if elapsed_fr < shot.shake_frames:
+                        shake_sign = 1 if (elapsed_fr % 2 == 0) else -1
+                        pan_x += shake_sign * 8.0
+                        pan_y -= shake_sign * 4.0
+
+                h, w = frame.shape[:2]
+                crop_w = int(w / zoom)
+                crop_h = int(h / zoom)
+
+                cx = int(w / 2.0 + pan_x)
+                cy = int(h / 2.0 + pan_y)
+
+                x1 = max(0, min(w - crop_w, cx - crop_w // 2))
+                y1 = max(0, min(h - crop_h, cy - crop_h // 2))
+                x2 = x1 + crop_w
+                y2 = y1 + crop_h
+
+                cropped = frame[y1:y2, x1:x2]
+                img = Image.fromarray(cropped)
+                resized = img.resize((w, h), Image.Resampling.BILINEAR)
+                return cast(np.ndarray, np.array(resized))
+
+            scene_video = VideoClip(frame_function=camera_frame_fn).with_duration(total_duration)
+
+        # Overlay HUD speech bubbles above virtual camera rig
+        if bubbles_list:
+            logger.info("Overlaying speech bubbles above virtual camera rig...")
+            final_video = CompositeVideoClip([scene_video, *bubbles_list], size=(target_w, target_h)).with_duration(total_duration)
+        else:
+            final_video = scene_video
+
         # 6. Global Audio (BGM/SFX)
         from moviepy.audio.fx import AudioFadeOut
 

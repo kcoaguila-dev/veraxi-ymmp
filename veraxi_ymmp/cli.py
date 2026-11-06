@@ -325,6 +325,12 @@ def _cmd_export_spec(argv: List[str]) -> None:
         default="markdown",
         help="Export format (markdown or json)",
     )
+    parser.add_argument(
+        "--target",
+        choices=["universal", "gemini-flash"],
+        default="universal",
+        help="Prompt target flavor (universal or gemini-flash)",
+    )
     args = parser.parse_args(argv)
 
     if args.format == "json":
@@ -332,12 +338,18 @@ def _cmd_export_spec(argv: List[str]) -> None:
         out_content = json.dumps(get_director_script_schema(), indent=2, ensure_ascii=False)
     else:
         # Load markdown
-        md_path = Path(__file__).parent / "templates" / "UNIVERSAL_AI_PROMPT.md"
+        template_name = (
+            "GEMINI_FLASH_LOW_SYSTEM_PROMPT.md"
+            if args.target == "gemini-flash"
+            else "UNIVERSAL_AI_PROMPT.md"
+        )
+        md_path = Path(__file__).parent / "templates" / template_name
         out_content = md_path.read_text(encoding="utf-8")
-        # Replace or append character list if needed
-        from .constants import DEFAULT_SPEAKER_MAP
-        chars = ", ".join(f"`{c}`" for c in DEFAULT_SPEAKER_MAP.keys())
-        out_content += f"\n\n## Available Characters\n{chars}\n"
+        if args.target == "universal":
+            # Replace or append character list if needed
+            from .constants import DEFAULT_SPEAKER_MAP
+            chars = ", ".join(f"`{c}`" for c in DEFAULT_SPEAKER_MAP.keys())
+            out_content += f"\n\n## Available Characters\n{chars}\n"
 
     if args.output:
         Path(args.output).write_text(out_content, encoding="utf-8")
