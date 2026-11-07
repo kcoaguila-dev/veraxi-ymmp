@@ -68,6 +68,7 @@ def stress_project_dir(tmp_path: Path) -> Path:
     thumb_path = proj / "thumbnail.png"
     thumb_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
 
+    (proj / "claims.json").write_text("[]\n", encoding="utf-8")
     return proj
 
 
