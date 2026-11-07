@@ -1,93 +1,114 @@
-# Veraxi YMMP: Agent Workspace Guidelines & Teamwork Blueprint
+# Veraxi YMMP: Senior Architect Governance & Compiler Blueprint
 
-Welcome to `veraxi-ymmp`. This document governs agent behavior, Clean Architecture invariants, and multi-agent coordination patterns (`/teamwork-preview`).
+Welcome to `veraxi-ymmp`. This document governs agent behavior, **3-Tier Compiler Pipeline + Hexagonal Targets** architectural invariants, epistemic anti-slop gates, and multi-agent coordination patterns (`/teamwork-preview`).
 
 ---
 
 ## 1. Architectural Invariants (Non-Negotiable)
 
-Any agent or subagent modifying this codebase must adhere to the Clean Architecture rules verified by `tests/test_architectural_fitness.py`:
+`veraxi-ymmp` is structured as a **Multi-Target Media Compiler with Static Analysis Gates** (modeled after Pandoc / LLVM / Manim), not a flat script dump or CRUD boilerplate. Any agent or subagent modifying this codebase must adhere to the invariants verified by `tests/test_architectural_fitness.py`:
 
-1. **Dependency Inversion:** Dependencies flow strictly inwards:
-   - `Domain` (`ir.py`, `script.py`, `constants.py`) has **zero dependencies** on outer layers.
-   - `Ports` (`ports.py`) defines abstract protocols (`TimelineExporter`, `TTSBackend`).
-   - `Application` (`pipeline.py`, `compiler.py`, `ir_builder.py`) coordinates domain models and ports.
-   - `Infrastructure Adapters` (`ymmp_renderer.py`, `premiere_exporter.py`, `moviepy_renderer.py`, etc.) implement ports.
-2. **Adapter Isolation:** Infrastructure adapters must **never import from peer adapters** directly.
-3. **Module Size Ceiling:** No Python file in `veraxi_ymmp/` may exceed 900 lines.
-4. **Privacy & Security:** Zero hardcoded local machine paths or developer usernames (`scripts/check_no_local_paths.py`). Zero committed API keys or secrets.
+### 1.1 The 3-Tier Compiler DAG & Bounded Subpackages
+Dependencies flow strictly downwards (`Tier 3 -> Tier 2 -> Tier 1`):
+
+```text
+veraxi_ymmp/
+├── core/        [Tier 1] Pure AST, TimelineIR, Script, Staging, Ports & Primitives (0 outer deps)
+├── epistemic/   [Tier 2] Fact-Checking, Pint Units, MeCab NLP, PDF/iXBRL/Web Source Grounding
+├── editorial/   [Tier 2] Pre-Production, BudouX Ingestion, Pacing & 50/30/20 Retention Linting
+├── graphics/    [Tier 2] Pro Dark Slate B-Roll, Infographics, 3-Split Thumbnails, PSD & Typography
+├── audio/       [Tier 2] VoiceVox TTS, Hatsuon Pitch Accent, Phonetics, EBU R128 (-16 LUFS) & SFX
+├── exporters/   [Tier 2] Hexagonal Targets: YMM4 (.ymmp), Premiere (.xml), MoviePy (.mp4), AE, SRT, YouTube
+└── app/         [Tier 3] Orchestration Pipeline, Compiler, CLI, FastAPI Studio & MCP Server
+```
+
+1. **Tier 1 Purity (`core/`):** Modules in `core/` (`ir.py`, `script.py`, `staging.py`, `template.py`, `ports.py`, `constants.py`, `config.py`, `logging.py`, `utils.py`) must have **zero dependencies** on Tier 2 or Tier 3.
+2. **Tier 2 Pass & Adapter Isolation:**
+   - Tier 2 packages (`epistemic/`, `editorial/`, `graphics/`, `audio/`, `exporters/`) must **never import from Tier 3 (`app/`)**.
+   - Target exporters inside `exporters/` (`ymmp_renderer.py`, `premiere_exporter.py`, `moviepy_renderer.py`, `ae_renderer.py`, `srt_generator.py`) must **never import from peer exporters**.
+3. **Anti-Fragmentation & Module Size Window (100–900 Lines):**
+   - **Hard Ceiling:** No Python file in `veraxi_ymmp/` may exceed **900 lines**.
+   - **Anti-Splinter Rule:** Never dump single-purpose micro-files (`<100` lines) at the package root to dodge the 900-line ceiling. Cohesive helpers belong inside their bounded subpackage module.
+4. **Epistemic & Retention Compiler Gates (Fail-Closed):**
+   - No project may compile without passing deterministic static analysis:
+     - **Epistemic Gate (`epistemic/`):** `pint` dimensional/unit compatibility, `mecab` morphological lemma & clause-scoped negation verification, `pypdf` / DOM-scoped table scale extraction, and SHA-256 primary source provenance.
+     - **Editorial & Typography Gate (`editorial/`):** Google `budoux` Japanese phrase segmentation (protecting `{Kanji|ruby}` tags, $\le 38$ chars/cut, $\le 2$ lines/bubble) and $\ge 80/100$ Retention Score.
+5. **Privacy & Security:** Zero hardcoded local machine paths or developer usernames (`scripts/check_no_local_paths.py`). Zero committed API keys or secrets.
 
 ---
 
 ## 2. Multi-Agent Teamwork Topology (`/teamwork-preview`)
 
-When executing complex tasks via `/teamwork-preview`, the orchestrator must structure the subagent squad into five decoupled roles:
+When executing complex tasks via `/teamwork-preview`, the orchestrator structures the subagent squad into five decoupled roles aligned with the compiler subpackages:
 
 ```
-                  ┌───────────────────────────────┐
-                  │  Lead Orchestrator / Director │
-                  └───────────────┬───────────────┘
-         ┌────────────────────────┼────────────────────────┐
-         ▼                        ▼                        ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│ Script & Staging │    │ Creative Designer│    │ Audio & Compiler │
-│  (Dialogue/Cues) │    │ (B-Roll / Thumb) │    │ (VoiceVox / IR)  │
-└────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘
-         └────────────────────────┼────────────────────────┘
-                                  ▼
-                     ┌──────────────────────────┐
-                     │    QA / Test Sentinel    │
-                     │ (Runs ymmp-qa & fitness) │
-                     └──────────────────────────┘
+                     ┌──────────────────────────────────┐
+                     │   Lead Orchestrator / Architect  │
+                     │          (Tier 3: app/)          │
+                     └─────────────────┬────────────────┘
+            ┌──────────────────────────┼──────────────────────────┐
+            ▼                          ▼                          ▼
+┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
+│ Editorial & Epistemic│   │   Graphics Designer  │   │  Audio & Exporters   │
+│(editorial/epistemic/)│   │     (graphics/)      │   │ (audio/ & exporters/)│
+└───────────┬──────────┘   └───────────┬──────────┘   └───────────┬──────────┘
+            └──────────────────────────┼──────────────────────────┘
+                                       ▼
+                         ┌──────────────────────────┐
+                         │    QA & Fitness Sentinel │
+                         │ (Fitness + Fact + Video) │
+                         └──────────────────────────┘
 ```
 
-### Role Specializations
+### Role Specializations & Package Ownership
 
-#### 1. Lead Orchestrator
-- **Scope:** Conducts user interview, defines boundaries, generates the Team Sheet artifact, and gates milestones.
-- **Rules:** Ensures tasks are modular and subagents do not overwrite each other's outputs.
+#### 1. Lead Orchestrator / Architect (`app/`)
+- **Scope:** Conducts user interview, defines package boundaries, generates the Team Sheet artifact, and gates milestones.
+- **Rules:** Ensures subagents operate in isolated subpackages and never create loose root files.
 
-#### 2. Script & Staging Specialist
-- **Scope:** Creates factual dialogue (`WriterScriptEntry`) and staging metadata (`DirectorScriptEntry`).
-- **Hygiene & Retention Rules:**
-  - Must strictly follow `.agents/skills/script-hygiene/SKILL.md` for all dialogue authoring.
-  - Hard limit: Maximum 2 lines per speech bubble, $\le 35\text{--}40$ characters per cut.
-  - Zero-greeting cold open (0.0s In Media Res), character emotional confrontation in Cuts 0–2 (`image: null`), slides enter Cut 3+.
-  - The 3 Archetypes: Zundamon (viewer's chaotic greedy proxy), Metan (cold sadistic realist, $\le 35\%$ agreement), Tsumugi (server-room whistleblower).
-  - 50/30/20 Retention ratio, hook protection (no Tsumugi in first 3 cuts), mid-roll entrance (30%–50% mark).
-  - Ping-pong syncopation: $\ge 5\text{--}10\%$ micro-reaction cuts ($\le 12$ chars). Zero-drop ending (no formulaic goodbyes).
-  - Clean audio & grounded staging: `"motion": "none"` or `"nod"` (no `"jump"`), clean ducked instrumental BGM, zero slapstick SFX.
+#### 2. Editorial & Epistemic Specialist (`editorial/` & `epistemic/`)
+- **Scope:** Authors primary-source-grounded dialogue (`WriterScriptEntry` / `DirectorScriptEntry`) and links verifiable evidence (`claims.json` + `sources/manifest.json`).
+- **Hygiene, Epistemic & Retention Rules:**
+  - Must strictly follow `.agents/skills/script-hygiene/SKILL.md` and `.agents/skills/editorial-dossier/SKILL.md`.
+  - **Epistemic Grounding:** Every salient quantitative figure (scales, percentages, multipliers, physical/computing/medical units) in Cold Open cuts (`0..10`), B-roll slides, thumbnail, and metadata must map to a `Verdict.SUPPORTED` claim backed by verbatim primary source quotes (`pypdf`, HTML/iXBRL, or Markdown).
+  - **BudouX & Typography:** Maximum 2 lines per speech bubble, $\le 35\text{--}40$ characters per cut segmented via `budoux` without splitting inline `{Kanji|ruby}` tags.
+  - **Retention Architecture:** Zero-greeting cold open (0.0s In Media Res), character confrontation in Cuts 0–2 (`image: null`), slides enter Cut 3+. 50/30/20 cast ratio (Metan / Zundamon / Tsumugi), hook protection (no Tsumugi in Cuts 0–2), mid-roll entrance (30%–50%), $\ge 5\text{--}10\%$ micro-reaction cuts ($\le 12$ chars), zero-drop ending.
 
-#### 3. Creative & Asset Designer
-- **Scope:** Generates B-roll slides and YouTube thumbnails using `veraxi_ymmp.broll` and `veraxi_ymmp.thumbnail`.
-- **Slide Guardrails:**
+#### 3. Creative & Graphics Designer (`graphics/`)
+- **Scope:** Generates B-roll slides, infographics, citation cards, and YouTube thumbnails (`broll.py`, `infographic.py`, `thumbnail.py`).
+- **Slide & Thumbnail Guardrails:**
   - Pro Dark Slate Theme (`#0F172A` / `#1E293B`).
   - 1-Slide-1-Impact: Total characters across slide $\le 100$. Maximum 6 text elements. Zero nested bullets.
-  - 3-Split Thumbnail Rule: Hero character, high-contrast headline, timestamp dead-zone protected.
+  - Visual Parity: Every number on a slide or thumbnail must match a `Verdict.SUPPORTED` claim in `claims.json`.
+  - 3-Split Thumbnail Rule: Hero character cutout, high-contrast headline, bottom-right timestamp dead-zone protected.
 
-#### 4. Audio & Pipeline Engineer
-- **Scope:** Generates VoiceVox audio WAVs, compiles `TimelineIR`, and renders target exports.
-- **Outputs:** YMM4 (`.ymmp`), Premiere Pro (`.xml`), MoviePy preview (`qa_test.mp4`), and EBU R128 loudness normalization (`audio_normalizer.py`).
+#### 4. Audio & Exporters Engineer (`audio/` & `exporters/`)
+- **Scope:** Synthesizes VoiceVox audio WAVs with `hatsuon` pitch/reading overrides, compiles `TimelineIR`, and renders target exports.
+- **Outputs:** YMM4 (`.ymmp`), Premiere Pro (`.xml`), After Effects (`.jsx`), MoviePy preview (`qa_test.mp4`), SRT captions (`.srt`), and `-16 LUFS` EBU R128 loudness normalization (`audio_normalizer.py`).
 
-#### 5. QA & Fitness Sentinel
-- **Scope:** Audits outputs before user delivery.
+#### 5. QA & Fitness Sentinel (`tests/`)
+- **Scope:** Audits architectural fitness, epistemic grounding, retention pacing, and multimodal video output before delivery.
 - **Checklist:**
-  - Executes `pytest tests/test_architectural_fitness.py` (all tests must pass).
-  - Executes `veraxi-ymmp validate <script.json> --audit-pacing` (Retention Score must be $\ge 80/100$).
-  - Verifies audio existence in `artifacts/audio/`.
-  - Inspects `qa_test.mp4` for character layout, concentric subtitle alignment, and color theme consistency following `.agents/skills/ymmp-qa/SKILL.md`.
+  - Executes `pytest tests/test_architectural_fitness.py -q` (all DAG, adapter isolation, mypy, and privacy checks must pass).
+  - Executes `veraxi-ymmp validate <script.json> --audit-facts --audit-pacing` (Epistemic Audit must pass with 0 unsupported claims; Retention Score $\ge 80/100$).
+  - Verifies `.wav` existence in `artifacts/audio/` and inspects `qa_test.mp4` following `.agents/skills/ymmp-qa/SKILL.md`.
 
 ---
 
-## 3. Operational Command Reference
+## 3. Operational Command Reference (The 4-Step Golden Path)
 
-- **Topic Ideation & NotebookLM Dossier:** `veraxi-ymmp ideate "<Topic>" --archetype post_mortem` (or `python -m veraxi_ymmp ideate ...`)
-- **Ingest Raw Markdown Dialogue:** `veraxi-ymmp ingest-script <dialogue_raw.md> -o <script.json>` (or `python -m veraxi_ymmp ingest-script ...`)
-- **Run full project pipeline:** `veraxi-ymmp run projects/<project_name>/` (or `python -m veraxi_ymmp run ...`)
-- **Architectural Fitness Check:** `pytest tests/test_architectural_fitness.py`
-- **Privacy Check:** `python scripts/check_no_local_paths.py`
-- **Audience Retention Audit:** `veraxi-ymmp validate <script.json> --audit-pacing` (or `python -m veraxi_ymmp validate ...`)
-- **Loudness Normalization:** `veraxi-ymmp normalize <video.mp4> -p youtube` (or `python -m veraxi_ymmp normalize ...`)
+1. **Topic Ideation & NotebookLM Dossier:**
+   `veraxi-ymmp ideate "<Topic>" --archetype post_mortem`
+2. **Ingest NotebookLM Markdown (BudouX Dialogue + Evidence Table $\rightarrow$ `script.json` & `claims.json`):**
+   `veraxi-ymmp ingest-script projects/<slug>/dialogue_raw.md -o projects/<slug>/script.json`
+3. **Epistemic Fact Audit & Retention Pacing Gate:**
+   `veraxi-ymmp validate projects/<slug>/script.json --audit-facts --audit-pacing`
+4. **Full Multi-Target Compilation & Loudness Normalization:**
+   `veraxi-ymmp run projects/<slug>/`
+   `veraxi-ymmp normalize <video.mp4> -p youtube`
+
+- **Architectural Fitness Check:** `pytest tests/test_architectural_fitness.py -q`
+- **Privacy & Secret Scan:** `python scripts/check_no_local_paths.py`
 
 ---
 

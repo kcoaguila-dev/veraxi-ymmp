@@ -1,0 +1,146 @@
+{
+  "マイクロソフト": [
+    "microsoft",
+    "msft"
+  ],
+  "アマゾン": [
+    "amazon",
+    "amzn",
+    "aws"
+  ],
+  "グーグル": [
+    "google",
+    "alphabet",
+    "goog",
+    "googl"
+  ],
+  "アップル": [
+    "apple",
+    "aapl"
+  ],
+  "エヌビディア": [
+    "nvidia",
+    "nvda"
+  ],
+  "メタ": [
+    "meta",
+    "facebook"
+  ],
+  "オープンai": [
+    "openai",
+    "open ai"
+  ],
+  "アンソロピック": [
+    "anthropic",
+    "claude"
+  ],
+  "コパイロット": [
+    "copilot"
+  ],
+  "ベッドロック": [
+    "bedrock"
+  ],
+  "トレニアム": [
+    "trainium"
+  ],
+  "クロード": [
+    "claude"
+  ],
+  "ラマ": [
+    "llama"
+  ],
+  "設備投資": [
+    "capital expenditure",
+    "capex",
+    "infrastructure investment",
+    "purchases of property and equipment",
+    "additions to property and equipment"
+  ],
+  "法人": [
+    "enterprise",
+    "commercial"
+  ],
+  "現金": [
+    "cash",
+    "free cash flow"
+  ],
+  "半導体": [
+    "semiconductor",
+    "chip",
+    "chips"
+  ],
+  "消費電力": [
+    "power consumption",
+    "tdp",
+    "power draw",
+    "wattage"
+  ],
+  "原発": [
+    "nuclear",
+    "nuclear power plant",
+    "reactor"
+  ],
+  "売上": [
+    "revenue",
+    "sales",
+    "net sales"
+  ],
+  "売上高": [
+    "revenue",
+    "sales",
+    "net sales"
+  ],
+  "利益": [
+    "operating income",
+    "net income",
+    "profit"
+  ],
+  "純利益": [
+    "net income",
+    "net profit"
+  ],
+  "営業利益": [
+    "operating income",
+    "operating profit"
+  ],
+  "時価総額": [
+    "market cap",
+    "market capitalization"
+  ],
+  "一人当たり": [
+    "per user",
+    "per person",
+    "per customer",
+    "per share"
+  ],
+  "月額": [
+    "per month",
+    "monthly"
+  ],
+  "臨床試験": [
+    "clinical trial",
+    "phase 3",
+    "trial"
+  ],
+  "死亡率": [
+    "mortality rate",
+    "case fatality rate",
+    "death rate"
+  ],
+  "有効性": [
+    "efficacy",
+    "effectiveness"
+  ],
+  "人口": [
+    "population"
+  ],
+  "インフレ率": [
+    "inflation rate",
+    "cpi",
+    "inflation"
+  ],
+  "失業率": [
+    "unemployment rate",
+    "jobless rate"
+  ]
+}

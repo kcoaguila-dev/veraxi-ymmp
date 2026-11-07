@@ -61,7 +61,7 @@ venv.bak/
 # Output & User-generated project files
 test_output.ymmp
 tests/scratch_audio.wav
-audio/
+/audio/
 artifacts/
 projects/
 scratch/

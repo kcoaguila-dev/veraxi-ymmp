@@ -14,8 +14,9 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 - Write the JSON script (e.g. `artifacts/script.json`).
 - Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"none"` or `"nod"`) when appropriate.
 - Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
-- **Audience Retention & 3-Character Pacing Standard (`veraxi_ymmp.pacing`)**:
-  - Run script preflight validation: `veraxi-ymmp validate <script.json> --audit-pacing` (Retention Score must be $\ge 80/100$).
+- **Epistemic Grounding & Audience Retention Standard (`veraxi_ymmp.fact_audit` & `veraxi_ymmp.pacing`)**:
+  - Run preflight epistemic + pacing validation: `veraxi-ymmp validate <script.json> --audit-facts --audit-pacing` (Epistemic Audit must pass with 0 unsupported claims; Retention Score must be $\ge 80/100$).
+  - **Fail-Closed Epistemic Parity**: Every salient figure across Cold Open cuts (`0..10`), B-roll slides (`broll_manifest.json`), thumbnail (`thumbnail_config.json`), and YouTube metadata must match a `Verdict.SUPPORTED` claim in `claims.json` backed by verbatim primary source quotes (`sources/*.pdf`, `.html`, `.md`).
   - **0-Second Cold Open & Zero-Greeting Invariant**:
     - Strictly ZERO generic greetings (`「みんな、こんにちは」`, `「ごきげんよう」`, `「よろしく」`) in the first 3 dialogue cuts.
     - **No Premature Slide Dump:** The opening hook window (first 2-3 cuts) strictly keeps `"image": null` so characters carry the emotional confrontation without slide clutter. Slides enter as evidence around Cut 4+ when transitioning to core data.

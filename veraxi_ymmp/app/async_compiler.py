@@ -1,0 +1,121 @@
+"""
+Async compilation for parallel TTS synthesis.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from veraxi_ymmp.app.compiler import CompilationResult, CompilerError, ScriptEntry, YMMPCompiler
+from veraxi_ymmp.audio.phonetics import normalize_tts_text
+from veraxi_ymmp.editorial.validation import sanitize_filename
+
+
+class AsyncYMMPCompiler(YMMPCompiler):
+    """
+    Compiler capable of parallel TTS synthesis.
+    """
+
+    async def synthesize_all_async(
+        self,
+        script: List[ScriptEntry],
+        audio_dir: Optional[Path] = None,
+    ) -> None:
+        """Synthesize all script entries asynchronously in parallel."""
+        async def _synthesize_line(t_text: str, spk_id: int) -> Tuple[bytes, float, Optional[Dict[str, Any]]]:
+            if not self.tts_backend:
+                return b"", 0.0, None
+            res = await self.tts_backend.synthesize_async(t_text, spk_id)
+            if len(res) == 3:
+                wb, dur, aq = res
+            else:
+                wb, dur = res
+                aq = None
+            if getattr(self.config, "gain_stage_speech", True):
+                try:
+                    from veraxi_ymmp.audio.audio_normalizer import gain_stage_audio_bytes
+                    loop = asyncio.get_running_loop()
+                    wb = await loop.run_in_executor(
+                        None,
+                        gain_stage_audio_bytes,
+                        wb,
+                        getattr(self.config, "target_speech_lufs", -16.0),
+                        getattr(self.config, "target_speech_tp", -1.5),
+                        getattr(self.config, "audio_sample_rate", 48000),
+                    )
+                except Exception:
+                    pass
+            return wb, dur, aq
+
+        tts_tasks = []
+        for idx, line in enumerate(script):
+            char_name = line.get("character")
+            text = line.get("text")
+            if not char_name or not text:
+                continue
+            if self.config.use_tts and self.tts_backend:
+                speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
+                tts_text = normalize_tts_text(str(text))
+                if hasattr(self.tts_backend, "synthesize_async"):
+                    task = asyncio.create_task(_synthesize_line(tts_text, speaker_id))
+                    tts_tasks.append((idx, char_name, text, tts_text, task))
+
+        if tts_tasks:
+            results = await asyncio.gather(*(t for _, _, _, _, t in tts_tasks), return_exceptions=True)
+            for (idx, char_name, text, tts_text, _), result in zip(tts_tasks, results):
+                if isinstance(result, BaseException):
+                    self.errors.append(f"Async synthesis failed for {char_name}: {result}")
+                else:
+                    if len(result) == 3:
+                        wav_bytes, duration, audio_query = result
+                    else:
+                        wav_bytes, duration = result
+                        audio_query = None
+                    speaker_id = self.config.speaker_map.get(char_name, self.config.default_speaker_id)
+                    self.cache.set(tts_text, speaker_id, wav_bytes, duration)
+                    if isinstance(audio_query, dict) and audio_query and audio_dir is not None:
+                        audio_dir.mkdir(parents=True, exist_ok=True)
+                        safe_char_name = sanitize_filename(str(char_name))
+                        out_path = audio_dir / f"{idx:03d}_{safe_char_name}.wav"
+                        out_path.with_suffix(".query.json").write_text(
+                            json.dumps(audio_query, ensure_ascii=False),
+                            encoding="utf-8",
+                        )
+
+    async def compile_async(
+        self,
+        script: List[ScriptEntry],
+        output_path: Union[str, Path],
+        use_bom: bool = False,
+    ) -> CompilationResult:
+        """
+        Asynchronously synthesizes speech audio in parallel before delegating
+        to build_ir and render_ymmp.
+        """
+        output_path = Path(output_path)
+        self.warnings.clear()
+        self.errors.clear()
+
+        audio_dir = output_path.parent / "audio"
+        if not audio_dir.exists() and (output_path.parent.parent / "audio").exists():
+            audio_dir = output_path.parent.parent / "audio"
+
+        # Phase 1: Async TTS synthesis in parallel
+        await self.synthesize_all_async(script, audio_dir)
+        if self.errors and getattr(self.config, "strict_tts", False):
+            raise CompilerError("Compilation failed due to TTS errors:\n" + "\n".join(self.errors))
+
+        # Phase 2: Build IR
+        timeline_ir, audio_files = self.build_ir(script, audio_dir)
+
+        # Phase 3: Render to YMMP
+        return self.render_ymmp(
+            timeline_ir,
+            output_path,
+            use_bom=use_bom,
+            script_len=len(script),
+            audio_files=audio_files,
+        )

@@ -137,18 +137,30 @@ def _find_raw_prints_outside_main(tree: ast.AST) -> List[int]:
     return prints
 
 
+def test_no_loose_modules_in_package_root() -> None:
+    """Ensure veraxi_ymmp package root contains only __init__.py and __main__.py."""
+    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    allowed_root_files = {"__init__.py", "__main__.py"}
+    loose_files = [
+        p.name for p in lib_dir.glob("*.py") if p.name not in allowed_root_files
+    ]
+    assert not loose_files, (
+        f"Loose Python modules found in veraxi_ymmp root (move into subpackage): {loose_files}"
+    )
+
+
 def test_no_raw_print_in_core_modules() -> None:
     """Ensure core library modules do not use raw print() statements outside __main__."""
     core_modules = [
-        "compiler.py",
-        "ir_builder.py",
-        "ymmp_renderer.py",
-        "psd_registry.py",
-        "premiere_exporter.py",
-        "moviepy_renderer.py",
-        "voicevox.py",
-        "broll.py",
-        "thumbnail.py",
+        "app/compiler.py",
+        "app/ir_builder.py",
+        "exporters/ymmp_renderer.py",
+        "graphics/psd_registry.py",
+        "exporters/premiere_exporter.py",
+        "exporters/moviepy_renderer.py",
+        "audio/voicevox.py",
+        "graphics/broll.py",
+        "graphics/thumbnail.py",
     ]
 
     violations: List[Tuple[str, List[int]]] = []
@@ -308,7 +320,7 @@ def test_no_cross_adapter_imports() -> None:
         "ae_renderer.py",
         "srt_generator.py",
     ]
-    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    lib_dir = REPO_ROOT / "veraxi_ymmp" / "exporters"
     violations: List[str] = []
 
     for file_name in adapter_files:
@@ -334,10 +346,11 @@ def test_no_cross_adapter_imports() -> None:
 def test_domain_layer_purity() -> None:
     """Ensure pure domain modules never import infrastructure or adapter modules."""
     domain_files = [
-        "ir.py",
-        "script.py",
-        "constants.py",
-        "facts.py",
+        ("core", "ir.py"),
+        ("core", "script.py"),
+        ("core", "constants.py"),
+        ("epistemic", "facts.py"),
+        ("epistemic", "epistemic_units.py"),
     ]
     forbidden_modules = [
         "voicevox",
@@ -354,8 +367,8 @@ def test_domain_layer_purity() -> None:
     lib_dir = REPO_ROOT / "veraxi_ymmp"
     violations: List[str] = []
 
-    for file_name in domain_files:
-        file_path = lib_dir / file_name
+    for sub_name, file_name in domain_files:
+        file_path = lib_dir / sub_name / file_name
         assert file_path.is_file(), f"Domain file not found: {file_path}"
         tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
         imported = _extract_imported_module_names(tree)
@@ -374,7 +387,7 @@ def test_domain_layer_purity() -> None:
 
 def test_ports_layer_purity() -> None:
     """Ensure veraxi_ymmp/ports.py only imports domain modules or standard library and never concrete adapters."""
-    ports_file = REPO_ROOT / "veraxi_ymmp" / "ports.py"
+    ports_file = REPO_ROOT / "veraxi_ymmp" / "core" / "ports.py"
     assert ports_file.is_file(), f"Ports file not found: {ports_file}"
 
     tree = ast.parse(ports_file.read_text(encoding="utf-8"), filename=str(ports_file))
@@ -388,11 +401,19 @@ def test_ports_layer_purity() -> None:
         "constants",
         "director",
         "facts",
+        "epistemic_units",
+        "veraxi_ymmp.epistemic_units",
         "veraxi_ymmp.ir",
         "veraxi_ymmp.script",
         "veraxi_ymmp.constants",
         "veraxi_ymmp.director",
         "veraxi_ymmp.facts",
+        "veraxi_ymmp.core.ir",
+        "veraxi_ymmp.core.script",
+        "veraxi_ymmp.core.constants",
+        "veraxi_ymmp.core.director",
+        "veraxi_ymmp.epistemic.facts",
+        "veraxi_ymmp.epistemic.epistemic_units",
     }
     forbidden_adapters = {
         "voicevox",
