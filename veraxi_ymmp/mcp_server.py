@@ -429,7 +429,11 @@ def spawn_interactive_desktop_process(cmd: str, cwd: Optional[str] = None) -> bo
         si.wShowWindow = 1       # SW_SHOWNORMAL
         pi = PROCESS_INFORMATION()
 
-        success = getattr(ctypes, "windll").kernel32.CreateProcessW(  # type: ignore[attr-defined]
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            return False
+
+        success = windll.kernel32.CreateProcessW(
             None,
             cmd,
             None,
@@ -442,8 +446,8 @@ def spawn_interactive_desktop_process(cmd: str, cwd: Optional[str] = None) -> bo
             ctypes.byref(pi),
         )
         if success:
-            getattr(ctypes, "windll").kernel32.CloseHandle(pi.hProcess)  # type: ignore[attr-defined]
-            getattr(ctypes, "windll").kernel32.CloseHandle(pi.hThread)  # type: ignore[attr-defined]
+            windll.kernel32.CloseHandle(pi.hProcess)
+            windll.kernel32.CloseHandle(pi.hThread)
             return True
     except Exception as e:
         logger.warning(f"spawn_interactive_desktop_process failed: {e}")
