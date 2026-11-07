@@ -53,6 +53,7 @@ class PipelineResult:
     ymmp_path: Optional[Path] = None
     ymmp_validation: Optional[Dict[str, Any]] = None
     qa_video_path: Optional[Path] = None
+    final_video_path: Optional[Path] = None
     thumbnail_path: Optional[Path] = None
     srt_path: Optional[Path] = None
     upload_result: Optional[UploadResult] = None
@@ -101,6 +102,7 @@ class ProjectPipeline:
         do_premiere: bool = True,
         do_ymmp: bool = True,
         do_qa: bool = True,
+        render_video: bool = False,
         qa_duration: Optional[float] = None,
         do_thumbnail: bool = True,
         upload_to_youtube: bool = False,
@@ -377,7 +379,7 @@ class ProjectPipeline:
                 result.errors.append(err_msg)
 
         # 4. MoviePy QA Video
-        if do_qa:
+        if do_qa and not render_video:
             target_qa_duration = (
                 qa_duration if qa_duration is not None else self.fast_qa_duration
             )
@@ -423,6 +425,38 @@ class ProjectPipeline:
                 logger.error(err_msg)
                 result.errors.append(err_msg)
 
+        if render_video:
+            _notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
+            _notify("production_rendering", 0.70, "Rendering Production Master Video")
+            logger.info("--- Headless Production Video Rendering ---")
+            try:
+                master_video_path = proj_dir / "final_video.mp4"
+                exporter = (
+                    (self.exporters.get("production") or self.exporters.get("moviepy"))
+                    if self.exporters
+                    else None
+                )
+                if exporter is None:
+                    exporter = MoviePyRenderer(timeline_ir)
+                exporter.export(
+                    timeline_ir,
+                    master_video_path,
+                    options={
+                        "preset": "medium",
+                        "crf": 18,
+                        "fast_qa_duration": None,
+                        "normalize_loudness": normalize_loudness,
+                    },
+                )
+                result.final_video_path = master_video_path
+                result.qa_video_path = master_video_path
+                logger.info(f"Production video ready at: {master_video_path}")
+                _notify("production_rendering", 0.85, "Production Video Complete")
+            except Exception as e:
+                err_msg = f"Failed generating Production video: {e}"
+                logger.error(err_msg)
+                result.errors.append(err_msg)
+
         # 5. High-CTR YouTube Thumbnail
         if do_thumbnail:
             logger.info("--- [4/4] Generating High-CTR YouTube Thumbnail ---")
@@ -450,7 +484,9 @@ class ProjectPipeline:
             logger.info("--- [5/5] YouTube Publishing Automation ---")
             target_video: Optional[Path] = None
             final_video_candidate = proj_dir / "final_video.mp4"
-            if final_video_candidate.exists():
+            if result.final_video_path and result.final_video_path.exists():
+                target_video = result.final_video_path
+            elif final_video_candidate.exists():
                 target_video = final_video_candidate
             elif result.qa_video_path and result.qa_video_path.exists():
                 target_video = result.qa_video_path
@@ -468,7 +504,7 @@ class ProjectPipeline:
                     result.thumbnail_path = default_thumb
 
             video_to_upload = target_video
-            if normalize_loudness:
+            if normalize_loudness and not render_video:
                 _notify("audio_normalization", 0.85, "Normalizing Audio")
                 logger.info("Normalizing video audio loudness for YouTube (-14.0 LUFS)...")
                 from .audio_normalizer import normalize_video_audio
@@ -560,6 +596,7 @@ def run_project(
     do_premiere: bool = True,
     do_ymmp: bool = True,
     do_qa: bool = True,
+    render_video: bool = False,
     qa_duration: Optional[float] = None,
     do_thumbnail: bool = True,
     upload_to_youtube: bool = False,
@@ -582,6 +619,7 @@ def run_project(
         do_premiere=do_premiere,
         do_ymmp=do_ymmp,
         do_qa=do_qa,
+        render_video=render_video,
         qa_duration=qa_duration,
         do_thumbnail=do_thumbnail,
         upload_to_youtube=upload_to_youtube,

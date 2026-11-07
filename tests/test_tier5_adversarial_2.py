@@ -70,6 +70,7 @@ def minimal_project(tmp_path: Path) -> Path:
     (proj / "script.json").write_text(
         json.dumps(script_data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    (proj / "claims.json").write_text("[]\n", encoding="utf-8")
     return proj
 
 

@@ -145,7 +145,14 @@ class TimelineExporter(Protocol):
         output_path: Path,
         options: Optional[Dict[str, Any]] = None,
     ) -> ExportResult:
-        """Export the given TimelineIR to output_path with optional exporter-specific options."""
+        """Export the given TimelineIR to output_path with optional exporter-specific options.
+
+        Supported options for headless video exporters (e.g. MoviePyRenderer):
+            preset: Encoding speed preset (e.g. 'ultrafast', 'medium', 'veryslow').
+            crf: Constant Rate Factor quality level (e.g. 18 for visually lossless, 23 for standard).
+            fast_qa_duration: Truncate export duration in seconds for rapid quality previews.
+            normalize_loudness: Whether to apply post-render EBU R128 audio normalization (-14 LUFS).
+        """
         ...
 
 

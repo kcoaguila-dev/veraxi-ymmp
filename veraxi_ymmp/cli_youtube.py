@@ -176,6 +176,7 @@ def _cmd_youtube_qa(args: argparse.Namespace) -> None:
             do_qa=False,
             do_thumbnail=False,
             upload_to_youtube=False,
+            allow_unverified=True,
         )
         if not result.success or not result.timeline_ir:
             logger.error(f"Failed to compile TimelineIR for QA: {result.errors}")

@@ -370,6 +370,7 @@ def mock_project_dir(tmp_path: Path) -> Path:
     )
     (proj / "final_video.mp4").write_bytes(b"dummy mp4")
     (proj / "thumbnail.png").write_bytes(b"dummy png")
+    (proj / "claims.json").write_text("[]\n", encoding="utf-8")
 
     return proj
 

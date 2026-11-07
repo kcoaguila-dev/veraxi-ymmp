@@ -6,8 +6,19 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
 
+if "IMAGEIO_FFMPEG_EXE" in os.environ and not os.environ["IMAGEIO_FFMPEG_EXE"]:
+    del os.environ["IMAGEIO_FFMPEG_EXE"]
 if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
     ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        try:
+            import glob
+            import imageio_ffmpeg._utils as _imgio_utils
+            _bins = glob.glob(os.path.join(_imgio_utils._get_bin_dir(), "ffmpeg*"))
+            if _bins:
+                ffmpeg_bin = _bins[0]
+        except Exception:
+            pass
     if ffmpeg_bin:
         os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
 
@@ -123,7 +134,12 @@ class MoviePyRenderer:
         self.fast_qa_duration: Optional[float] = fast_qa_duration
         self.final_video: Optional[Any] = None
 
-    def render(self, output_path: Optional[str] = None) -> None:
+    def render(
+        self,
+        output_path: Optional[str] = None,
+        preset: str = "ultrafast",
+        crf: Optional[int] = None,
+    ) -> None:
         if self.ir is None:
             raise ValueError("TimelineIR must be provided to render")
         fps = self.ir.fps
@@ -460,7 +476,11 @@ class MoviePyRenderer:
 
         # Apply Dynamic Virtual Camera Shot IR (Pan, Zoom, Punch-in, Shake)
         camera_shots = getattr(self.ir, "camera_shots", [])
-        if camera_shots:
+        has_dynamic_shots = any(
+            (shot.zoom > 1.01 or shot.pan_x != 0.0 or shot.pan_y != 0.0 or getattr(shot, "shake_frames", 0) > 0)
+            for shot in camera_shots
+        )
+        if camera_shots and has_dynamic_shots:
             from PIL import Image
 
             def get_active_camera_shot(t: float) -> Optional[Any]:
@@ -527,7 +547,9 @@ class MoviePyRenderer:
                 ac = AudioFileClip(str(clip.audio_path))
                 if clip.length == -1: # Looped BGM
                     dur = total_duration - (clip.start_frame/fps)
-                    ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(clip.volume)
+                    duck_factor = (DEFAULT_BGM_DUCKING_VOLUME / 100.0) if talk_times else 1.0
+                    vol = clip.volume * duck_factor if clip.volume > 0.5 else clip.volume
+                    ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(vol)
                     ac = ac.with_effects([AudioFadeOut(2.0)])
                 else:
                     dur = clip.length / fps
@@ -551,13 +573,29 @@ class MoviePyRenderer:
         if self.fast_qa_duration is not None:
             final_video = final_video.subclipped(0, min(self.fast_qa_duration, total_duration))
 
+        ffmpeg_params = []
+        if crf is not None:
+            ffmpeg_params.extend(["-crf", str(crf)])
+
+        has_audio = final_video.audio is not None
+        write_kwargs: Dict[str, Any] = {
+            "fps": 30,
+            "codec": "libx264",
+            "preset": preset,
+            "threads": 6,
+            "logger": None,
+        }
+        if has_audio:
+            write_kwargs["audio_codec"] = "aac"
+        else:
+            write_kwargs["audio"] = False
+
+        if ffmpeg_params:
+            write_kwargs["ffmpeg_params"] = ffmpeg_params
+
         final_video.write_videofile(
             str(output_path),
-            fps=30,
-            codec="libx264",
-            audio_codec="aac",
-            preset="ultrafast",
-            threads=6
+            **write_kwargs,
         )
 
     def save_frame_at(self, t: float, output_path: str) -> None:
@@ -577,9 +615,24 @@ class MoviePyRenderer:
         self.ir = ir
         if "fast_qa_duration" in opts:
             self.fast_qa_duration = opts["fast_qa_duration"]
+        preset = opts.get("preset", "ultrafast")
+        crf = opts.get("crf")
+        normalize_loudness = bool(opts.get("normalize_loudness", False))
+
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
-        self.render(str(out_p))
+        self.render(str(out_p), preset=preset, crf=crf)
+
+        if normalize_loudness:
+            try:
+                from .audio_normalizer import normalize_video_audio
+                norm_out = out_p.parent / f"{out_p.stem}_normalized{out_p.suffix}"
+                normalize_video_audio(out_p, norm_out, target_i=-14.0)
+                if norm_out.exists():
+                    norm_out.replace(out_p)
+            except Exception as e:
+                logger.warning(f"Audio loudness normalization failed for {out_p}: {e}")
+
         total_duration = ir.total_frames / ir.fps
         return ExportResult(
             target_format="mp4",
@@ -589,5 +642,8 @@ class MoviePyRenderer:
                 "fps": 30,
                 "duration": total_duration,
                 "fast_qa_duration": self.fast_qa_duration,
+                "preset": preset,
+                "crf": crf,
+                "normalize_loudness": normalize_loudness,
             },
         )

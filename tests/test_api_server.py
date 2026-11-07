@@ -283,8 +283,11 @@ def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
 
 
 def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
+    pytest.importorskip("google.auth")
+    from veraxi_ymmp import youtube_auth
+
     # 1. GET /api/youtube/auth/status
-    with patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": False}):
+    with patch.object(youtube_auth, "get_auth_status", return_value={"authenticated": False, "has_client_secrets": False}):
         res = requests.get(f"{api_server}/api/youtube/auth/status")
         assert res.status_code == 200
         assert res.json()["authenticated"] is False
@@ -294,8 +297,8 @@ def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
     assert res_bad.status_code == 400
 
     # 3. POST /api/youtube/auth/client-secrets with valid data
-    with patch("veraxi_ymmp.youtube_auth.save_client_secrets") as mock_save, \
-         patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
+    with patch.object(youtube_auth, "save_client_secrets") as mock_save, \
+         patch.object(youtube_auth, "get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
         res_ok = requests.post(
             f"{api_server}/api/youtube/auth/client-secrets",
             json={"installed": {"client_id": "test_id", "client_secret": "test_secret"}}
@@ -305,8 +308,8 @@ def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
         mock_save.assert_called_once()
 
     # 4. POST /api/youtube/auth/revoke
-    with patch("veraxi_ymmp.youtube_auth.revoke_token", return_value=True), \
-         patch("veraxi_ymmp.youtube_auth.get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
+    with patch.object(youtube_auth, "revoke_token", return_value=True), \
+         patch.object(youtube_auth, "get_auth_status", return_value={"authenticated": False, "has_client_secrets": True}):
         res_rev = requests.post(f"{api_server}/api/youtube/auth/revoke")
         assert res_rev.status_code == 200
         assert res_rev.json()["success"] is True
