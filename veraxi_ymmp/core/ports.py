@@ -46,10 +46,10 @@ from veraxi_ymmp.core.ir import (
 class DocumentSourceType(str, Enum):
     """Type of official primary authority document source."""
 
+    WEB = "web"
     SEC_EDGAR = "sec_edgar"
     FRED = "fred"
     GOVERNMENT_STAT = "government_stat"
-    WEB = "web"
     CUSTOM = "custom"
 
 
@@ -57,8 +57,8 @@ class DocumentSourceType(str, Enum):
 class DocumentCaptureSpec:
     """Specification for official document passage capture, highlighting, and citation."""
 
-    source_type: DocumentSourceType = DocumentSourceType.SEC_EDGAR
-    identifier: str = ""  # Ticker symbol (e.g. 'MSFT'), CIK ('0000789019'), or series ID ('WALCL')
+    source_type: DocumentSourceType = DocumentSourceType.WEB
+    identifier: str = ""  # Primary authority identifier (URL, DOI/arXiv, CVE, statute/docket, ticker 'MSFT', or FRED 'WALCL')
     target_text: str = ""  # Text, figure, or line-item substring to locate and highlight
     document_url: str = ""  # Explicit URL to the document HTML or local path
     citation_label: str = ""  # Authoritative citation display text

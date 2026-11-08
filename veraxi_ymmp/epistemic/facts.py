@@ -12,8 +12,10 @@ import unicodedata
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from veraxi_ymmp.core.ports import (
-    DocumentProvenance,
-    DocumentSourceType,
+    DocumentCaptureResult as DocumentCaptureResult,
+    DocumentCaptureSpec as DocumentCaptureSpec,
+    DocumentProvenance as DocumentProvenance,
+    DocumentSourceType as DocumentSourceType,
 )
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
@@ -27,6 +29,7 @@ class EpistemicProfile(str, Enum):
     ACADEMIC = "academic"
     GENERAL = "general"
     LORE = "lore"
+    TECH = "tech"
 
 
 class ClaimKind(str, Enum):
@@ -168,7 +171,7 @@ GENERAL_AUTHORITY_HOSTS = frozenset({
     "www.britannica.com",
 })
 
-LORE_AUTHORITY_HOSTS = frozenset({
+TECH_AUTHORITY_HOSTS = frozenset({
     "github.com",
     "www.github.com",
     "python.org",
@@ -177,7 +180,25 @@ LORE_AUTHORITY_HOSTS = frozenset({
     "developer.mozilla.org",
     "w3.org",
     "www.w3.org",
+    "cve.org",
+    "www.cve.org",
+    "nvd.nist.gov",
+    "rfc-editor.org",
+    "www.rfc-editor.org",
+    "ietf.org",
+    "www.ietf.org",
+    "owasp.org",
+    "www.owasp.org",
+    "kernel.org",
+    "www.kernel.org",
+    "kubernetes.io",
+    "www.kubernetes.io",
+    "rust-lang.org",
+    "www.rust-lang.org",
+    "go.dev",
 })
+
+LORE_AUTHORITY_HOSTS = TECH_AUTHORITY_HOSTS
 
 PRIMARY_AUTHORITY_HOSTS = FINANCE_AUTHORITY_HOSTS
 
@@ -223,11 +244,19 @@ PRIMARY_INSTITUTIONS: Dict[str, str] = {
     "bbc.co.uk": "bbc",
     "archive.org": "archive",
     "britannica.com": "britannica",
-    # Lore / Tech
+    # Lore / Tech / Standards & Security
     "github.com": "github",
     "python.org": "python",
     "mozilla.org": "mozilla",
     "w3.org": "w3c",
+    "ietf.org": "ietf",
+    "rfc-editor.org": "ietf",
+    "cve.org": "cve",
+    "nist.gov": "nist",
+    "owasp.org": "owasp",
+    "kernel.org": "linux",
+    "wipo.int": "wipo",
+    "epo.org": "epo",
 }
 
 
@@ -362,11 +391,26 @@ def is_primary_authority_url(
     if prof == EpistemicProfile.GENERAL:
         return False
 
-    # Tier 1 for lore / tech: official source trees and language documentation
-    if clean_host in LORE_AUTHORITY_HOSTS or host in LORE_AUTHORITY_HOSTS:
+    # Tier 1 for lore / tech: official source trees, language documentation, standards, CVEs
+    if clean_host in TECH_AUTHORITY_HOSTS or host in TECH_AUTHORITY_HOSTS:
         return True
-    lore_domains = ("github.com", "python.org", "mozilla.org", "w3.org")
-    if any(clean_host == d or clean_host.endswith("." + d) for d in lore_domains):
+    tech_domains = (
+        "github.com",
+        "python.org",
+        "mozilla.org",
+        "w3.org",
+        "cve.org",
+        "ietf.org",
+        "rfc-editor.org",
+        "owasp.org",
+        "kernel.org",
+        "kubernetes.io",
+        "rust-lang.org",
+        "go.dev",
+        "wipo.int",
+        "epo.org",
+    )
+    if any(clean_host == d or clean_host.endswith("." + d) for d in tech_domains):
         return True
 
     return False
@@ -796,7 +840,7 @@ class ProvenanceRecord:
             image_path=str(data.get("image_path", "")),
             image_sha256=str(data.get("image_sha256", "")),
             content_sha256=str(data.get("content_sha256", "")),
-            source_type=DocumentSourceType(str(data.get("source_type", "sec_edgar"))),
+            source_type=DocumentSourceType(str(data.get("source_type", "web"))),
             identifier=str(data.get("identifier", "")),
             citation_label=str(data.get("citation_label", "")),
             source_url=str(data.get("source_url", "")),

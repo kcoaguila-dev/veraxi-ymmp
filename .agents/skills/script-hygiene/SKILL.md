@@ -1,7 +1,7 @@
 ---
 name: script-hygiene
 description: >-
-  Use this skill whenever authoring or validating dialogue, staging metadata, video scripts, or retention rules for veraxi-ymmp. Covers cold opens, character archetypes, 50/30/20 pacing, dialogue ping-pong, Lehman macro causality, and anti-AI-slop invariants.
+  Use this skill whenever authoring or validating dialogue, staging metadata, video scripts, or retention rules for veraxi-ymmp. Covers cold opens, character archetypes, 50/30/20 pacing, dialogue ping-pong, causal domino causality, and anti-AI-slop invariants.
 ---
 
 # Script Hygiene & Audience Retention Guidelines (Anti-AI-Slop)
@@ -73,11 +73,11 @@ NEVER structure videos as boring corporate lectures with generic bullet lists (`
 
 ---
 
-## 8. The Lehman Method: Loss-Aversion & Macro Domino Invariant (レバナス一本リーマン原則)
-- **Loss-Aversion Hook:** Puncture the mainstream consensus trap within opening 10 seconds. Human loss aversion (fear of capital destruction) drives 2x higher retention than generic profit chasing.
-- **Primary Authority Citations:** Anchor financial/market scripts to verifiable primary data sources (FRED, SEC Form 10-K/Q, 米労働統計局, 四半期決算書).
+## 8. The Causal Domino Protocol: Loss-Aversion & Structural Domino Invariant (構造的ドミノ連鎖原則)
+- **Loss-Aversion / Cognitive Disillusion Hook:** Puncture the mainstream consensus trap or widespread myth within opening 10 seconds. High-stakes loss aversion (capital destruction, system crash, legal liability) drives 2x higher retention than generic cheerleading.
+- **Primary Authority Citations:** Anchor scripts to verifiable primary data sources (Technical RFC/CVE specs, PubMed/arXiv, Court dockets, FRED, SEC filings, government statistics).
 - **4-Phase Domino Causality:** Structure narrative as a mechanistic chain reaction:
-  *Consensus Illusion $\to$ Primary Data Fracture $\to$ Structural Domino Collapse $\to$ Cold Survival Verdict*.
+  *Consensus Illusion $\to$ Primary Evidence Fracture $\to$ Structural Domino Cascade $\to$ Cold Survival Verdict*.
 - **High-Stakes Packaging:** Titles and thumbnails MUST NEVER use passive match-up cliches (e.g. bare `「勝つのはどっち！？」` is banned). Deploy high-tension curiosity gaps with concrete financial stakes (e.g. `「【全員騙されていた】60兆円AIバブルの罠…生き残る真の1社」`).
 
 ---

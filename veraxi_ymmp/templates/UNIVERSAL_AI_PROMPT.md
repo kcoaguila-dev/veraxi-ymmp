@@ -107,8 +107,8 @@ Use one of the 3 exact schemas:
 }
 ```
 
-### Type 4: `"official_data"` (Authoritative Primary Source / FRED / SEC Statistics)
-Use whenever citing macroeconomic data, corporate earnings (SEC filings), or government statistics:
+### Type 4: `"official_data"` (Authoritative Primary Source / Technical Specs, Benchmarks, Filings, or Stats)
+Use whenever citing technical specs (CVE/RFC), academic benchmarks, court filings, SEC filings, or macroeconomic statistics:
 ```json
 {
   "type": "official_data",
@@ -125,12 +125,12 @@ Use whenever citing macroeconomic data, corporate earnings (SEC filings), or gov
 }
 ```
 
-## The Lehman Narrative Protocol (マクロ・ドミノ連鎖原則)
-For financial, tech commentary, or analytical videos, follow the 4-phase domino causality:
-1. **The Consensus Trap (世間の大いなる幻想)**: Puncture the mainstream consensus within the first 10 seconds using loss-aversion framing.
-2. **The Hidden Fracture (一次公的データの提示)**: Introduce FRED, SEC Form 10-K, or financial metrics revealing the underlying structural crack.
-3. **The Mechanical Domino Effect (因果連鎖のドミノ解剖)**: Explain the stepwise chain reaction (A -> B -> C) rather than a flat bullet list.
-4. **The Cold Survival Verdict (冷酷な生存戦略)**: Conclude with a decisive game-theoretic verdict grounded in cash flow and unit economics.
+## The Causal Domino Protocol (構造的ドミノ連鎖原則)
+For analytical, tech commentary, scientific, legal, or financial explainer videos, follow the 4-phase domino causality:
+1. **The Consensus Trap (世間の大いなる錯覚)**: Puncture the mainstream myth or superficial headline within the first 10 seconds using cognitive dissonance or loss-aversion framing.
+2. **The Primary Evidence Fracture (一次資料・実測データの提示)**: Introduce the smoking-gun primary source (CVE report, RFC specification, peer-reviewed paper, court exhibit, SEC filing, or empirical metric) revealing the underlying structural crack.
+3. **The Mechanical Domino Cascade (因果連鎖のドミノ解剖)**: Explain the stepwise chain reaction (A -> B -> C) rather than a flat bullet list.
+4. **The Cold Structural Verdict (忖度なしの最終結論)**: Conclude with a decisive, evidence-backed conclusion grounded in physics, unit economics, statutory reality, or operational constraints.
 
 ## Output Contract
 

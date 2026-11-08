@@ -16,7 +16,7 @@ def cmd_capture(argv: list[str]) -> None:
     """Capture and highlight official primary authority document proof (SEC or FRED)."""
     parser = argparse.ArgumentParser(
         prog="veraxi-ymmp capture",
-        description="Capture official SEC EDGAR or macroeconomic FRED document proof with highlighted citations.",
+        description="Capture and highlight primary source document proof (Web, PDF/HTML, Academic, SEC, FRED).",
     )
     parser.add_argument(
         "--source",
@@ -57,6 +57,10 @@ def cmd_capture(argv: list[str]) -> None:
     args = parser.parse_args(argv)
 
     source_norm = args.source.lower()
+    # Auto-detect source: if URL is provided without a ticker/identifier and --source was not explicitly passed, route to web
+    if args.url and not args.identifier and source_norm in ("sec", "sec_edgar") and ("--source" not in argv):
+        source_norm = "web"
+
     if source_norm in ("sec", "sec_edgar"):
         source_type = DocumentSourceType.SEC_EDGAR
         identifier = args.identifier or "MSFT"
