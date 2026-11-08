@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from veraxi_ymmp.youtube_adapter import (
+from veraxi_ymmp.exporters.youtube_adapter import (
     MockYouTubeAdapter,
     YouTubeAdapter,
 )

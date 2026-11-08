@@ -14,7 +14,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 - Write the JSON script (e.g. `artifacts/script.json`).
 - Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"none"` or `"nod"`) when appropriate.
 - Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
-- **Epistemic Grounding & Audience Retention Standard (`veraxi_ymmp.fact_audit` & `veraxi_ymmp.pacing`)**:
+- **Epistemic Grounding & Audience Retention Standard (`veraxi_ymmp.epistemic.fact_audit` & `veraxi_ymmp.editorial.pacing`)**:
   - Run preflight epistemic + pacing validation: `veraxi-ymmp validate <script.json> --audit-facts --audit-pacing` (Epistemic Audit must pass with 0 unsupported claims; Retention Score must be $\ge 80/100$).
   - **Fail-Closed Epistemic Parity**: Every salient figure across Cold Open cuts (`0..10`), B-roll slides (`broll_manifest.json`), thumbnail (`thumbnail_config.json`), and YouTube metadata must match a `Verdict.SUPPORTED` claim in `claims.json` backed by verbatim primary source quotes (`sources/*.pdf`, `.html`, `.md`).
   - **0-Second Cold Open & Zero-Greeting Invariant**:
@@ -25,7 +25,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - **Hook Protection Rule**: 3rd character must NEVER speak in the opening hook (first 10% or first 3 cuts). Premise must be cleanly established by the core duo to prevent early viewer bounce.
   - **Mid-Roll Attention Spike**: 3rd character's first entrance must occur during the mid-roll attention decay window (30%–50% timeline mark) to reset audience focus.
   - **2-Position Stage Convention**: Screen layout strictly maintains Left Anchor (Explainer at `x=80`) and Right Alternating (Lead Inquirer $\leftrightarrow$ Guest Specialist at `x=1180`), keeping center screen open for presentation slides.
-- **B-Roll Presentation Boards Standard (`veraxi_ymmp.broll`)**:
+- **B-Roll Presentation Boards Standard (`veraxi_ymmp.graphics.broll`)**:
   - Always use **Pro Dark Slate Theme** (`#0F172A` / `#1E293B`) for explanatory slides.
   - Apply **1-Slide-1-Impact Architecture** (VS comparisons, big impact metric, or 3-card overview).
   - Strictly **NO redundant category badges** (e.g. no `【マクロ経済】`), **NO English jargon** (`OVERVIEW`, `Higher for Longer`), **NO robotic brackets** (`【警告】`, `【急騰】`), and **NO premature conclusion labels** (`本日の結論` in video intro).
@@ -38,8 +38,8 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
     - Maximum **6 discrete text elements** (title, step tag, hero, status pill, impact text, optional badge).
     - **Zero nested bullet lists** on presentation cuts (causes severe reading fatigue and fights with subtitles/characters).
     - Maintain visual symmetry across related sequences (e.g. Condition 01, 02, 03 must share the same clean `render_metric_slide` structure).
-  - Use `veraxi_ymmp.broll` (`render_metric_slide`, `render_vs_slide`, `render_overview_slide`) to generate all slide assets.
-- **Dialogue & Subtitle Hygiene Standard (`veraxi_ymmp.typography`)**:
+  - Use `veraxi_ymmp.graphics.broll` (`render_metric_slide`, `render_vs_slide`, `render_overview_slide`) to generate all slide assets.
+- **Dialogue & Subtitle Hygiene Standard (`veraxi_ymmp.graphics.typography`)**:
   - **Hard Ceiling: Max 2 lines per speech bubble**: Dialogue cuts must NEVER produce 3 lines. 3 lines crowd the screen, obstruct character bodies, and risk vertical clipping.
   - **Character Length Ceiling: <= 35-40 characters per dialogue cut**: If an explanation contains compound thoughts or multiple sentences, split them into distinct, well-paced cuts (2-3 seconds each).
   - **Pronunciation & Interjection Rule**: NEVER start dialogue lines with bare `「ええ、」` (which causes OpenJTalk/VOICEVOX to assign an unnatural questioning Atamadaka pitch accent). Write natural character-themed affirmations such as `「はい、」`, `「その通りですわ、」`, `「そうですわね、」`, or `「まさにその通りなのだ！」`.
@@ -54,8 +54,8 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   ```
 - Or use the compiler directly to build `TimelineIR` via public `compiler.build_ir` and render an internal `.mp4` video:
   ```python
-  from veraxi_ymmp.compiler import YMMPCompiler
-  from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
+  from veraxi_ymmp.app.compiler import YMMPCompiler
+  from veraxi_ymmp.exporters.moviepy_renderer import MoviePyRenderer
   import json
   from pathlib import Path
 
@@ -79,9 +79,9 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 
 ### 4. High-CTR YouTube Thumbnail Generation & QA
 - Every generated video project MUST have a publication-grade YouTube thumbnail (`thumbnail.png`).
-- Auto-generate using `veraxi_ymmp.thumbnail`:
+- Auto-generate using `veraxi_ymmp.graphics.thumbnail`:
   ```python
-  from veraxi_ymmp.thumbnail import generate_project_thumbnail
+  from veraxi_ymmp.graphics.thumbnail import generate_project_thumbnail
   generate_project_thumbnail(proj_dir, out_path=proj_dir / "thumbnail.png")
   ```
 - **Thumbnail Review Criteria (Multimodal Inspection via `view_file`)**:

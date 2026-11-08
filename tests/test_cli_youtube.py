@@ -19,8 +19,8 @@ from unittest.mock import patch
 
 import pytest
 
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+from veraxi_ymmp.app.cli import main
+from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
 
 @pytest.fixture
@@ -385,7 +385,7 @@ class TestCLIRunYouTubeIntegration:
         mock_project_dir / "audio" / "001_Zundamon.wav"
         real_mock = MockYouTubeAdapter()
 
-        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+        with patch("veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
              patch.object(
                 sys,
                 "argv",
@@ -437,7 +437,7 @@ class TestCLIRunYouTubeIntegration:
         real_mock = MockYouTubeAdapter()
         scheduled_ts = "2026-10-25T15:00:00Z"
 
-        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+        with patch("veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
              patch.object(
                 sys,
                 "argv",
@@ -582,8 +582,8 @@ class TestCLIRunYouTubeIntegration:
         norm_video = mock_project_dir / "final_video_normalized.mp4"
         norm_video.write_bytes(b"\x00" * 2048)
 
-        with patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
-             patch("veraxi_ymmp.audio_normalizer.normalize_video_audio", return_value=norm_video) as mock_norm, \
+        with patch("veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter", return_value=real_mock), \
+             patch("veraxi_ymmp.audio.audio_normalizer.normalize_video_audio", return_value=norm_video) as mock_norm, \
              patch.object(
                 sys,
                 "argv",
@@ -610,9 +610,9 @@ class TestCLIRunYouTubeIntegration:
         assert uploaded_path.name == "final_video_normalized.mp4"
 
 def test_youtube_auth_cli_parsing(capsys) -> None:
-    from veraxi_ymmp.cli import main
+    from veraxi_ymmp.app.cli import main
     with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--client-secrets", "secrets.json", "--monetary"]):
-        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+        with patch("veraxi_ymmp.app.cli_youtube._cmd_youtube_auth") as mock_cmd:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
@@ -621,9 +621,9 @@ def test_youtube_auth_cli_parsing(capsys) -> None:
             assert args.no_browser is False
 
 def test_youtube_stats_cli_parsing_json_csv_output(capsys) -> None:
-    from veraxi_ymmp.cli import main
+    from veraxi_ymmp.app.cli import main
     with patch("sys.argv", ["veraxi-ymmp", "youtube", "stats", "--video-id", "vid1", "--video-id", "vid2", "--format", "json"]):
-        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_stats") as mock_cmd:
+        with patch("veraxi_ymmp.app.cli_youtube._cmd_youtube_stats") as mock_cmd:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
@@ -631,32 +631,32 @@ def test_youtube_stats_cli_parsing_json_csv_output(capsys) -> None:
             assert args.format == "json"
 
 def test_youtube_channel_cli_parsing(capsys) -> None:
-    from veraxi_ymmp.cli import main
+    from veraxi_ymmp.app.cli import main
     with patch("sys.argv", ["veraxi-ymmp", "youtube", "channel", "--mock"]):
-        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_channel") as mock_cmd:
+        with patch("veraxi_ymmp.app.cli_youtube._cmd_youtube_channel") as mock_cmd:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
             assert args.mock is True
 
 def test_youtube_auth_status_and_revoke_cli_parsing() -> None:
-    from veraxi_ymmp.cli import main
+    from veraxi_ymmp.app.cli import main
     with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--status"]):
-        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+        with patch("veraxi_ymmp.app.cli_youtube._cmd_youtube_auth") as mock_cmd:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
             assert args.status is True
 
     with patch("sys.argv", ["veraxi-ymmp", "youtube", "auth", "--revoke"]):
-        with patch("veraxi_ymmp.cli_youtube._cmd_youtube_auth") as mock_cmd:
+        with patch("veraxi_ymmp.app.cli_youtube._cmd_youtube_auth") as mock_cmd:
             main()
             mock_cmd.assert_called_once()
             args = mock_cmd.call_args[0][0]
             assert args.revoke is True
 
 def test_youtube_upload_project_dir_cli(tmp_path: Path) -> None:
-    from veraxi_ymmp.cli_youtube import _cmd_youtube_upload
+    from veraxi_ymmp.app.cli_youtube import _cmd_youtube_upload
     proj_dir = tmp_path / "test_project"
     proj_dir.mkdir()
     video_file = proj_dir / "final_video.mp4"

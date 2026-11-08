@@ -1,5 +1,5 @@
-from veraxi_ymmp.fact_report import render_report
-from veraxi_ymmp.facts import Claim, ClaimWeight, Evidence, Stance, audit
+from veraxi_ymmp.epistemic.fact_report import render_report
+from veraxi_ymmp.epistemic.facts import Claim, ClaimWeight, Evidence, Stance, audit
 
 
 def _claims() -> list[Claim]:

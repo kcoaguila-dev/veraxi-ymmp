@@ -26,8 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from veraxi_ymmp.asset_guard import verify_image_asset, write_provenance_metadata  # noqa: E402
-from veraxi_ymmp.facts import DocumentProvenance, DocumentSourceType, ProvenanceRecord  # noqa: E402
+from veraxi_ymmp.epistemic.asset_guard import verify_image_asset, write_provenance_metadata  # noqa: E402
+from veraxi_ymmp.epistemic.facts import DocumentProvenance, DocumentSourceType, ProvenanceRecord  # noqa: E402
 
 
 def get_official_asset_spec(filename: str) -> Tuple[DocumentSourceType, str, str]:

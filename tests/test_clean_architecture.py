@@ -6,7 +6,7 @@ Unit test suite for newly extracted Clean Architecture components:
    - Face layers and paths across emotions and mouth states (is_open=True vs False)
    - Spatial layout with and without B-roll
    - Open-Closed Principle dynamic character registration with CharacterPSDConfig
-2. veraxi_ymmp.typography:
+2. veraxi_ymmp.graphics.typography:
    - wrap_japanese with short/long text, Kinsoku Shori punctuation rules, and 2-line balancing
    - get_char_color for known, unknown, and custom fallback colors
    - calculate_speech_plate_geometry and draw_rounded_speech_bubble
@@ -26,28 +26,28 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
 
-from veraxi_ymmp.ae_renderer import AfterEffectsRenderer
-from veraxi_ymmp.audio_normalizer import normalize_video_audio
-from veraxi_ymmp.compiler import CompilationResult, YMMPCompiler
-from veraxi_ymmp.constants import (
+from veraxi_ymmp.exporters.ae_renderer import AfterEffectsRenderer
+from veraxi_ymmp.audio.audio_normalizer import normalize_video_audio
+from veraxi_ymmp.app.compiler import CompilationResult, YMMPCompiler
+from veraxi_ymmp.core.constants import (
     DEFAULT_BG_FILL_ZOOM,
     DEFAULT_BGM_DUCKING_VOLUME,
     DEFAULT_CANVAS_HEIGHT,
     DEFAULT_CANVAS_WIDTH,
     KNOWN_CHARACTERS,
 )
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     CharacterClip,
     TimelineIR,
     VoiceClip,
 )
-from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.ports import ExportResult, TimelineExporter
-from veraxi_ymmp.premiere_exporter import PremiereExporter
-from veraxi_ymmp.psd_registry import CharacterPSDConfig, CharacterPSDRegistry
-from veraxi_ymmp.srt_generator import SRTExporter
-from veraxi_ymmp.typography import (
+from veraxi_ymmp.exporters.moviepy_renderer import MoviePyRenderer
+from veraxi_ymmp.app.pipeline import ProjectPipeline
+from veraxi_ymmp.core.ports import ExportResult, TimelineExporter
+from veraxi_ymmp.exporters.premiere_exporter import PremiereExporter
+from veraxi_ymmp.graphics.psd_registry import CharacterPSDConfig, CharacterPSDRegistry
+from veraxi_ymmp.exporters.srt_generator import SRTExporter
+from veraxi_ymmp.graphics.typography import (
     CHAR_COLORS,
     DEFAULT_CHAR_COLOR,
     SpeechPlateGeometry,
@@ -56,7 +56,7 @@ from veraxi_ymmp.typography import (
     get_char_color,
     wrap_japanese,
 )
-from veraxi_ymmp.ymmp_renderer import YMMPRenderer
+from veraxi_ymmp.exporters.ymmp_renderer import YMMPRenderer
 
 
 # ==============================================================================
@@ -309,7 +309,7 @@ class TestCharacterPSDRegistry:
 
 
 # ==============================================================================
-# 2. veraxi_ymmp.typography Tests
+# 2. veraxi_ymmp.graphics.typography Tests
 # ==============================================================================
 
 
@@ -352,7 +352,7 @@ class TestTypography:
         """Test 2-line length balancing when text fits in 2 lines."""
         mock_parser = MagicMock()
         mock_parser.parse.return_value = ["明日の", "天気は", "晴れ時々", "曇りです"]
-        monkeypatch.setattr("veraxi_ymmp.typography._budoux_parser", mock_parser)
+        monkeypatch.setattr("veraxi_ymmp.graphics.typography._budoux_parser", mock_parser)
 
         text = "明日の天気は晴れ時々曇りです"  # 14 chars, width=10 -> fits in 2 lines (<= 20)
         wrapped = wrap_japanese(text, width=10)
@@ -707,7 +707,7 @@ class TestDomainConstantsAndBrandColors:
         exporter = PremiereExporter(ir)
         xml_dir = tmp_path / "xml"
         proj_dir = tmp_path / "proj"
-        with patch("veraxi_ymmp.premiere_exporter.create_speech_bubble_png") as mock_create_bubble:
+        with patch("veraxi_ymmp.exporters.premiere_exporter.create_speech_bubble_png") as mock_create_bubble:
             exporter.export_xmeml(xml_dir, proj_dir)
             assert mock_create_bubble.called
             # The border_color should match get_char_color("ずんだもん")[:3] -> (34, 197, 94)
@@ -762,7 +762,7 @@ class TestTimelineExporterProtocol:
         """YMMPRenderer produces valid ExportResult."""
         with open(sample_template_path, "r", encoding="utf-8") as f:
             template_data = json.load(f)
-        from veraxi_ymmp.template import extract_character_templates
+        from veraxi_ymmp.core.template import extract_character_templates
         char_templates = extract_character_templates(template_data)
         renderer = YMMPRenderer(template_data=template_data, character_templates=char_templates)
         vc = _make_dummy_vc(

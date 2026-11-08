@@ -152,7 +152,7 @@ class VoicevoxClient:
         if dictionary_path is None:
             candidates = [
                 Path("assets/dictionary/tts_dictionary.json"),
-                Path(__file__).parent.parent / "assets" / "dictionary" / "tts_dictionary.json",
+                Path(__file__).resolve().parent.parent.parent / "assets" / "dictionary" / "tts_dictionary.json",
             ]
             for c in candidates:
                 if c.exists():

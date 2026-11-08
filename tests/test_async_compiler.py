@@ -1,11 +1,19 @@
-import os
-import json
-import pytest
-from veraxi_ymmp.async_compiler import AsyncYMMPCompiler
-from veraxi_ymmp.config import CompilerConfig
-
+import asyncio
+import functools
 import io
+import json
+import os
 import wave
+
+from veraxi_ymmp.app.async_compiler import AsyncYMMPCompiler
+from veraxi_ymmp.core.config import CompilerConfig
+
+
+def async_test(coro):
+    @functools.wraps(coro)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(coro(*args, **kwargs))
+    return wrapper
 
 def _create_mock_wav(frames=24000, rate=24000):
     buf = io.BytesIO()
@@ -29,7 +37,7 @@ class MockAsyncTTSBackend:
     async def synthesize_async(self, text, speaker_id):
         return _create_mock_wav(), 1.0
 
-@pytest.mark.asyncio
+@async_test
 async def test_compile_async(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_async.ymmp"
@@ -65,7 +73,7 @@ async def test_compile_async(tmp_path):
     audio_items = [i for i in output_data["Timeline"]["Items"] if "AudioItem" in i.get("$type", "")]
     assert len(audio_items) == 2
 
-@pytest.mark.asyncio
+@async_test
 async def test_compile_async_director_script(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_async_director.ymmp"
@@ -100,7 +108,7 @@ async def test_compile_async_director_script(tmp_path):
     assert any("BGM not found: theme.mp3" in w for w in result.warnings)
     assert any("SFX not found: bang.wav" in w for w in result.warnings)
 
-@pytest.mark.asyncio
+@async_test
 async def test_compile_async_diagnostics_reset(tmp_path):
     template_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')
     output_path = tmp_path / "output_async_director_1.ymmp"

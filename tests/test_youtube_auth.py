@@ -11,7 +11,7 @@ import pytest
 google_auth = pytest.importorskip("google.oauth2.credentials")
 Credentials = google_auth.Credentials
 
-from veraxi_ymmp.youtube_auth import (  # noqa: E402
+from veraxi_ymmp.exporters.youtube_auth import (  # noqa: E402
     authenticate_youtube,
     load_credentials,
     refresh_credentials,
@@ -20,7 +20,7 @@ from veraxi_ymmp.youtube_auth import (  # noqa: E402
 
 @pytest.fixture
 def mock_flow():
-    with patch("veraxi_ymmp.youtube_auth.InstalledAppFlow") as mock:
+    with patch("veraxi_ymmp.exporters.youtube_auth.InstalledAppFlow") as mock:
         flow_instance = MagicMock()
         mock.from_client_secrets_file.return_value = flow_instance  # pragma: allowlist secret
         yield flow_instance
@@ -149,7 +149,7 @@ def test_env_json_source_not_persisted(tmp_path: Path):
 
 def test_save_and_resolve_client_secrets(tmp_path: Path):  # pragma: allowlist secret
     """Test saving valid client secrets and erroring on invalid format."""
-    from veraxi_ymmp.youtube_auth import save_client_secrets, resolve_client_secrets_path  # pragma: allowlist secret
+    from veraxi_ymmp.exporters.youtube_auth import save_client_secrets, resolve_client_secrets_path  # pragma: allowlist secret
 
     valid_dict = {"installed": {"client_id": "test_cid", "client_secret": "test_csec"}}  # pragma: allowlist secret
     target = tmp_path / "secrets.json"
@@ -175,7 +175,7 @@ def test_save_and_resolve_client_secrets(tmp_path: Path):  # pragma: allowlist s
 
 def test_auth_status_and_revoke(tmp_path: Path, dummy_token_data):
     """Test get_auth_status and revoke_token."""
-    from veraxi_ymmp.youtube_auth import get_auth_status, revoke_token
+    from veraxi_ymmp.exporters.youtube_auth import get_auth_status, revoke_token
 
     tok_path = tmp_path / "tok.json"
     tok_path.write_text(json.dumps(dummy_token_data), encoding="utf-8")

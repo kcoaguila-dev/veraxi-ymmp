@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.ports import ExportResult
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.app.pipeline import ProjectPipeline
+from veraxi_ymmp.core.ports import ExportResult
 
 
 def _create_minimal_project(proj_dir: Path) -> Path:
@@ -64,9 +64,9 @@ def test_pipeline_bypasses_gate_when_allow_unverified_enabled(tmp_path: Path) ->
     mock_exp.export.return_value = ExportResult(target_format="ymmp", output_path=proj_dir / "out.ymmp")
 
     with (
-        patch("veraxi_ymmp.pipeline.YMMPCompiler") as mock_compiler,
-        patch("veraxi_ymmp.pipeline.validate_ymmp_timeline", return_value={"status": "PASS"}),
-        patch("veraxi_ymmp.pipeline.generate_project_thumbnail", return_value=fake_thumb),
+        patch("veraxi_ymmp.app.pipeline.YMMPCompiler") as mock_compiler,
+        patch("veraxi_ymmp.app.pipeline.validate_ymmp_timeline", return_value={"status": "PASS"}),
+        patch("veraxi_ymmp.app.pipeline.generate_project_thumbnail", return_value=fake_thumb),
     ):
         inst = MagicMock()
         inst.build_ir.return_value = (dummy_ir, [])
@@ -191,9 +191,9 @@ def test_pipeline_succeeds_when_claims_verified_against_stored_source(tmp_path: 
     mock_exp.export.return_value = ExportResult(target_format="ymmp", output_path=proj_dir / "out.ymmp")
 
     with (
-        patch("veraxi_ymmp.pipeline.YMMPCompiler") as mock_compiler,
-        patch("veraxi_ymmp.pipeline.validate_ymmp_timeline", return_value={"status": "PASS"}),
-        patch("veraxi_ymmp.pipeline.generate_project_thumbnail", return_value=fake_thumb),
+        patch("veraxi_ymmp.app.pipeline.YMMPCompiler") as mock_compiler,
+        patch("veraxi_ymmp.app.pipeline.validate_ymmp_timeline", return_value={"status": "PASS"}),
+        patch("veraxi_ymmp.app.pipeline.generate_project_thumbnail", return_value=fake_thumb),
     ):
         inst = MagicMock()
         inst.build_ir.return_value = (dummy_ir, [])

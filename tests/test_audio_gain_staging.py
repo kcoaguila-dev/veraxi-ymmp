@@ -4,25 +4,30 @@ Tests for Upstream Audio Gain Staging and Loudness Targeting.
 
 from __future__ import annotations
 
+
 import io
 import json
+import shutil
 import struct
 import wave
 from pathlib import Path
 
+import pytest
 
-from veraxi_ymmp.audio_normalizer import (
+from veraxi_ymmp.app.ir_builder import TimelineIRBuilder
+from veraxi_ymmp.audio.audio_normalizer import (
     gain_stage_audio_bytes,
     gain_stage_audio_file,
 )
-from veraxi_ymmp.config import CompilerConfig
-from veraxi_ymmp.constants import (
+from veraxi_ymmp.core.config import CompilerConfig
+from veraxi_ymmp.core.constants import (
     DEFAULT_AUDIO_SAMPLE_RATE,
     DEFAULT_SPEECH_TARGET_LUFS,
     DEFAULT_SPEECH_TARGET_TP,
 )
-from veraxi_ymmp.ir_builder import TimelineIRBuilder
-from veraxi_ymmp.ports import NullTTSBackend
+from veraxi_ymmp.core.ports import NullTTSBackend
+
+pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required for audio normalizer gain staging")
 
 
 def _generate_synthetic_speech_wav(duration_sec: float = 1.5, sample_rate: int = 24000) -> bytes:

@@ -1,7 +1,7 @@
 """Tests for the Hatsuon phonetic conversion module."""
 
 import pytest
-from veraxi_ymmp.hatsuon import Hatsuon, HatsuonError
+from veraxi_ymmp.audio.hatsuon import Hatsuon, HatsuonError
 
 
 @pytest.fixture

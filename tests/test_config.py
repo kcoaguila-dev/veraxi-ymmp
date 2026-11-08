@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
-from veraxi_ymmp.config import CompilerConfig
-from veraxi_ymmp.constants import DEFAULT_FPS
+from veraxi_ymmp.core.config import CompilerConfig
+from veraxi_ymmp.core.constants import DEFAULT_FPS
 
 def test_compiler_config_defaults():
     config = CompilerConfig()

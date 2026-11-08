@@ -1,4 +1,4 @@
-from veraxi_ymmp.cache import TTSCache
+from veraxi_ymmp.app.cache import TTSCache
 import json
 
 def test_cache_memory():

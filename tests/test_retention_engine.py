@@ -2,21 +2,21 @@ import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from veraxi_ymmp.config import CompilerConfig
-from veraxi_ymmp.ir import CameraShotIR, TimelineIR, VoiceClip
-from veraxi_ymmp.ir_builder import (
+from veraxi_ymmp.core.config import CompilerConfig
+from veraxi_ymmp.core.ir import CameraShotIR, TimelineIR, VoiceClip
+from veraxi_ymmp.app.ir_builder import (
     TimelineIRBuilder,
     _calculate_cut_padding,
     _resolve_camera_shot,
 )
-from veraxi_ymmp.ports import NullTTSBackend
-from veraxi_ymmp.sfx import (
+from veraxi_ymmp.core.ports import NullTTSBackend
+from veraxi_ymmp.audio.sfx import (
     ensure_tactile_sfx_suite,
     generate_sub_bass_impact,
     generate_subtle_whoosh,
     generate_ui_snap,
 )
-from veraxi_ymmp.voicevox import VoicevoxClient
+from veraxi_ymmp.audio.voicevox import VoicevoxClient
 
 
 def test_tactile_sfx_generation(tmp_path: Path) -> None:
@@ -221,7 +221,7 @@ def test_voicevox_speed_scale_and_silence_clamping() -> None:
 def test_moviepy_virtual_camera_frame_render(tmp_path: Path) -> None:
     """Verify MoviePyRenderer executes virtual camera zoom and crops cleanly."""
     from PIL import Image
-    from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
+    from veraxi_ymmp.exporters.moviepy_renderer import MoviePyRenderer
 
     ir = TimelineIR(
         fps=30,
@@ -266,8 +266,8 @@ def test_moviepy_virtual_camera_frame_render(tmp_path: Path) -> None:
 def test_premiere_audio_track_separation(tmp_path: Path) -> None:
     """Verify PremiereExporter maps A1: BGM, A2: SFX (finite duration), and A3+: Voices."""
     import xml.etree.ElementTree as ET
-    from veraxi_ymmp.ir import DynamicAudioClip
-    from veraxi_ymmp.premiere_exporter import PremiereExporter
+    from veraxi_ymmp.core.ir import DynamicAudioClip
+    from veraxi_ymmp.exporters.premiere_exporter import PremiereExporter
 
     sfx_wav = tmp_path / "snap.wav"
     sfx_wav.write_bytes(b"RIFF....WAVE")
@@ -380,8 +380,8 @@ def test_premiere_audio_track_separation(tmp_path: Path) -> None:
 def test_ymmp_sfx_non_overlapping_layers(tmp_path: Path) -> None:
     """Verify YMMPRenderer routes SFX to Layer 11+ with collision-free allocation and no duplicate BGM."""
     import json
-    from veraxi_ymmp.ir import DynamicAudioClip
-    from veraxi_ymmp.ymmp_renderer import YMMPRenderer
+    from veraxi_ymmp.core.ir import DynamicAudioClip
+    from veraxi_ymmp.exporters.ymmp_renderer import YMMPRenderer
 
     sfx1 = tmp_path / "snap.wav"
     sfx1.write_bytes(b"RIFF....WAVE")
@@ -419,7 +419,7 @@ def test_ymmp_sfx_non_overlapping_layers(tmp_path: Path) -> None:
     with open(out_ymmp, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    from veraxi_ymmp.template import get_timeline
+    from veraxi_ymmp.core.template import get_timeline
     items = get_timeline(data)["Items"]
     audio_items = [it for it in items if "AudioItem" in it.get("$type", "")]
 
@@ -441,8 +441,8 @@ def test_ymmp_sfx_non_overlapping_layers(tmp_path: Path) -> None:
 
 
 def test_staging_module_heuristics(tmp_path: Path) -> None:
-    """Verify veraxi_ymmp.staging decoupled functions."""
-    from veraxi_ymmp.staging import (
+    """Verify veraxi_ymmp.core.staging decoupled functions."""
+    from veraxi_ymmp.core.staging import (
         calculate_cut_padding,
         detect_sfx_for_cut,
         detect_slide_sfx,

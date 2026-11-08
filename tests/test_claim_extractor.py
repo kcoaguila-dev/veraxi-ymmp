@@ -1,5 +1,5 @@
-from veraxi_ymmp.claim_extractor import classify_text, extract_draft_claims
-from veraxi_ymmp.facts import Claim, ClaimKind, ClaimWeight, Verdict, audit, gate_failures
+from veraxi_ymmp.epistemic.claim_extractor import classify_text, extract_draft_claims
+from veraxi_ymmp.epistemic.facts import Claim, ClaimKind, ClaimWeight, Verdict, audit, gate_failures
 
 
 def test_banter_is_not_a_claim() -> None:

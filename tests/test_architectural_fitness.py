@@ -13,6 +13,7 @@ These tests enforce Clean Architecture constraints and privacy invariants:
 from __future__ import annotations
 
 import ast
+import re
 import getpass
 import subprocess
 import sys
@@ -386,7 +387,7 @@ def test_domain_layer_purity() -> None:
 
 
 def test_ports_layer_purity() -> None:
-    """Ensure veraxi_ymmp/ports.py only imports domain modules or standard library and never concrete adapters."""
+    """Ensure veraxi_ymmp/core/ports.py only imports Tier 1 domain modules or standard library."""
     ports_file = REPO_ROOT / "veraxi_ymmp" / "core" / "ports.py"
     assert ports_file.is_file(), f"Ports file not found: {ports_file}"
 
@@ -395,39 +396,12 @@ def test_ports_layer_purity() -> None:
         "__future__",
         "typing",
         "dataclasses",
+        "enum",
         "pathlib",
-        "ir",
-        "script",
-        "constants",
-        "director",
-        "facts",
-        "epistemic_units",
-        "veraxi_ymmp.epistemic_units",
-        "veraxi_ymmp.ir",
-        "veraxi_ymmp.script",
-        "veraxi_ymmp.constants",
-        "veraxi_ymmp.director",
-        "veraxi_ymmp.facts",
         "veraxi_ymmp.core.ir",
         "veraxi_ymmp.core.script",
         "veraxi_ymmp.core.constants",
         "veraxi_ymmp.core.director",
-        "veraxi_ymmp.epistemic.facts",
-        "veraxi_ymmp.epistemic.epistemic_units",
-    }
-    forbidden_adapters = {
-        "voicevox",
-        "ymmp_renderer",
-        "premiere_exporter",
-        "moviepy_renderer",
-        "ae_renderer",
-        "srt_generator",
-        "thumbnail",
-        "broll",
-        "cli",
-        "cli_youtube",
-        "mcp_server",
-        "pipeline",
     }
 
     violations: List[str] = []
@@ -435,19 +409,97 @@ def test_ports_layer_purity() -> None:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 root_mod = alias.name.split(".")[0]
-                if root_mod not in allowed_roots or any(
-                    _matches_module(alias.name, f) for f in forbidden_adapters
-                ):
+                if alias.name not in allowed_roots and root_mod not in allowed_roots:
                     violations.append(f"ports.py:{node.lineno} disallowed import '{alias.name}'")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            if any(_matches_module(mod, f) for f in forbidden_adapters):
-                violations.append(f"ports.py:{node.lineno} forbidden adapter import '{mod}'")
-            elif mod and mod not in allowed_roots:
+            if mod not in allowed_roots:
                 violations.append(f"ports.py:{node.lineno} disallowed import from '{mod}'")
 
     assert not violations, (
         f"Ports layer purity violations found ({len(violations)}):\n" + "\n".join(violations)
+    )
+
+
+def test_strict_three_tier_compiler_dag() -> None:
+    """Enforce the 3-Tier Compiler DAG:
+    - Tier 1 (core/): Zero dependencies on Tier 2 or Tier 3.
+    - Tier 2 (epistemic, editorial, graphics, audio, exporters): Never import from Tier 3 (app/).
+    - Exporters: Never import from peer exporters.
+    """
+    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    tier2_subs = {"epistemic", "editorial", "graphics", "audio", "exporters"}
+    violations: List[str] = []
+
+    for py_file in lib_dir.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        sub = py_file.parent.name if py_file.parent != lib_dir else "root"
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        rel_path = str(py_file.relative_to(REPO_ROOT))
+
+        for node in ast.walk(tree):
+            mods: List[str] = []
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                mods = [node.module]
+
+            for m in mods:
+                if m.startswith("veraxi_ymmp."):
+                    parts = m.split(".")
+                    if len(parts) >= 2:
+                        target_sub = parts[1]
+                        if sub == "core" and target_sub != "core":
+                            violations.append(
+                                f"{rel_path}:{node.lineno} Tier 1 violation: core cannot import '{m}'"
+                            )
+                        elif sub in tier2_subs and target_sub == "app":
+                            violations.append(
+                                f"{rel_path}:{node.lineno} Tier 2->3 violation: Tier 2 cannot import from app ('{m}')"
+                            )
+
+    assert not violations, (
+        f"Compiler DAG violations found ({len(violations)}):\n" + "\n".join(violations)
+    )
+
+
+def test_no_sys_meta_path_or_legacy_flat_imports() -> None:
+    """Ensure no sys.meta_path aliasing in __init__.py and zero legacy flat imports in tests or scripts."""
+    init_file = REPO_ROOT / "veraxi_ymmp" / "__init__.py"
+    init_content = init_file.read_text(encoding="utf-8")
+    assert "sys.meta_path" not in init_content, "sys.meta_path aliasing hook must not exist in __init__.py"
+    assert "_MODULE_MAP" not in init_content, "_MODULE_MAP must not exist in __init__.py"
+
+    forbidden_legacy_mods = [
+        "constants", "logging", "utils", "config", "template", "ir", "script",
+        "staging", "ports", "director", "schema", "epistemic_units", "facts",
+        "fact_audit", "fact_report", "citation_card", "asset_guard", "web_capture",
+        "edgar_capture", "fred_capture", "claim_extractor", "veraxi_checker",
+        "document_registry", "script_ingest", "pacing", "retention_qa", "validation",
+        "official_assets", "psd_registry", "typography", "subtitle_plate",
+        "stats_formatter", "broll", "infographic", "thumbnail", "thumbnail_composer",
+        "thumbnail_ab", "phonetics", "hatsuon", "voicevox", "audio_normalizer",
+        "sfx", "ymmp_renderer", "ymmp_utils", "premiere_exporter", "moviepy_renderer",
+        "ae_renderer", "srt_generator", "youtube_auth", "youtube_metadata",
+        "youtube_adapter", "compiler", "cache", "async_compiler", "ir_builder",
+        "pipeline", "history", "cli", "cli_ideate", "cli_capture", "cli_youtube",
+        "api_server", "mcp_server"
+    ]
+    legacy_regex = re.compile(r"(?<!\.)\bveraxi_ymmp\.(" + "|".join(forbidden_legacy_mods) + r")\b")
+
+    violations: List[str] = []
+    for scan_dir in [REPO_ROOT / "tests", REPO_ROOT / "scripts", REPO_ROOT / "veraxi_ymmp"]:
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file == REPO_ROOT / "tests" / "test_architectural_fitness.py":
+                continue
+            scan_text = py_file.read_text(encoding="utf-8")
+            matches = legacy_regex.findall(scan_text)
+            if matches:
+                violations.append(f"{py_file.relative_to(REPO_ROOT)}: legacy flat imports {set(matches)}")
+
+    assert not violations, (
+        f"Legacy flat module references found ({len(violations)}):\n" + "\n".join(violations)
     )
 
 

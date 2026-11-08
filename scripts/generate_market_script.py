@@ -2,7 +2,7 @@
 """Generate high-quality 8-12 minute YouTube script for 2026 Stock Market Rotation."""
 import json
 from pathlib import Path
-from veraxi_ymmp.script import validate_production_script
+from veraxi_ymmp.core.script import validate_production_script
 
 dialogues = [
     # Directive: Clean instrumental BGM ducked low

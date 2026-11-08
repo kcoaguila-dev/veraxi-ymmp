@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from veraxi_ymmp.audio_normalizer import PLATFORM_TARGETS, normalize_all_platforms
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.pipeline import ProjectPipeline, run_project
-from veraxi_ymmp.ports import ExportResult
+from veraxi_ymmp.audio.audio_normalizer import PLATFORM_TARGETS, normalize_all_platforms
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.app.pipeline import ProjectPipeline, run_project
+from veraxi_ymmp.core.ports import ExportResult
 
 
 def test_pipeline_full_orchestration_with_mocked_exporters(tmp_path: Path) -> None:
@@ -62,13 +62,13 @@ def test_pipeline_full_orchestration_with_mocked_exporters(tmp_path: Path) -> No
     mock_qa_exp = MagicMock()
 
     with (
-        patch("veraxi_ymmp.pipeline.YMMPCompiler") as mock_compiler_cls,
+        patch("veraxi_ymmp.app.pipeline.YMMPCompiler") as mock_compiler_cls,
         patch(
-            "veraxi_ymmp.pipeline.validate_ymmp_timeline",
+            "veraxi_ymmp.app.pipeline.validate_ymmp_timeline",
             return_value={"status": "PASS", "voice_items": 1},
         ) as mock_validate,
         patch(
-            "veraxi_ymmp.pipeline.generate_project_thumbnail",
+            "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
             return_value=fake_thumb,
         ) as mock_thumb,
     ):
@@ -132,7 +132,7 @@ def test_normalize_all_platforms(tmp_path: Path) -> None:
             assert out_path == (out_dir / f"source_{plat}.mp4").resolve()
 
 def test_pipeline_progress_callback(tmp_path: Path) -> None:
-    from veraxi_ymmp.pipeline import ProjectPipeline
+    from veraxi_ymmp.app.pipeline import ProjectPipeline
     import json
 
     stages = []

@@ -1,4 +1,4 @@
-"""Unit tests for veraxi_ymmp.mcp_server tools and helpers."""
+"""Unit tests for veraxi_ymmp.app.mcp_server tools and helpers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from veraxi_ymmp.mcp_server import (
+from veraxi_ymmp.app.mcp_server import (
     audition_voice,
     compile_project,
     generate_thumbnail_tool,
@@ -27,7 +27,7 @@ from veraxi_ymmp.mcp_server import (
     validate_script,
     workspace_path,
 )
-from veraxi_ymmp.pipeline import PipelineResult
+from veraxi_ymmp.app.pipeline import PipelineResult
 
 pytest.importorskip("mcp")
 
@@ -140,7 +140,7 @@ def test_run_pipeline_and_generate_thumbnail_tool(
         thumbnail_path=proj_dir / "thumbnail.png",
         success=True,
     )
-    with patch("veraxi_ymmp.mcp_server.ProjectPipeline.run", return_value=fake_result):
+    with patch("veraxi_ymmp.app.mcp_server.ProjectPipeline.run", return_value=fake_result):
         raw = run_pipeline("demo_proj", use_tts=False)
         parsed = json.loads(raw)
         assert parsed["success"] is True
@@ -148,22 +148,22 @@ def test_run_pipeline_and_generate_thumbnail_tool(
 
     expected_thumb = proj_dir / "thumbnail.png"
     with patch(
-        "veraxi_ymmp.mcp_server.generate_project_thumbnail",
+        "veraxi_ymmp.app.mcp_server.generate_project_thumbnail",
         return_value=expected_thumb,
     ) as mock_thumb:
         thumb_res = generate_thumbnail_tool("demo_proj")
         assert thumb_res == str(expected_thumb)
         assert mock_thumb.called
 
-@patch("veraxi_ymmp.mcp_server.VoicevoxClient.is_available", return_value=True)
-@patch("veraxi_ymmp.mcp_server.VoicevoxClient.get_speakers", return_value=[{"name": "ずんだもん"}])
+@patch("veraxi_ymmp.app.mcp_server.VoicevoxClient.is_available", return_value=True)
+@patch("veraxi_ymmp.app.mcp_server.VoicevoxClient.get_speakers", return_value=[{"name": "ずんだもん"}])
 def test_get_voicevox_health(mock_speakers, mock_is_available) -> None:
     res = get_voicevox_health("http://fake")
     assert res["available"] is True
     assert res["url"] == "http://fake"
     assert res["speakers"] == [{"name": "ずんだもん"}]
 
-@patch("veraxi_ymmp.mcp_server.VoicevoxClient.get_audio_query")
+@patch("veraxi_ymmp.app.mcp_server.VoicevoxClient.get_audio_query")
 @patch("requests.post")
 def test_audition_voice(mock_post, mock_get_audio_query) -> None:
     mock_get_audio_query.return_value = {"accent_phrases": [{"moras": [1, 2]}]}
@@ -184,8 +184,8 @@ def test_audition_voice(mock_post, mock_get_audio_query) -> None:
     assert Path(res["path"]).exists()
     assert res["duration_seconds"] == 1.0
 
-@patch("veraxi_ymmp.mcp_server.render_from_manifest")
-@patch("veraxi_ymmp.mcp_server.Image.open")
+@patch("veraxi_ymmp.app.mcp_server.render_from_manifest")
+@patch("veraxi_ymmp.app.mcp_server.Image.open")
 def test_render_broll_slides(mock_image_open, mock_render) -> None:
     mock_render.return_value = [Path("fake1.png"), Path("fake2.png")]
     mock_img = mock_image_open.return_value.__enter__.return_value
@@ -196,7 +196,7 @@ def test_render_broll_slides(mock_image_open, mock_render) -> None:
     assert res["slides"][0]["width"] == 1920
 
 @patch("subprocess.run")
-@patch("veraxi_ymmp.mcp_server.normalize_video_audio")
+@patch("veraxi_ymmp.app.mcp_server.normalize_video_audio")
 def test_normalize_project_audio(mock_normalize, mock_run, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     proj = tmp_path / "testproj"
@@ -232,7 +232,7 @@ def test_launch_ymm4_desktop(mock_popen, monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 def test_find_ymm4_executable_auto_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from veraxi_ymmp.mcp_server import find_ymm4_executable
+    from veraxi_ymmp.app.mcp_server import find_ymm4_executable
 
     # When YMM4_PATH is set and exists
     fake_exe = tmp_path / "YukkuriMovieMaker.exe"
@@ -300,8 +300,8 @@ def test_save_project_script(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert len(res["warnings"]) == 1
     assert (proj_dir / "script.json").exists()
 
-@patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_video")
-@patch("veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_caption")
+@patch("veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter.upload_video")
+@patch("veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter.upload_caption")
 def test_upload_project_to_youtube(mock_upload_caption, mock_upload_video, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     proj_dir = tmp_path / "projects" / "testproj"
@@ -309,7 +309,7 @@ def test_upload_project_to_youtube(mock_upload_caption, mock_upload_video, monke
     (proj_dir / "qa_test.mp4").touch()
     (proj_dir / "test.srt").touch()
 
-    from veraxi_ymmp.ir import UploadResult
+    from veraxi_ymmp.core.ir import UploadResult
     mock_upload_video.return_value = UploadResult(video_id="fakeid", status="uploaded", thumbnail_uploaded=False, bytes_uploaded=100, url="http://fakeurl")
 
     res = upload_project_to_youtube(
@@ -325,14 +325,14 @@ def test_upload_project_to_youtube(mock_upload_caption, mock_upload_video, monke
 
 
 def test_get_ai_prompt_spec() -> None:
-    from veraxi_ymmp.mcp_server import get_ai_prompt_spec
+    from veraxi_ymmp.app.mcp_server import get_ai_prompt_spec
     res = get_ai_prompt_spec()
     assert "prompt_markdown" in res
     assert "json_schema" in res
     assert "ずんだもん" in res["prompt_markdown"]
 
 def test_save_project_script_reprompt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from veraxi_ymmp.mcp_server import save_project_script
+    from veraxi_ymmp.app.mcp_server import save_project_script
     monkeypatch.chdir(tmp_path)
     proj_dir = tmp_path / "projects" / "testproj"
     proj_dir.mkdir(parents=True)

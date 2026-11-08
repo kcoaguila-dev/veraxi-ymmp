@@ -5,10 +5,10 @@ Tests for WebDocumentCaptureAdapter and general web document capture.
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.cli_capture import cmd_capture
-from veraxi_ymmp.facts import DocumentCaptureSpec, DocumentProvenance, DocumentSourceType
-from veraxi_ymmp.ports import OfficialDocumentCapturePort
-from veraxi_ymmp.web_capture import WebDocumentCaptureAdapter
+from veraxi_ymmp.app.cli_capture import cmd_capture
+from veraxi_ymmp.epistemic.facts import DocumentCaptureSpec, DocumentProvenance, DocumentSourceType
+from veraxi_ymmp.core.ports import OfficialDocumentCapturePort
+from veraxi_ymmp.epistemic.web_capture import WebDocumentCaptureAdapter
 
 
 def test_web_protocol_conformance() -> None:

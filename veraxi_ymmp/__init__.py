@@ -13,10 +13,7 @@ veraxi-ymmp: A Python tool for generating YMM4 .ymmp dialogue timelines.
 
 from __future__ import annotations
 
-import sys
-import importlib
-import importlib.abc
-from typing import Any, Sequence
+
 
 # Subpackages
 from . import core
@@ -108,40 +105,3 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
-
-_MODULE_MAP = {'constants': 'core', 'logging': 'core', 'utils': 'core', 'config': 'core', 'template': 'core', 'ir': 'core', 'script': 'core', 'staging': 'core', 'ports': 'core', 'director': 'core', 'schema': 'core', 'epistemic_units': 'epistemic', 'facts': 'epistemic', 'fact_audit': 'epistemic', 'fact_report': 'epistemic', 'citation_card': 'epistemic', 'asset_guard': 'epistemic', 'web_capture': 'epistemic', 'edgar_capture': 'epistemic', 'fred_capture': 'epistemic', 'claim_extractor': 'epistemic', 'veraxi_checker': 'epistemic', 'document_registry': 'epistemic', 'script_ingest': 'editorial', 'pacing': 'editorial', 'retention_qa': 'editorial', 'validation': 'editorial', 'official_assets': 'graphics', 'psd_registry': 'graphics', 'typography': 'graphics', 'subtitle_plate': 'graphics', 'stats_formatter': 'graphics', 'broll': 'graphics', 'infographic': 'graphics', 'thumbnail': 'graphics', 'thumbnail_composer': 'graphics', 'thumbnail_ab': 'graphics', 'phonetics': 'audio', 'hatsuon': 'audio', 'voicevox': 'audio', 'audio_normalizer': 'audio', 'sfx': 'audio', 'ymmp_renderer': 'exporters', 'ymmp_utils': 'exporters', 'premiere_exporter': 'exporters', 'moviepy_renderer': 'exporters', 'ae_renderer': 'exporters', 'srt_generator': 'exporters', 'youtube_auth': 'exporters', 'youtube_metadata': 'exporters', 'youtube_adapter': 'exporters', 'compiler': 'app', 'cache': 'app', 'async_compiler': 'app', 'ir_builder': 'app', 'pipeline': 'app', 'history': 'app', 'cli': 'app', 'cli_ideate': 'app', 'cli_capture': 'app', 'cli_youtube': 'app', 'api_server': 'app', 'mcp_server': 'app'}
-
-class _SubpackageAliasLoader(importlib.abc.Loader):
-    def __init__(self, target_module_name: str) -> None:
-        self.target_module_name = target_module_name
-
-    def create_module(self, spec: Any) -> Any:
-        return importlib.import_module(self.target_module_name)
-
-    def exec_module(self, module: Any) -> None:
-        pass
-
-
-class _SubpackageAliasFinder(importlib.abc.MetaPathFinder):
-    """MetaPathFinder to alias legacy imports (e.g. from veraxi_ymmp.facts import ...) to subpackages."""
-    def find_spec(self, fullname: str, path: Sequence[str] | None, target: Any = None) -> Any:
-        if fullname.startswith("veraxi_ymmp."):
-            parts = fullname.split(".")
-            if len(parts) == 2 and parts[1] in _MODULE_MAP:
-                sub = _MODULE_MAP[parts[1]]
-                canonical = f"veraxi_ymmp.{sub}.{parts[1]}"
-                return importlib.machinery.ModuleSpec(fullname, _SubpackageAliasLoader(canonical))
-        return None
-
-if not any(isinstance(f, _SubpackageAliasFinder) for f in sys.meta_path):
-    sys.meta_path.insert(0, _SubpackageAliasFinder())
-
-def __getattr__(name: str) -> Any:
-    """Dynamically resolve legacy module imports from veraxi_ymmp.<module>."""
-    if name in _MODULE_MAP:
-        sub = _MODULE_MAP[name]
-        mod = importlib.import_module(f"veraxi_ymmp.{sub}.{name}")
-        sys.modules[f"veraxi_ymmp.{name}"] = mod
-        globals()[name] = mod
-        return mod
-    raise AttributeError(f"module 'veraxi_ymmp' has no attribute '{name}'")

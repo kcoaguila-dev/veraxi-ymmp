@@ -384,7 +384,7 @@ def _cmd_export_spec(argv: List[str]) -> None:
             if args.target == "gemini-flash"
             else "UNIVERSAL_AI_PROMPT.md"
         )
-        md_path = Path(__file__).parent / "templates" / template_name
+        md_path = Path(__file__).resolve().parent.parent / "templates" / template_name
         out_content = md_path.read_text(encoding="utf-8")
         if args.target == "universal":
             # Replace or append character list if needed

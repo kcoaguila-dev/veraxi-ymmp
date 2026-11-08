@@ -876,4 +876,4 @@ if __name__ == "__main__":
         output_dir = sys.argv[2]
         render_from_manifest(manifest_file, output_dir)
     else:
-        print("Usage: python -m veraxi_ymmp.broll <manifest.json> <output_dir>")
+        print("Usage: python -m veraxi_ymmp.graphics.broll <manifest.json> <output_dir>")

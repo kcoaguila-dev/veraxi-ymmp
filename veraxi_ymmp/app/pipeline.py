@@ -159,7 +159,7 @@ class ProjectPipeline:
 
         validator = validate_production_script
         if validator is None:
-            from . import script as _script_mod
+            from veraxi_ymmp.core import script as _script_mod
 
             validator = getattr(_script_mod, "validate_production_script", None)
         if validator is not None:

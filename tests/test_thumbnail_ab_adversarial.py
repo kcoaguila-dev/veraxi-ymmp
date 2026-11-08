@@ -19,11 +19,11 @@ from typing import List
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     ThumbnailVariant,
     VariantMetrics,
 )
-from veraxi_ymmp.thumbnail_ab import (
+from veraxi_ymmp.graphics.thumbnail_ab import (
     ThumbnailABCoordinator,
     commit_winner,
     evaluate_performance,
@@ -33,7 +33,7 @@ from veraxi_ymmp.thumbnail_ab import (
     rotate_thumbnail,
     save_experiment,
 )
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
 
 def _create_mock_png(path: Path, content: bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRdummy") -> Path:

@@ -153,9 +153,9 @@ def _cmd_youtube_qa(args: argparse.Namespace) -> None:
     template_candidates = [
         project_path / "template.ymmp",
         Path("examples/full_template.ymmp"),
-        Path(__file__).resolve().parent.parent / "examples" / "full_template.ymmp",
+        Path(__file__).resolve().parent.parent.parent / "examples" / "full_template.ymmp",
         Path("examples/template.ymmp"),
-        Path(__file__).resolve().parent.parent / "examples" / "template.ymmp",
+        Path(__file__).resolve().parent.parent.parent / "examples" / "template.ymmp",
     ]
     template_path = None
     for cand in template_candidates:
@@ -403,7 +403,7 @@ def _cmd_youtube_channel(args: argparse.Namespace) -> None:
 
 def _cmd_youtube_ab(args: argparse.Namespace) -> None:
     """Handle the 'youtube ab' subcommand (A/B thumbnail variant switching)."""
-    from . import thumbnail_ab as ab
+    from veraxi_ymmp.graphics import thumbnail_ab as ab
 
     project = Path(args.project)
     if not project.exists():

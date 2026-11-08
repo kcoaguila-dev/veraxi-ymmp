@@ -1,4 +1,4 @@
-"""Unit test suite for veraxi_ymmp.youtube_adapter.
+"""Unit test suite for veraxi_ymmp.exporters.youtube_adapter.
 
 Tests:
 - MockYouTubeAdapter: 100% offline simulation of chunked upload, retry backoff,
@@ -16,15 +16,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     VideoPublishMetadata,
     VideoRetentionReport,
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     VideoAnalyticsProvider,
     VideoPublisher,
 )
-from veraxi_ymmp.youtube_adapter import (
+from veraxi_ymmp.exporters.youtube_adapter import (
     CHUNK_SIZE_DEFAULT,
     DEFAULT_RETENTION_CURVE,
     MOCK_CHUNK_SIZE_DEFAULT,

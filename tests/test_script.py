@@ -1,5 +1,5 @@
 import pytest
-from veraxi_ymmp.script import (
+from veraxi_ymmp.core.script import (
     validate_writer_script,
     validate_director_script,
     validate_director_against_writer

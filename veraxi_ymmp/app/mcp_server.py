@@ -246,7 +246,7 @@ def audition_voice(text: str, speaker_id: int, speed: float = 1.0, voicevox_url:
 
 @mcp.tool()
 def render_broll_slides(manifest_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
-    """Wraps veraxi_ymmp.broll.render_from_manifest to generate slides."""
+    """Wraps veraxi_ymmp.graphics.broll.render_from_manifest to generate slides."""
     try:
         resolved_manifest = workspace_path(manifest_path)
         if output_dir:
@@ -781,7 +781,7 @@ def get_ai_prompt_spec() -> Dict[str, Any]:
     from veraxi_ymmp.core.constants import DEFAULT_SPEAKER_MAP
     from veraxi_ymmp.core.schema import get_director_script_schema
 
-    prompt_path = Path(__file__).parent / "templates" / "UNIVERSAL_AI_PROMPT.md"
+    prompt_path = Path(__file__).resolve().parent.parent / "templates" / "UNIVERSAL_AI_PROMPT.md"
     prompt_markdown = ""
     if prompt_path.exists():
         prompt_markdown = prompt_path.read_text(encoding="utf-8")

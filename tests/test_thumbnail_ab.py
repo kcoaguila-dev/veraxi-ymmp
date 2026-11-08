@@ -1,13 +1,13 @@
 """Unit and Integration Tests for YouTube Thumbnail A/B Variant Engine (Milestone 1).
 
 Covers:
-- Pure domain models in veraxi_ymmp.ir:
+- Pure domain models in veraxi_ymmp.core.ir:
   VariantMetrics, ThumbnailVariant, RotationEvent, WinnerDecision, ThumbnailExperiment (serialization)
-- Protocol conformance in veraxi_ymmp.ports:
+- Protocol conformance in veraxi_ymmp.core.ports:
   VideoPublisher, VideoAnalyticsProvider
-- Variant configuration and generation in veraxi_ymmp.thumbnail:
+- Variant configuration and generation in veraxi_ymmp.graphics.thumbnail:
   validate_thumbnail_file_size, auto_extract_variant_configs, generate_thumbnail_variants
-- Infrastructure adapter mock simulation in veraxi_ymmp.youtube_adapter:
+- Infrastructure adapter mock simulation in veraxi_ymmp.exporters.youtube_adapter:
   MockYouTubeAdapter thumbnail_history, set_simulated_metrics, fetch_variant_metrics
 """
 
@@ -18,24 +18,24 @@ from pathlib import Path
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     RotationEvent,
     ThumbnailExperiment,
     ThumbnailVariant,
     VariantMetrics,
     WinnerDecision,
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     VideoAnalyticsProvider,
     VideoPublisher,
 )
-from veraxi_ymmp.thumbnail import (
+from veraxi_ymmp.graphics.thumbnail import (
     ThumbnailConfig,
     auto_extract_variant_configs,
     generate_thumbnail_variants,
     validate_thumbnail_file_size,
 )
-from veraxi_ymmp.thumbnail_ab import (
+from veraxi_ymmp.graphics.thumbnail_ab import (
     ThumbnailABCoordinator,
     commit_winner,
     evaluate_performance,
@@ -45,14 +45,14 @@ from veraxi_ymmp.thumbnail_ab import (
     render_ab_report,
     rotate_thumbnail,
 )
-from veraxi_ymmp.youtube_adapter import (
+from veraxi_ymmp.exporters.youtube_adapter import (
     THUMBNAIL_MAX_SIZE_BYTES,
     MockYouTubeAdapter,
 )
 
 
 class TestDomainModelSerialization:
-    """Test pure dataclass serialization (to_dict / from_dict) in veraxi_ymmp.ir."""
+    """Test pure dataclass serialization (to_dict / from_dict) in veraxi_ymmp.core.ir."""
 
     def test_variant_metrics_roundtrip(self) -> None:
         metrics = VariantMetrics(

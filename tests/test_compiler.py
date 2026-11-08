@@ -1,6 +1,6 @@
 import copy
-from veraxi_ymmp.compiler import YMMPCompiler
-from veraxi_ymmp.voicevox import VoicevoxClient
+from veraxi_ymmp.app.compiler import YMMPCompiler
+from veraxi_ymmp.audio.voicevox import VoicevoxClient
 from unittest.mock import Mock
 import os
 import json
@@ -318,7 +318,7 @@ def test_compile_discovers_existing_audio_without_tts(tmp_path: Path):
     with open(output_path, "r", encoding="utf-8") as f:
         output_data = json.load(f)
 
-    from veraxi_ymmp.validation import validate_ymmp_timeline
+    from veraxi_ymmp.editorial.validation import validate_ymmp_timeline
 
     v_res = validate_ymmp_timeline(output_data, expected_voice_count=1, require_audio=True)
     assert v_res["status"] == "PASS"

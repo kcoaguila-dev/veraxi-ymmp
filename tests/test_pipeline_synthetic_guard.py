@@ -10,15 +10,15 @@ from pathlib import Path
 from PIL import Image
 import pytest
 
-from veraxi_ymmp.asset_guard import (
+from veraxi_ymmp.epistemic.asset_guard import (
     AssetIntegrityError,
     compute_file_sha256,
     verify_image_asset,
     verify_project_assets,
     write_provenance_metadata,
 )
-from veraxi_ymmp.facts import DocumentProvenance, DocumentSourceType, ProvenanceRecord
-from veraxi_ymmp.pipeline import ProjectPipeline
+from veraxi_ymmp.epistemic.facts import DocumentProvenance, DocumentSourceType, ProvenanceRecord
+from veraxi_ymmp.app.pipeline import ProjectPipeline
 
 
 def _create_dummy_png(path: Path, color=(15, 23, 42, 255)) -> Path:

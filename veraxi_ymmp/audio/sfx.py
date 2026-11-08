@@ -114,7 +114,7 @@ def ensure_tactile_sfx_suite(target_dir: Path | None = None) -> Dict[str, Path]:
     Returns:
         Dictionary mapping SFX name to its resolved Path.
     """
-    base_dir = (target_dir or (Path(__file__).parent.parent / "assets" / "sfx")).resolve()
+    base_dir = (target_dir or (Path(__file__).resolve().parent.parent.parent / "assets" / "sfx")).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
 
     whoosh_p = base_dir / "whoosh_subtle.wav"

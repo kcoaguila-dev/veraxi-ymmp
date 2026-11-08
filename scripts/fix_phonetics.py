@@ -16,9 +16,9 @@ import json
 import sys
 from pathlib import Path
 
-from veraxi_ymmp.phonetics import DEFAULT_PHONETICS_DICT_PATH, normalize_tts_text
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.voicevox import VoicevoxClient
+from veraxi_ymmp.audio.phonetics import DEFAULT_PHONETICS_DICT_PATH, normalize_tts_text
+from veraxi_ymmp.app.pipeline import ProjectPipeline
+from veraxi_ymmp.audio.voicevox import VoicevoxClient
 
 
 def update_phonetics_dict(dict_path: Path, additions: list[str]) -> dict[str, str]:

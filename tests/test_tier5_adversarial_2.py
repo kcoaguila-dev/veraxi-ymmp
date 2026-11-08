@@ -24,14 +24,14 @@ from unittest.mock import patch
 
 import pytest
 
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.app.cli import main
+from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
     VideoPublishMetadata,
     VideoRetentionReport,
 )
-from veraxi_ymmp.retention_qa import RetentionCorrelationEngine
+from veraxi_ymmp.editorial.retention_qa import RetentionCorrelationEngine
 
 
 @pytest.fixture
@@ -1172,7 +1172,7 @@ class TestCLIAdversarialUploadAndStatus:
 
         def mock_upload(video_p: Path, meta: VideoPublishMetadata, **kwargs: Any) -> Any:
             captured_metadata.append(meta)
-            from veraxi_ymmp.ports import UploadResult
+            from veraxi_ymmp.core.ports import UploadResult
             return UploadResult(
                 video_id="mock_test_id",
                 url="https://youtu.be/mock_test_id",
@@ -1180,7 +1180,7 @@ class TestCLIAdversarialUploadAndStatus:
             )
 
         with patch(
-            "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_video",
+            "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter.upload_video",
             side_effect=mock_upload,
         ):
             with patch.object(
@@ -1206,9 +1206,9 @@ class TestCLIAdversarialUploadAndStatus:
     def test_upload_mock_simulated_failure_exits_1(self, dummy_video: Path) -> None:
         """When mock adapter returns status='failed', CLI exits 1."""
         with patch(
-            "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_video"
+            "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter.upload_video"
         ) as mock_up:
-            from veraxi_ymmp.ports import UploadResult
+            from veraxi_ymmp.core.ports import UploadResult
             mock_up.return_value = UploadResult(
                 video_id="",
                 url="",
@@ -1229,7 +1229,7 @@ class TestCLIAdversarialUploadAndStatus:
     ) -> None:
         """When adapter upload raises unexpected Exception, CLI catches and exits 1."""
         with patch(
-            "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter.upload_video",
+            "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter.upload_video",
             side_effect=ConnectionResetError("Socket reset by peer"),
         ):
             with patch.object(

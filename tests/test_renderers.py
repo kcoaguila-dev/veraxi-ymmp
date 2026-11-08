@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from veraxi_ymmp.ae_renderer import AfterEffectsRenderer
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.exporters.ae_renderer import AfterEffectsRenderer
+from veraxi_ymmp.core.ir import (
     DynamicImageClip,
     GlobalClip,
     TimelineIR,
@@ -18,7 +18,7 @@ from veraxi_ymmp.ir import (
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 if HAS_FFMPEG:
     try:
-        from veraxi_ymmp.moviepy_renderer import MoviePyRenderer, create_speech_bubble
+        from veraxi_ymmp.exporters.moviepy_renderer import MoviePyRenderer, create_speech_bubble
     except Exception:
         HAS_FFMPEG = False
 

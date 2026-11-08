@@ -34,7 +34,7 @@ def mock_ymmp_timeline_validation(monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "veraxi_ymmp.ymmp_renderer.validate_ymmp_timeline",
+            "veraxi_ymmp.exporters.ymmp_renderer.validate_ymmp_timeline",
             lambda *args, **kwargs: dummy_result,
         )
     except AttributeError:
@@ -42,7 +42,7 @@ def mock_ymmp_timeline_validation(monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "veraxi_ymmp.validation.validate_ymmp_timeline",
+            "veraxi_ymmp.editorial.validation.validate_ymmp_timeline",
             lambda *args, **kwargs: dummy_result,
         )
     except AttributeError:
@@ -50,7 +50,7 @@ def mock_ymmp_timeline_validation(monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "veraxi_ymmp.compiler.validate_ymmp_timeline",
+            "veraxi_ymmp.app.compiler.validate_ymmp_timeline",
             lambda *args, **kwargs: dummy_result,
         )
     except AttributeError:
@@ -58,7 +58,7 @@ def mock_ymmp_timeline_validation(monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "veraxi_ymmp.pipeline.validate_ymmp_timeline",
+            "veraxi_ymmp.app.pipeline.validate_ymmp_timeline",
             lambda *args, **kwargs: dummy_result,
         )
     except AttributeError:

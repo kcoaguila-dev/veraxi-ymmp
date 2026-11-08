@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from veraxi_ymmp.ir import VideoPublishMetadata
+from veraxi_ymmp.core.ir import VideoPublishMetadata
 
 
 class TestDateFormatsAdversarial:

@@ -7,9 +7,9 @@ from __future__ import annotations
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.facts import DocumentCaptureResult, DocumentCaptureSpec, DocumentSourceType
-from veraxi_ymmp.ports import OfficialDocumentCapturePort
-from veraxi_ymmp.edgar_capture import (
+from veraxi_ymmp.epistemic.facts import DocumentCaptureResult, DocumentCaptureSpec, DocumentSourceType
+from veraxi_ymmp.core.ports import OfficialDocumentCapturePort
+from veraxi_ymmp.epistemic.edgar_capture import (
     EdgarDocumentCaptureAdapter,
     get_sec_user_agent,
     resolve_company_meta,
@@ -105,7 +105,7 @@ def test_synthetic_capture_execution(tmp_path: Path) -> None:
 
 def test_cli_capture_sec_mock(tmp_path: Path) -> None:
     """Verify CLI capture-sec subcommand in mock mode."""
-    from veraxi_ymmp.cli import _cmd_capture_sec
+    from veraxi_ymmp.app.cli import _cmd_capture_sec
 
     out_file = tmp_path / "cli_capture_out.png"
     _cmd_capture_sec([
@@ -123,7 +123,7 @@ def test_cli_capture_sec_mock(tmp_path: Path) -> None:
 
 def test_cli_capture_generic_fred_mock(tmp_path: Path) -> None:
     """Verify CLI capture subcommand with --source fred in mock mode."""
-    from veraxi_ymmp.cli import _cmd_capture
+    from veraxi_ymmp.app.cli import _cmd_capture
 
     out_file = tmp_path / "cli_capture_fred.png"
     _cmd_capture([

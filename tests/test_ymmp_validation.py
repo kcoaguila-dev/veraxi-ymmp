@@ -7,8 +7,8 @@ import base64
 import brotli
 import pytest
 from pathlib import Path
-from veraxi_ymmp.validation import validate_ymmp_timeline, ValidationError
-from veraxi_ymmp.psd_registry import CharacterPSDRegistry
+from veraxi_ymmp.editorial.validation import validate_ymmp_timeline, ValidationError
+from veraxi_ymmp.graphics.psd_registry import CharacterPSDRegistry
 
 @pytest.fixture(autouse=True)
 def mock_path_exists(monkeypatch):

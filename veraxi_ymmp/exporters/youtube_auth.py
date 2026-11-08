@@ -11,9 +11,14 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+try:
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+except ImportError:
+    Request = None  # type: ignore[assignment,misc]
+    Credentials = None  # type: ignore[assignment,misc]
+    InstalledAppFlow = None  # type: ignore[assignment,misc]
 
 from veraxi_ymmp.core.logging import logger
 

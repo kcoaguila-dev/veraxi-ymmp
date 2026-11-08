@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
-from veraxi_ymmp.cli_ideate import cmd_ideate
-from veraxi_ymmp.script_ingest import parse_markdown_dialogue
-from veraxi_ymmp.pacing import audit_script_pacing
-from veraxi_ymmp.facts import compute_deterministic_grounding
+from veraxi_ymmp.app.cli_ideate import cmd_ideate
+from veraxi_ymmp.editorial.script_ingest import parse_markdown_dialogue
+from veraxi_ymmp.editorial.pacing import audit_script_pacing
+from veraxi_ymmp.epistemic.facts import compute_deterministic_grounding
 
 
 def test_e2e_editorial_to_grounded_script(tmp_path: Path) -> None:

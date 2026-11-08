@@ -1,5 +1,5 @@
 import os
-from veraxi_ymmp.template import load_template, extract_character_templates
+from veraxi_ymmp.core.template import load_template, extract_character_templates
 
 def test_extract_character_templates():
     fixture_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'sample_template.ymmp')

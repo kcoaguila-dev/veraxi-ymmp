@@ -2,8 +2,8 @@
 """Execute full project pipeline for 07_ai_capex_market_rotation_2026."""
 import sys
 from pathlib import Path
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.voicevox import VoicevoxClient
+from veraxi_ymmp.app.pipeline import ProjectPipeline
+from veraxi_ymmp.audio.voicevox import VoicevoxClient
 
 def main():
     proj_dir = Path("projects/07_ai_capex_market_rotation_2026")

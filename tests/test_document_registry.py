@@ -4,11 +4,11 @@ Tests for DocumentCaptureRegistry and multi-source dispatch.
 
 import pytest
 
-from veraxi_ymmp.document_registry import DocumentCaptureRegistry, get_default_document_registry
-from veraxi_ymmp.edgar_capture import EdgarDocumentCaptureAdapter
-from veraxi_ymmp.facts import DocumentSourceType
-from veraxi_ymmp.fred_capture import FredDocumentCaptureAdapter
-from veraxi_ymmp.ports import OfficialDocumentCapturePort
+from veraxi_ymmp.epistemic.document_registry import DocumentCaptureRegistry, get_default_document_registry
+from veraxi_ymmp.epistemic.edgar_capture import EdgarDocumentCaptureAdapter
+from veraxi_ymmp.epistemic.facts import DocumentSourceType
+from veraxi_ymmp.epistemic.fred_capture import FredDocumentCaptureAdapter
+from veraxi_ymmp.core.ports import OfficialDocumentCapturePort
 
 
 def test_registry_registration_and_lookup() -> None:

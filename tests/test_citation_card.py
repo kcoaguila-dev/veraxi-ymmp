@@ -5,12 +5,12 @@ Tests for CitationCardRenderer and typed BadgeKind invariants.
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.citation_card import (
+from veraxi_ymmp.epistemic.citation_card import (
     BadgeKind,
     CitationCardRenderer,
     resolve_badge_kind,
 )
-from veraxi_ymmp.facts import DocumentProvenance
+from veraxi_ymmp.epistemic.facts import DocumentProvenance
 
 
 def test_resolve_badge_kind_state_matrix() -> None:

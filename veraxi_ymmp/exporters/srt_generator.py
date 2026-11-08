@@ -48,7 +48,7 @@ def generate_srt(ir: TimelineIR, output_path: Union[str, Path]) -> Path:
         The resolved output path as a Path object.
 
     Example:
-        >>> from veraxi_ymmp.srt_generator import generate_srt
+        >>> from veraxi_ymmp.exporters.srt_generator import generate_srt
         >>> srt_path = generate_srt(timeline_ir, Path("output/subtitles.srt"))
     """
     output_path = Path(output_path)

@@ -6,11 +6,11 @@ import sys
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 import pytest
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.pipeline import ProjectPipeline
-from veraxi_ymmp.srt_generator import _format_srt_time, generate_srt
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+from veraxi_ymmp.app.cli import main
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.app.pipeline import ProjectPipeline
+from veraxi_ymmp.exporters.srt_generator import _format_srt_time, generate_srt
+from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
 
 
@@ -141,12 +141,12 @@ class TestPipelineRunEmpiricalIntegration:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=proj_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(
                 fps=60,
@@ -236,8 +236,8 @@ class TestPipelineRunEmpiricalIntegration:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(
                 fps=60,
@@ -276,8 +276,8 @@ class TestPipelineRunEmpiricalIntegration:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(fps=60, total_frames=60, voice_clips=[])
             mock_build_ir.return_value = (ir, [])
@@ -311,8 +311,8 @@ class TestPipelineRunEmpiricalIntegration:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(
                 fps=60,
@@ -364,10 +364,10 @@ class TestPipelineRunEmpiricalIntegration:
         norm_file.write_bytes(b"\x00" * 3000)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch(
-                "veraxi_ymmp.audio_normalizer.normalize_video_audio",
+                "veraxi_ymmp.audio.audio_normalizer.normalize_video_audio",
                 return_value=norm_file,
             ) as mock_norm,
         ):
@@ -499,14 +499,14 @@ class TestCLIRunAdversarial:
         mock_pub = MockYouTubeAdapter()
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=proj_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
+                "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter",
                 return_value=mock_pub,
             ),
             patch.object(
@@ -637,8 +637,8 @@ class TestPipelineRunDirectSchedulingValidation:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(fps=60, total_frames=60, voice_clips=[])
             mock_build_ir.return_value = (ir, [dummy_wav])
@@ -667,8 +667,8 @@ class TestPipelineRunDirectSchedulingValidation:
         pipeline = ProjectPipeline(use_tts=False)
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
         ):
             ir = TimelineIR(fps=60, total_frames=60, voice_clips=[])
             mock_build_ir.return_value = (ir, [dummy_wav])

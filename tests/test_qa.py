@@ -1,7 +1,7 @@
 import json
 import pytest
 from pathlib import Path
-from veraxi_ymmp.template import get_timeline
+from veraxi_ymmp.core.template import get_timeline
 
 def test_qa_output_ymmp():
     ymmp_path = "artifacts/final_video.ymmp"

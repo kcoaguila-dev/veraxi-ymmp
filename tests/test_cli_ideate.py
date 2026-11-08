@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from veraxi_ymmp.cli_ideate import cmd_ideate, ARCHETYPES
+from veraxi_ymmp.app.cli_ideate import cmd_ideate, ARCHETYPES
 
 
 def test_cli_ideate_creates_expected_artifacts(tmp_path: Path) -> None:
@@ -25,7 +25,8 @@ def test_cli_ideate_creates_expected_artifacts(tmp_path: Path) -> None:
     dossier_text = dossier_file.read_text(encoding="utf-8")
     assert "CrowdStrike Kernel Sensor Outage" in dossier_text
     assert "Evidence Extraction Matrix" in dossier_text
-    assert "Strict negative filter" in dossier_text
+    assert "Strict constraints" in dossier_text
+    assert "No filler words" in dossier_text
 
     manifest_json = json.loads(manifest_file.read_text(encoding="utf-8"))
     assert manifest_json["topic"] == "CrowdStrike Kernel Sensor Outage"

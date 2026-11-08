@@ -10,13 +10,13 @@ from typing import Any, Dict
 import numpy as np
 import pytest
 
-from veraxi_ymmp.phonetics import (
+from veraxi_ymmp.audio.phonetics import (
     build_ymm4_lipsync_frames,
     format_ymm4_timespan,
     get_audio_reactive_intervals,
     resolve_lipsync_intervals,
 )
-from veraxi_ymmp.premiere_exporter import (
+from veraxi_ymmp.exporters.premiere_exporter import (
     get_audio_reactive_intervals as reexported_get_audio_reactive_intervals,
 )
 
@@ -154,7 +154,7 @@ def test_reexported_get_audio_reactive_intervals_in_premiere_exporter() -> None:
 
 
 def test_normalize_tts_text() -> None:
-    from veraxi_ymmp.phonetics import normalize_tts_text
+    from veraxi_ymmp.audio.phonetics import normalize_tts_text
 
     # Affirmative ええ at start of sentence/clause
     assert normalize_tts_text("ええ、極めて重要ですわね。") == "えー、極めて重要ですわね。"
@@ -196,7 +196,7 @@ def test_normalize_tts_text() -> None:
 
 
 def test_normalize_kaname_reading() -> None:
-    from veraxi_ymmp.phonetics import normalize_kaname_reading
+    from veraxi_ymmp.audio.phonetics import normalize_kaname_reading
 
     assert normalize_kaname_reading("インフレ下でも値上げできる価格転嫁力を持つ企業や、割安で見直されている日本や世界市場へ広く分散することが防御の要ですわ。") == (
         "インフレ下でも値上げできる価格転嫁力を持つ企業や、割安で見直されている日本や世界市場へ広く分散することが防御のかなめですわ。"
@@ -211,7 +211,7 @@ def test_normalize_kaname_reading() -> None:
 
 
 def test_normalize_okonau_and_bun_and_ruby() -> None:
-    from veraxi_ymmp.phonetics import (
+    from veraxi_ymmp.audio.phonetics import (
         expand_phonetic_ruby,
         normalize_bun_reading,
         normalize_okonau_reading,
@@ -249,7 +249,7 @@ def test_normalize_okonau_and_bun_and_ruby() -> None:
 
 
 def test_tune_audio_query_pitch() -> None:
-    from veraxi_ymmp.phonetics import tune_audio_query_pitch
+    from veraxi_ymmp.audio.phonetics import tune_audio_query_pitch
 
     query = {
         "accent_phrases": [
@@ -301,7 +301,7 @@ def test_tune_audio_query_pitch() -> None:
 
 
 def test_normalize_tts_text_preserves_declarative_words() -> None:
-    from veraxi_ymmp.phonetics import normalize_tts_text
+    from veraxi_ymmp.audio.phonetics import normalize_tts_text
 
     # With the declarative dictionary system (assets/dictionary/tts_dictionary.json),
     # terms like '借り増し' and 'AIインフラ' are natively parsed by OpenJTalk/MeCab via /user_dict_word

@@ -1,6 +1,6 @@
 import json
 import pytest
-from veraxi_ymmp.cli import _cmd_validate
+from veraxi_ymmp.app.cli import _cmd_validate
 
 def test_script_validation_reprompt(capsys, tmp_path):
     # Create an invalid script

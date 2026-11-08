@@ -25,8 +25,8 @@ from typing import (
     runtime_checkable,
 )
 
+from enum import Enum
 from veraxi_ymmp.core.director import DirectorProvider
-from veraxi_ymmp.epistemic.facts import Claim, Evidence, DocumentCaptureSpec, DocumentCaptureResult
 from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
@@ -41,6 +41,53 @@ from veraxi_ymmp.core.ir import (
     VideoRetentionReport,
     WinnerDecision,
 )
+
+
+class DocumentSourceType(str, Enum):
+    """Type of official primary authority document source."""
+
+    SEC_EDGAR = "sec_edgar"
+    FRED = "fred"
+    GOVERNMENT_STAT = "government_stat"
+    WEB = "web"
+    CUSTOM = "custom"
+
+
+@dataclass
+class DocumentCaptureSpec:
+    """Specification for official document passage capture, highlighting, and citation."""
+
+    source_type: DocumentSourceType = DocumentSourceType.SEC_EDGAR
+    identifier: str = ""  # Ticker symbol (e.g. 'MSFT'), CIK ('0000789019'), or series ID ('WALCL')
+    target_text: str = ""  # Text, figure, or line-item substring to locate and highlight
+    document_url: str = ""  # Explicit URL to the document HTML or local path
+    citation_label: str = ""  # Authoritative citation display text
+    context_padding_px: int = 40  # Context padding around matched bounding box
+    highlight_color: str = "#fef08a"  # Fluorescent yellow highlight (#fef08a default)
+    device_scale_factor: int = 2  # High-DPI Retina multiplier (2x default for 4K video clarity)
+    source_params: Dict[str, Any] = field(default_factory=dict)
+
+
+class DocumentProvenance(str, Enum):
+    """Provenance origin of a captured document."""
+
+    LIVE = "live"
+    SYNTHETIC = "synthetic"
+
+
+@dataclass
+class DocumentCaptureResult:
+    """Result of an official document capture operation."""
+
+    success: bool
+    image_path: Path
+    citation_label: str
+    source_url: str
+    verified: bool = False
+    provenance: DocumentProvenance = DocumentProvenance.LIVE
+    error_message: str = ""
+    matched_text: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -160,7 +207,7 @@ class TimelineExporter(Protocol):
 class FactChecker(Protocol):
     """Protocol for adapters that gather evidence for a claim (e.g. Veraxi MCP)."""
 
-    def check(self, claim: Claim) -> List[Evidence]:
+    def check(self, claim: Any) -> List[Any]:
         """Return structured evidence (stance + verbatim quote + source) for the claim."""
         ...
 
@@ -282,4 +329,8 @@ __all__ = [
     "VideoPublisher",
     "VideoAnalyticsProvider",
     "OfficialDocumentCapturePort",
+    "DocumentSourceType",
+    "DocumentProvenance",
+    "DocumentCaptureSpec",
+    "DocumentCaptureResult",
 ]

@@ -9,8 +9,8 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from veraxi_ymmp.api_server import APIHandler
-from veraxi_ymmp.pipeline import PipelineResult
+from veraxi_ymmp.app.api_server import APIHandler
+from veraxi_ymmp.app.pipeline import PipelineResult
 
 
 def get_free_port() -> int:
@@ -37,8 +37,8 @@ def api_server():
 
 
 def test_api_projects_list(api_server: str, tmp_path: Path) -> None:
-    with patch("veraxi_ymmp.api_server.workspace_path", return_value=tmp_path):
-        with patch("veraxi_ymmp.api_server.list_projects") as mock_list:
+    with patch("veraxi_ymmp.app.api_server.workspace_path", return_value=tmp_path):
+        with patch("veraxi_ymmp.app.api_server.list_projects") as mock_list:
             mock_list.return_value = {"projects": [{"name": "test"}]}
             res = requests.get(f"{api_server}/api/projects")
             assert res.status_code == 200
@@ -52,7 +52,7 @@ def test_api_project_create_traversal_rejection(api_server: str) -> None:
 
 
 def test_api_script_saving(api_server: str, tmp_path: Path) -> None:
-    with patch("veraxi_ymmp.api_server.save_project_script") as mock_save:
+    with patch("veraxi_ymmp.app.api_server.save_project_script") as mock_save:
         mock_save.return_value = {"success": True}
         res = requests.put(
             f"{api_server}/api/projects/myproj/script",
@@ -68,7 +68,7 @@ def test_api_script_saving(api_server: str, tmp_path: Path) -> None:
 
 
 def test_api_script_saving_validation_error(api_server: str, tmp_path: Path) -> None:
-    with patch("veraxi_ymmp.api_server.save_project_script") as mock_save:
+    with patch("veraxi_ymmp.app.api_server.save_project_script") as mock_save:
         mock_save.return_value = {
             "success": False,
             "valid": False,
@@ -100,14 +100,14 @@ def test_api_script_splitting(api_server: str) -> None:
 
 
 def test_api_serve_media_traversal(api_server: str, tmp_path: Path) -> None:
-    with patch("veraxi_ymmp.api_server.workspace_path") as mock_wp:
+    with patch("veraxi_ymmp.app.api_server.workspace_path") as mock_wp:
         mock_wp.return_value = tmp_path
         res = requests.get(f"{api_server}/api/projects/test/media/..%2F..%2Fetc%2Fpasswd")
         assert res.status_code == 403
 
 
 def test_api_ai_prompt(api_server: str) -> None:
-    with patch("veraxi_ymmp.api_server.get_ai_prompt_spec") as mock_prompt:
+    with patch("veraxi_ymmp.app.api_server.get_ai_prompt_spec") as mock_prompt:
         mock_prompt.return_value = {"prompt_markdown": "Test"}
         res = requests.get(f"{api_server}/api/ai-prompt")
         assert res.status_code == 200
@@ -115,7 +115,7 @@ def test_api_ai_prompt(api_server: str) -> None:
 
 
 def test_api_youtube_schedule_validation(api_server: str) -> None:
-    with patch("veraxi_ymmp.api_server.upload_project_to_youtube") as mock_up:
+    with patch("veraxi_ymmp.app.api_server.upload_project_to_youtube") as mock_up:
         mock_up.side_effect = ValueError("Scheduling requires private")
         res = requests.post(
             f"{api_server}/api/projects/test/youtube",
@@ -140,8 +140,8 @@ def test_api_pipeline_run_and_status_path_serialization(
         success=True,
     )
     with (
-        patch("veraxi_ymmp.api_server.workspace_path", return_value=tmp_path / "projects" / "demo"),
-        patch("veraxi_ymmp.pipeline.ProjectPipeline.run", return_value=fake_res),
+        patch("veraxi_ymmp.app.api_server.workspace_path", return_value=tmp_path / "projects" / "demo"),
+        patch("veraxi_ymmp.app.pipeline.ProjectPipeline.run", return_value=fake_res),
     ):
         res_run = requests.post(f"{api_server}/api/projects/demo/run", json={"use_tts": False})
         assert res_run.status_code == 200
@@ -162,8 +162,8 @@ def test_api_integration_lifecycle(api_server: str, tmp_path: Path) -> None:
         return tmp_path
 
     with (
-        patch("veraxi_ymmp.api_server.workspace_path", side_effect=mock_wp),
-        patch("veraxi_ymmp.mcp_server.workspace_path", side_effect=mock_wp),
+        patch("veraxi_ymmp.app.api_server.workspace_path", side_effect=mock_wp),
+        patch("veraxi_ymmp.app.mcp_server.workspace_path", side_effect=mock_wp),
         patch("pathlib.Path.cwd", side_effect=mock_cwd),
     ):
         # 1. Create project
@@ -212,7 +212,7 @@ def test_api_voicevox_audition_success(api_server: str, tmp_path: Path) -> None:
     fake_wav = tmp_path / "test_audition.wav"
     fake_wav.write_bytes(b"RIFFdummywavdata")
 
-    with patch("veraxi_ymmp.api_server.audition_voice") as mock_audition:
+    with patch("veraxi_ymmp.app.api_server.audition_voice") as mock_audition:
         mock_audition.return_value = {
             "path": str(fake_wav),
             "duration_seconds": 1.5,
@@ -233,7 +233,7 @@ def test_api_voicevox_audition_success(api_server: str, tmp_path: Path) -> None:
 
 
 def test_api_voicevox_audition_error(api_server: str) -> None:
-    with patch("veraxi_ymmp.api_server.audition_voice") as mock_audition:
+    with patch("veraxi_ymmp.app.api_server.audition_voice") as mock_audition:
         mock_audition.side_effect = RuntimeError("Voicevox offline")
         res = requests.post(
             f"{api_server}/api/voicevox/audition",
@@ -244,7 +244,7 @@ def test_api_voicevox_audition_error(api_server: str) -> None:
 
 
 def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
-    with patch("veraxi_ymmp.api_server.workspace_path", return_value=tmp_path / "projects" / "hist_proj"):
+    with patch("veraxi_ymmp.app.api_server.workspace_path", return_value=tmp_path / "projects" / "hist_proj"):
         proj_dir = tmp_path / "projects" / "hist_proj"
         proj_dir.mkdir(parents=True, exist_ok=True)
         (proj_dir / "script.json").write_text(
@@ -252,7 +252,7 @@ def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
             encoding="utf-8"
         )
 
-        from veraxi_ymmp.history import backup_project_script
+        from veraxi_ymmp.app.history import backup_project_script
         snap_id = backup_project_script(proj_dir, reason="api_test")
         assert snap_id is not None
 
@@ -284,7 +284,7 @@ def test_api_history_lifecycle(api_server: str, tmp_path: Path) -> None:
 
 def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
     pytest.importorskip("google.auth")
-    from veraxi_ymmp import youtube_auth
+    from veraxi_ymmp.exporters import youtube_auth
 
     # 1. GET /api/youtube/auth/status
     with patch.object(youtube_auth, "get_auth_status", return_value={"authenticated": False, "has_client_secrets": False}):

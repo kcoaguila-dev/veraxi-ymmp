@@ -1,4 +1,4 @@
-from veraxi_ymmp.facts import (
+from veraxi_ymmp.epistemic.facts import (
     Claim,
     ClaimKind,
     ClaimWeight,
@@ -86,7 +86,7 @@ def test_json_roundtrip() -> None:
 
 
 def test_enforce_source_tier_downgrades_non_primary() -> None:
-    from veraxi_ymmp.facts import enforce_source_tier
+    from veraxi_ymmp.epistemic.facts import enforce_source_tier
 
     assert enforce_source_tier("https://sec.gov/edgar/data", 1) == 1
     assert enforce_source_tier("https://fred.stlouisfed.org/series/GDP", 1) == 1
@@ -97,7 +97,7 @@ def test_enforce_source_tier_downgrades_non_primary() -> None:
 
 
 def test_quote_normalization_and_strict_verification() -> None:
-    from veraxi_ymmp.facts import verify_quote_in_source
+    from veraxi_ymmp.epistemic.facts import verify_quote_in_source
 
     source = "2026年第1四半期の売上高は500億ドルに達した。営業利益率は42%であった。"
     assert verify_quote_in_source("売上高は500億ドル", source) is True
@@ -111,7 +111,7 @@ def test_quote_normalization_and_strict_verification() -> None:
 
 
 def test_quote_error_blocks_gate() -> None:
-    from veraxi_ymmp.facts import gate_failures, verdict_for
+    from veraxi_ymmp.epistemic.facts import gate_failures, verdict_for
 
     claim = Claim("c1", 1, "test", weight=ClaimWeight.MINOR)
     res = verdict_for(claim, quote_errors=["quote not found in source 'doc1'"])
@@ -121,7 +121,7 @@ def test_quote_error_blocks_gate() -> None:
 
 
 def test_quote_matching_preserves_english_word_boundaries() -> None:
-    from veraxi_ymmp.facts import verify_quote_in_source
+    from veraxi_ymmp.epistemic.facts import verify_quote_in_source
 
     source = "The quick brown fox jumps over the lazy dog."
     assert verify_quote_in_source("brown fox", source) is True
@@ -199,7 +199,7 @@ def test_number_check_passes_when_derived_flag_set() -> None:
 
 
 def test_canonical_institution_subdomain_deduplication() -> None:
-    from veraxi_ymmp.facts import canonical_institution
+    from veraxi_ymmp.epistemic.facts import canonical_institution
 
     assert canonical_institution("https://data.sec.gov/api/xbrl") == "sec"
     assert canonical_institution("https://efts.sec.gov/LATEST/search") == "sec"
@@ -276,7 +276,7 @@ def test_derived_claim_requires_non_empty_derivation() -> None:
 
 
 def test_year_not_dropped_when_other_numbers_exist() -> None:
-    from veraxi_ymmp.facts import extract_claim_numbers
+    from veraxi_ymmp.epistemic.facts import extract_claim_numbers
 
     # "2000 jobs" is a quantity, not a calendar year, so it must not be dropped when "5" is present
     nums = extract_claim_numbers("In 2024, the company cut 2000 jobs and paid $5M")
@@ -353,7 +353,7 @@ def test_derived_claim_security_and_grounding() -> None:
 
 
 def test_year_fallback_when_only_year_present() -> None:
-    from veraxi_ymmp.facts import extract_claim_numbers
+    from veraxi_ymmp.epistemic.facts import extract_claim_numbers
 
     # A claim asserting only a year falls back to auditing the year
     nums = extract_claim_numbers("The financial crisis began in 2008")
@@ -362,7 +362,7 @@ def test_year_fallback_when_only_year_present() -> None:
 
 
 def test_epistemic_profiles_primary_authority_allowlist() -> None:
-    from veraxi_ymmp.facts import EpistemicProfile, is_primary_authority_url
+    from veraxi_ymmp.epistemic.facts import EpistemicProfile, is_primary_authority_url
 
     # Finance: SEC/FRED are primary, Wikipedia and arXiv are NOT primary
     assert is_primary_authority_url("https://www.sec.gov/edgar", EpistemicProfile.FINANCE) is True
@@ -389,7 +389,7 @@ def test_epistemic_profiles_primary_authority_allowlist() -> None:
 
 
 def test_central_claim_with_academic_and_general_profiles() -> None:
-    from veraxi_ymmp.facts import EpistemicProfile
+    from veraxi_ymmp.epistemic.facts import EpistemicProfile
 
     # Academic central claim supported by 2 distinct academic authorities
     e1 = Evidence(url="https://arxiv.org/abs/2301.00001", quote="Q1", stance=Stance.CONFIRMS, tier=1, source_id="s1")
@@ -496,7 +496,7 @@ def test_derived_claim_allows_standard_scaling_constants() -> None:
 
 
 def test_bare_numbers_in_year_range_not_dropped() -> None:
-    from veraxi_ymmp.facts import extract_claim_numbers
+    from veraxi_ymmp.epistemic.facts import extract_claim_numbers
 
     # Index points and stock prices in 1900-2099 must NOT be dropped when other numbers exist
     nums1 = extract_claim_numbers("S&P 500 fell to 1980, down 12%")
@@ -510,7 +510,7 @@ def test_bare_numbers_in_year_range_not_dropped() -> None:
 
 
 def test_duplicate_year_and_quantity_preserved() -> None:
-    from veraxi_ymmp.facts import extract_claim_numbers
+    from veraxi_ymmp.epistemic.facts import extract_claim_numbers
 
     # "In 2024" is a temporal year, but "2024 jobs" is a real quantity:
     # 2024 jobs must NOT be dropped by value-set poisoning

@@ -18,19 +18,19 @@ from pathlib import Path
 from typing import Dict, List
 
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     RotationEvent,
     ThumbnailExperiment,
     ThumbnailVariant,
     VariantMetrics,
     WinnerDecision,
 )
-from veraxi_ymmp.thumbnail import (
+from veraxi_ymmp.graphics.thumbnail import (
     ThumbnailConfig,
     auto_extract_variant_configs,
     validate_thumbnail_file_size,
 )
-from veraxi_ymmp.youtube_adapter import (
+from veraxi_ymmp.exporters.youtube_adapter import (
     THUMBNAIL_MAX_SIZE_BYTES,
     MockYouTubeAdapter,
 )

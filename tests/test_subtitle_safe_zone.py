@@ -3,24 +3,24 @@ Automated QA tests for systematic subtitle and speech bubble plate safe zones.
 Guarantees that speech bubble plates and subtitles maintain adequate space at the bottom
 to prevent the bottom border from ever being clipped or touching the canvas edge.
 """
-from veraxi_ymmp.subtitle_plate import create_speech_plate
-from veraxi_ymmp.typography import (
+from veraxi_ymmp.graphics.subtitle_plate import create_speech_plate
+from veraxi_ymmp.graphics.typography import (
     calculate_ymm4_subtitle_y,
 )
-from veraxi_ymmp.validation import ValidationError, validate_ymmp_timeline
+from veraxi_ymmp.editorial.validation import ValidationError, validate_ymmp_timeline
 
 import base64
 import brotli
 from pathlib import Path
 import pytest
 
-from veraxi_ymmp.constants import (
+from veraxi_ymmp.core.constants import (
     DEFAULT_CANVAS_HEIGHT,
     DEFAULT_SUBTITLE_BOTTOM_EDGE_Y,
     DEFAULT_SUBTITLE_SAFE_BOTTOM_MARGIN,
 )
-from veraxi_ymmp.moviepy_renderer import create_speech_bubble
-from veraxi_ymmp.psd_registry import CharacterPSDRegistry
+from veraxi_ymmp.exporters.moviepy_renderer import create_speech_bubble
+from veraxi_ymmp.graphics.psd_registry import CharacterPSDRegistry
 
 @pytest.fixture(autouse=True)
 def mock_path_exists(monkeypatch):
@@ -176,7 +176,7 @@ class TestSubtitleSafeZone:
 
     def test_ymm4_voice_y_offset_balances_vertical_padding(self) -> None:
         """Verify calculate_ymm4_voice_y_offset maintains concentric 0.0 offset with CenterCenter BasePoint."""
-        from veraxi_ymmp.typography import calculate_ymm4_voice_y_offset
+        from veraxi_ymmp.graphics.typography import calculate_ymm4_voice_y_offset
 
         assert calculate_ymm4_voice_y_offset(line_count=1, font_size=44.0) == 0.0
         assert calculate_ymm4_voice_y_offset(line_count=2, font_size=44.0) == 0.0

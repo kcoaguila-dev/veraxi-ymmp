@@ -20,16 +20,16 @@ from typing import List, Optional
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     ThumbnailVariant,
     VariantMetrics,
 )
-from veraxi_ymmp.thumbnail_ab import (
+from veraxi_ymmp.graphics.thumbnail_ab import (
     ThumbnailABCoordinator,
     load_experiment,
     save_experiment,
 )
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
 
 def _create_mock_variant(

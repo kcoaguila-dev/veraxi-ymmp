@@ -5,9 +5,9 @@ Tests for FredDocumentCaptureAdapter and St. Louis Fed primary data capture.
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.facts import DocumentCaptureSpec, DocumentProvenance, DocumentSourceType
-from veraxi_ymmp.fred_capture import FredDocumentCaptureAdapter
-from veraxi_ymmp.ports import OfficialDocumentCapturePort
+from veraxi_ymmp.epistemic.facts import DocumentCaptureSpec, DocumentProvenance, DocumentSourceType
+from veraxi_ymmp.epistemic.fred_capture import FredDocumentCaptureAdapter
+from veraxi_ymmp.core.ports import OfficialDocumentCapturePort
 
 
 def test_fred_protocol_conformance() -> None:
@@ -52,7 +52,7 @@ def test_fred_synthetic_capture_execution(tmp_path: Path) -> None:
 
 def test_fred_user_agent_configuration(monkeypatch) -> None:
     """Verify FRED User-Agent respects environment overrides and avoids fake emails."""
-    from veraxi_ymmp.fred_capture import get_fred_user_agent
+    from veraxi_ymmp.epistemic.fred_capture import get_fred_user_agent
 
     monkeypatch.setenv("FRED_USER_AGENT", "CustomFredBot/2.0")
     assert get_fred_user_agent() == "CustomFredBot/2.0"
@@ -94,7 +94,7 @@ SAMPLE_FRED_CSV = b"DATE,WALCL\n2024-09-25,7450120\n2024-10-02,7435800\n"
 def test_fred_live_verified_true_on_legitimate_stlouisfed_response(tmp_path: Path, monkeypatch) -> None:
     """Verify live capture sets verified=True when final URL is verified HTTPS stlouisfed.org."""
     import urllib.request
-    from veraxi_ymmp.facts import ProvenanceRecord
+    from veraxi_ymmp.epistemic.facts import ProvenanceRecord
 
     dummy_resp = DummyHttpResponse(
         content=SAMPLE_FRED_CSV,

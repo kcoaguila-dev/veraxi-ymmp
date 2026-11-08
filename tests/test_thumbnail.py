@@ -1,11 +1,11 @@
 """
-Unit tests for YouTube Thumbnail Generation Engine (veraxi_ymmp.thumbnail)
+Unit tests for YouTube Thumbnail Generation Engine (veraxi_ymmp.graphics.thumbnail)
 """
 from pathlib import Path
 from PIL import Image
 
 import pytest
-from veraxi_ymmp.thumbnail import (
+from veraxi_ymmp.graphics.thumbnail import (
     ThumbnailConfig,
     generate_thumbnail,
     auto_extract_thumbnail_config,

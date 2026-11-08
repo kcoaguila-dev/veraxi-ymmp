@@ -1,7 +1,7 @@
 """Tests for SRT subtitle generator."""
 
-from veraxi_ymmp.srt_generator import generate_srt, _format_srt_time
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.exporters.srt_generator import generate_srt, _format_srt_time
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
 
 
 class TestFormatSrtTime:

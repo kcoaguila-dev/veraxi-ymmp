@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from veraxi_ymmp.broll import (
+from veraxi_ymmp.graphics.broll import (
     check_cognitive_load,
     MAX_SLIDE_CHARS,
     MAX_SLIDE_ELEMENTS,
@@ -105,7 +105,7 @@ def test_render_from_manifest_and_market_analysis_manifest(tmp_path: Path):
 def test_vertical_mobile_broll_rendering_and_detection(tmp_path: Path):
     """Ensures 9:16 mobile vertical mode renders 1080x720 cards and auto-detects vertical projects."""
     from PIL import Image
-    from veraxi_ymmp.broll import (
+    from veraxi_ymmp.graphics.broll import (
         detect_project_vertical,
         VERTICAL_BROLL_WIDTH,
         VERTICAL_BROLL_HEIGHT,

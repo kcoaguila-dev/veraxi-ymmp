@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from veraxi_ymmp.fact_audit import audit_project_facts
+from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
 
 
 def _write(tmp_path: Path, claims: list) -> Path:
@@ -33,7 +33,7 @@ def test_supported_ledger_is_clear(tmp_path: Path) -> None:
 
 
 def test_draft_claims_skips_banter_and_is_idempotent(tmp_path: Path) -> None:
-    from veraxi_ymmp.fact_audit import draft_project_claims
+    from veraxi_ymmp.epistemic.fact_audit import draft_project_claims
 
     script = tmp_path / "script.json"
     data = [{"character": "a", "text": "売上は500億ドルです。"}, {"character": "b", "text": "はぁ！？"}]
@@ -184,7 +184,7 @@ def test_central_claim_fails_closed_without_registered_origin(tmp_path: Path) ->
     doc = sources_dir / "unregistered_doc.txt"
     doc.write_text("Amazon capex reached $85B in 2026.", encoding="utf-8")
 
-    from veraxi_ymmp.fact_audit import compute_file_sha256
+    from veraxi_ymmp.epistemic.fact_audit import compute_file_sha256
     digest = compute_file_sha256(doc)
 
     ev = [{
@@ -233,7 +233,7 @@ def test_central_claim_fails_closed_when_source_origin_not_tier1(tmp_path: Path)
     meta = sources_dir / "blog_doc.meta.json"
     meta.write_text(json.dumps({"url": "https://tech-rumor-blog.com/post"}), encoding="utf-8")
 
-    from veraxi_ymmp.fact_audit import compute_file_sha256
+    from veraxi_ymmp.epistemic.fact_audit import compute_file_sha256
     digest = compute_file_sha256(doc)
 
     ev = [{
@@ -260,7 +260,7 @@ def test_project_audit_with_general_profile(tmp_path: Path) -> None:
     meta = sources_dir / "wiki_doc.meta.json"
     meta.write_text(json.dumps({"url": "https://en.wikipedia.org/wiki/Python_(programming_language)"}), encoding="utf-8")
 
-    from veraxi_ymmp.fact_audit import compute_file_sha256
+    from veraxi_ymmp.epistemic.fact_audit import compute_file_sha256
     digest = compute_file_sha256(doc)
 
     ev = [{

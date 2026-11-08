@@ -4,7 +4,7 @@ Unit tests for the Retention Pacing Engine (veraxi_ymmp/pacing.py).
 
 from __future__ import annotations
 
-from veraxi_ymmp.pacing import (
+from veraxi_ymmp.editorial.pacing import (
     audit_script_pacing,
     format_pacing_report_markdown,
 )

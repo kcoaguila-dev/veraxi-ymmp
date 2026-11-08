@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     DynamicImageClip,
     TimelineIR,
     VoiceClip,
 )
-from veraxi_ymmp.retention_qa import RetentionCorrelationEngine
+from veraxi_ymmp.editorial.retention_qa import RetentionCorrelationEngine
 
 
 # ---------------------------------------------------------------------------

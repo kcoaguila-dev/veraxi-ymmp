@@ -28,7 +28,7 @@ from PIL import Image
 # Milestone M1: Domain Models, Ports, Thumbnail Helpers, and Mock Adapter
 # ---------------------------------------------------------------------------
 try:
-    from veraxi_ymmp.ir import (
+    from veraxi_ymmp.core.ir import (
         RotationEvent,
         ThumbnailExperiment,
         ThumbnailVariant,
@@ -45,7 +45,7 @@ except ImportError:
     WinnerDecision = None  # type: ignore
 
 try:
-    from veraxi_ymmp.ports import VideoAnalyticsProvider, VideoPublisher
+    from veraxi_ymmp.core.ports import VideoAnalyticsProvider, VideoPublisher
     HAS_M1_PORTS = True
 except ImportError:
     HAS_M1_PORTS = False
@@ -53,7 +53,7 @@ except ImportError:
     VideoPublisher = None  # type: ignore
 
 try:
-    from veraxi_ymmp.thumbnail import (
+    from veraxi_ymmp.graphics.thumbnail import (
         ThumbnailConfig,
         auto_extract_variant_configs,
         generate_thumbnail,
@@ -70,7 +70,7 @@ except ImportError:
     validate_thumbnail_file_size = None  # type: ignore
 
 try:
-    from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter, YouTubeAdapter
+    from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter, YouTubeAdapter
     HAS_M1_ADAPTER = hasattr(MockYouTubeAdapter, "set_simulated_metrics") and hasattr(
         MockYouTubeAdapter, "fetch_variant_metrics"
     )
@@ -83,7 +83,7 @@ except (ImportError, AttributeError):
 # Milestone M2: Application Coordinator Service (ThumbnailABCoordinator)
 # ---------------------------------------------------------------------------
 try:
-    from veraxi_ymmp.thumbnail_ab import ThumbnailABCoordinator
+    from veraxi_ymmp.graphics.thumbnail_ab import ThumbnailABCoordinator
     HAS_M2_COORDINATOR = True
 except ImportError:
     try:
@@ -98,7 +98,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 def _check_cli_supports_ab_test() -> bool:
     try:
-        from veraxi_ymmp import cli
+        from veraxi_ymmp.app import cli
         return hasattr(cli, "_cmd_youtube_ab_test") or hasattr(cli, "cmd_youtube_ab_test")
     except Exception:
         return False
@@ -108,23 +108,23 @@ HAS_M3_CLI = _check_cli_supports_ab_test()
 # Milestone Progressive Skip Markers
 skip_m1_domain = pytest.mark.skipif(
     not HAS_M1_DOMAIN,
-    reason="Milestone M1 (Domain models in veraxi_ymmp.ir) pending implementation",
+    reason="Milestone M1 (Domain models in veraxi_ymmp.core.ir) pending implementation",
 )
 skip_m1_thumbnail = pytest.mark.skipif(
     not HAS_M1_THUMBNAIL,
-    reason="Milestone M1 (Thumbnail helpers in veraxi_ymmp.thumbnail) pending implementation",
+    reason="Milestone M1 (Thumbnail helpers in veraxi_ymmp.graphics.thumbnail) pending implementation",
 )
 skip_m1_adapter = pytest.mark.skipif(
     not HAS_M1_ADAPTER,
-    reason="Milestone M1 (MockYouTubeAdapter analytics in veraxi_ymmp.youtube_adapter) pending implementation",
+    reason="Milestone M1 (MockYouTubeAdapter analytics in veraxi_ymmp.exporters.youtube_adapter) pending implementation",
 )
 skip_m2 = pytest.mark.skipif(
     not HAS_M2_COORDINATOR,
-    reason="Milestone M2 (ThumbnailABCoordinator in veraxi_ymmp.thumbnail_ab) pending implementation",
+    reason="Milestone M2 (ThumbnailABCoordinator in veraxi_ymmp.graphics.thumbnail_ab) pending implementation",
 )
 skip_m3 = pytest.mark.skipif(
     not HAS_M3_CLI,
-    reason="Milestone M3 (CLI subcommand 'youtube ab-test' in veraxi_ymmp.cli) pending implementation",
+    reason="Milestone M3 (CLI subcommand 'youtube ab-test' in veraxi_ymmp.app.cli) pending implementation",
 )
 
 
@@ -679,7 +679,7 @@ class TestFeature8CLICommandParsing:
     @skip_m3
     def test_f8_01_cli_ab_test_help_displays_subcommands(self, capsys: Any) -> None:
         """veraxi-ymmp youtube ab-test --help prints actions (init, rotate, evaluate, commit, status)."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(sys, "argv", ["veraxi-ymmp", "youtube", "ab-test", "--help"]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -690,7 +690,7 @@ class TestFeature8CLICommandParsing:
     @skip_m3
     def test_f8_02_cli_ab_test_init_mock_execution(self, tmp_project: Path, capsys: Any) -> None:
         """veraxi-ymmp youtube ab-test init --project <dir> --video-id <id> --mock."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         cmd = ["veraxi-ymmp", "youtube", "ab-test", "init", "--project", str(tmp_project), "--video-id", "cli_test_01", "--mock"]
         with patch.object(sys, "argv", cmd):
             main()
@@ -700,7 +700,7 @@ class TestFeature8CLICommandParsing:
     @skip_m3
     def test_f8_03_cli_ab_test_rotate_mock_execution(self, tmp_project: Path, capsys: Any) -> None:
         """veraxi-ymmp youtube ab-test rotate --project <dir> --video-id <id> --mock."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         cmd_init = ["veraxi-ymmp", "youtube", "ab-test", "init", "--project", str(tmp_project), "--video-id", "cli_test_02", "--mock"]
         with patch.object(sys, "argv", cmd_init):
             main()
@@ -714,7 +714,7 @@ class TestFeature8CLICommandParsing:
     @skip_m3
     def test_f8_04_cli_ab_test_status_mock_output(self, tmp_project: Path, capsys: Any) -> None:
         """veraxi-ymmp youtube ab-test status --project <dir> --mock outputs experiment state."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         cmd_init = ["veraxi-ymmp", "youtube", "ab-test", "init", "--project", str(tmp_project), "--video-id", "cli_test_03", "--mock"]
         with patch.object(sys, "argv", cmd_init):
             main()
@@ -728,7 +728,7 @@ class TestFeature8CLICommandParsing:
     @skip_m3
     def test_f8_05_cli_ab_test_evaluate_and_commit_cli(self, tmp_project: Path) -> None:
         """veraxi-ymmp youtube ab-test evaluate and commit commands run cleanly in mock mode."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         cmd_init = ["veraxi-ymmp", "youtube", "ab-test", "init", "--project", str(tmp_project), "--video-id", "cli_test_04", "--mock"]
         with patch.object(sys, "argv", cmd_init):
             main()
@@ -1231,7 +1231,7 @@ class TestTier4RealWorldWorkloadScenarios:
         Scenario 5: Full Headless CLI Workflow Simulation:
         veraxi-ymmp youtube ab-test init -> rotate -> status -> evaluate -> commit.
         """
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
 
         proj_dir = tmp_path / "cli_workflow_project"
         proj_dir.mkdir(parents=True, exist_ok=True)

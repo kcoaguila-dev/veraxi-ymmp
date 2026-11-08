@@ -76,14 +76,22 @@ def load_project_sources(project_dir: Path) -> Dict[str, StoredSource]:
                 pass
 
     out: Dict[str, StoredSource] = {}
-    valid_exts = {".txt", ".md", ".json", ".html", ".htm", ".csv"}
+    valid_exts = {".txt", ".md", ".json", ".html", ".htm", ".csv", ".pdf"}
     for p in sources_dir.iterdir():
         if not p.is_file() or p.suffix.lower() not in valid_exts or p.name.endswith(".meta.json"):
             continue
         if p.name in ("manifest.json", "sources.json"):
             continue
         try:
-            content = p.read_text(encoding="utf-8", errors="replace")
+            if p.suffix.lower() == ".pdf":
+                try:
+                    import pypdf  # type: ignore[import-untyped]
+                    reader = pypdf.PdfReader(str(p))
+                    content = "\n".join(page.extract_text() or "" for page in reader.pages)
+                except Exception:
+                    content = ""
+            else:
+                content = p.read_text(encoding="utf-8", errors="replace")
             digest = compute_file_sha256(p)
             source_url = ""
 
@@ -139,6 +147,7 @@ def audit_project_facts(
     title: str = "",
     cut_times: Optional[Dict[int, float]] = None,
     profile: Optional[EpistemicProfile | str] = None,
+    verify_urls: bool = False,
 ) -> FactAuditOutcome:
     """Read `claims.json` beside the script, verify quotes against sources/, write `sources.md`, return outcome.
 
@@ -246,5 +255,4 @@ def draft_project_claims(
     existing = load_claims(claims_path) if claims_path.is_file() else []
     merged = extract_draft_claims(script, existing, extract_qualitative=extract_qualitative)
     claims_path.write_text(claims_to_json(merged), encoding="utf-8")
-    return claims_path, len(merged) - len(existing)
     return claims_path, len(merged) - len(existing)

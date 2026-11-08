@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from veraxi_ymmp.moviepy_renderer import MoviePyRenderer
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.exporters.moviepy_renderer import MoviePyRenderer
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
 
 def test_headless_renderer(tmp_path: Path) -> None:
     """Test headless rendering natively from MoviePyRenderer without requiring YMM4/Premiere."""

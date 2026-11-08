@@ -11,6 +11,10 @@ import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from veraxi_ymmp.core.ports import (
+    DocumentProvenance,
+    DocumentSourceType,
+)
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 from urllib.parse import urlparse
@@ -740,51 +744,6 @@ def load_claims(path: Path) -> List[Claim]:
     return claims_from_json(path.read_text(encoding="utf-8"))
 
 
-class DocumentSourceType(str, Enum):
-    """Type of official primary authority document source."""
-
-    SEC_EDGAR = "sec_edgar"
-    FRED = "fred"
-    GOVERNMENT_STAT = "government_stat"
-    WEB = "web"
-    CUSTOM = "custom"
-
-
-@dataclass
-class DocumentCaptureSpec:
-    """Specification for official document passage capture, highlighting, and citation."""
-
-    source_type: DocumentSourceType = DocumentSourceType.SEC_EDGAR
-    identifier: str = ""  # Ticker symbol (e.g. 'MSFT'), CIK ('0000789019'), or series ID ('WALCL')
-    target_text: str = ""  # Text, figure, or line-item substring to locate and highlight
-    document_url: str = ""  # Explicit URL to the document HTML or local path
-    citation_label: str = ""  # Authoritative citation display text
-    context_padding_px: int = 40  # Context padding around matched bounding box
-    highlight_color: str = "#fef08a"  # Fluorescent yellow highlight (#fef08a default)
-    device_scale_factor: int = 2  # High-DPI Retina multiplier (2x default for 4K video clarity)
-    source_params: Dict[str, Any] = field(default_factory=dict)
-
-
-class DocumentProvenance(str, Enum):
-    """Provenance origin of a captured document."""
-
-    LIVE = "live"
-    SYNTHETIC = "synthetic"
-
-
-@dataclass
-class DocumentCaptureResult:
-    """Result of an official document capture operation."""
-
-    success: bool
-    image_path: Path
-    citation_label: str
-    source_url: str
-    verified: bool = False
-    provenance: DocumentProvenance = DocumentProvenance.LIVE
-    error_message: str = ""
-    matched_text: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 

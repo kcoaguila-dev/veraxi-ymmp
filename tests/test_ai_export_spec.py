@@ -1,6 +1,6 @@
 import json
 
-from veraxi_ymmp.cli import _cmd_export_spec
+from veraxi_ymmp.app.cli import _cmd_export_spec
 
 def test_export_spec_markdown(capsys, tmp_path):
     output_path = tmp_path / "prompt.md"

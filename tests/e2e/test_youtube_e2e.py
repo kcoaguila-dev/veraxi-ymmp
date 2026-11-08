@@ -28,7 +28,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Domain Models & Ports (Milestone M1)
 # ---------------------------------------------------------------------------
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     DynamicImageClip,
     RetentionDropoffPoint,
@@ -39,7 +39,7 @@ from veraxi_ymmp.ir import (
     VideoRetentionReport,
     VoiceClip,
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     ProgressCallback,
     VideoAnalyticsProvider,
     VideoPublisher,
@@ -49,7 +49,7 @@ from veraxi_ymmp.ports import (
 # Lazy Imports for Modules Under Development (Milestones M2, M3, M4)
 # ---------------------------------------------------------------------------
 try:
-    from veraxi_ymmp.youtube_adapter import (
+    from veraxi_ymmp.exporters.youtube_adapter import (
         CHUNK_SIZE_DEFAULT,
         MOCK_CHUNK_SIZE_DEFAULT,
         THUMBNAIL_MAX_SIZE_BYTES,
@@ -66,7 +66,7 @@ except ImportError:
     YouTubeAdapter = None  # type: ignore
 
 try:
-    from veraxi_ymmp.retention_qa import RetentionCorrelationEngine
+    from veraxi_ymmp.editorial.retention_qa import RetentionCorrelationEngine
     HAS_M3_QA = True
 except ImportError:
     HAS_M3_QA = False
@@ -75,7 +75,7 @@ except ImportError:
 def _check_cli_supports_youtube() -> bool:
     try:
         # Run in dry-run/mock mode or inspect registered subcommands
-        from veraxi_ymmp import cli
+        from veraxi_ymmp.app import cli
         return hasattr(cli, "_cmd_youtube")
     except Exception:
         return False
@@ -84,15 +84,15 @@ HAS_M4_CLI = _check_cli_supports_youtube()
 
 skip_m2 = pytest.mark.skipif(
     not HAS_M2_ADAPTER,
-    reason="Milestone M2 (veraxi_ymmp.youtube_adapter) pending implementation",
+    reason="Milestone M2 (veraxi_ymmp.exporters.youtube_adapter) pending implementation",
 )
 skip_m3 = pytest.mark.skipif(
     not HAS_M3_QA,
-    reason="Milestone M3 (veraxi_ymmp.retention_qa) pending implementation",
+    reason="Milestone M3 (veraxi_ymmp.editorial.retention_qa) pending implementation",
 )
 skip_m4 = pytest.mark.skipif(
     not HAS_M4_CLI,
-    reason="Milestone M4 (veraxi_ymmp.cli youtube subcommands) pending implementation",
+    reason="Milestone M4 (veraxi_ymmp.app.cli youtube subcommands) pending implementation",
 )
 
 
@@ -341,7 +341,7 @@ class TestTier1Feature1DomainModelsAndProtocols:
             def fetch_variant_metrics(self, video_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None):
                 return {}
             def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
-                from veraxi_ymmp.ports import VideoStatsReport
+                from veraxi_ymmp.core.ports import VideoStatsReport
                 return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
             def get_channel_info(self):
                 return {}
@@ -655,7 +655,7 @@ class TestTier1Feature7CLISubcommands:
     @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_help_displays_subcommands(self, capsys: Any) -> None:
         """Verifies veraxi-ymmp youtube --help displays available subcommands."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(sys, "argv", ["veraxi-ymmp", "youtube", "--help"]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -668,7 +668,7 @@ class TestTier1Feature7CLISubcommands:
     @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_upload_mock_mode(self, small_video_file: Path) -> None:
         """Verifies veraxi-ymmp youtube upload --mock succeeds."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys,
             "argv",
@@ -689,7 +689,7 @@ class TestTier1Feature7CLISubcommands:
     @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_status_mock_mode(self) -> None:
         """Verifies veraxi-ymmp youtube status <video_id> --mock succeeds."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys, "argv", ["veraxi-ymmp", "youtube", "status", "mock_vid_123", "--mock"]
         ):
@@ -700,7 +700,7 @@ class TestTier1Feature7CLISubcommands:
     @pytest.mark.skip(reason='m4')
     def test_t1_f7_cli_qa_mock_mode(self, fake_project: Path, tmp_path: Path) -> None:
         """Verifies veraxi-ymmp youtube qa --mock succeeds with valid arguments."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys,
             "argv",
@@ -726,7 +726,7 @@ class TestTier1Feature7CLISubcommands:
         self, small_video_file: Path, sample_thumbnail_png: Path
     ) -> None:
         """Verifies veraxi-ymmp youtube upload --thumbnail <file> --mock succeeds."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys,
             "argv",
@@ -1121,7 +1121,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
     @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_upload_missing_video_path(self) -> None:
         """Verifies invoking youtube upload without video path exits with error."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(sys, "argv", ["veraxi-ymmp", "youtube", "upload"]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1130,7 +1130,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
     @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_missing_video_id(self, fake_project) -> None:
         """Verifies invoking youtube qa without --video-id exits with error."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys, "argv", ["veraxi-ymmp", "youtube", "qa", "--project", str(fake_project)]
         ):
@@ -1141,7 +1141,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
     @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_missing_project(self) -> None:
         """Verifies invoking youtube qa without --project exits with error."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(sys, "argv", ["veraxi-ymmp", "youtube", "qa", "--video-id", "vid_123"]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1150,7 +1150,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
     @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_unknown_subcommand(self) -> None:
         """Verifies unknown youtube subcommand exits with error."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(sys, "argv", ["veraxi-ymmp", "youtube", "invalid_subcmd"]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1159,7 +1159,7 @@ class TestTier2Feature7CLISubcommandsBoundaries:
     @pytest.mark.skip(reason='m4')
     def test_t2_f7_cli_qa_invalid_threshold(self, fake_project) -> None:
         """Verifies passing invalid non-float threshold exits with error."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         with patch.object(
             sys,
             "argv",
@@ -1298,7 +1298,7 @@ class TestTier3CrossFeatureCombinations:
     @pytest.mark.skip(reason='m4')
     def test_t3_cli_upload_and_status_chain(self, small_video_file: Path) -> None:
         """Cross-Feature 5: CLI upload followed by CLI status query on returned video ID."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         # Run CLI upload
         with patch.object(
             sys,
@@ -1320,7 +1320,7 @@ class TestTier3CrossFeatureCombinations:
     @pytest.mark.skip(reason='m4')
     def test_t3_cli_qa_generates_verified_files_on_disk(self, fake_project: Path, tmp_path: Path) -> None:
         """Cross-Feature 6: CLI qa execution produces real JSON and Markdown files on disk."""
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
         out_dir = tmp_path / "cli_qa_out"
         with patch.object(
             sys,
@@ -1517,7 +1517,7 @@ class TestTier4RealWorldApplicationScenarios:
         """
         Scenario 5: Completely headless CI pipeline script execution running upload, status, and qa in sequence.
         """
-        from veraxi_ymmp.cli import main
+        from veraxi_ymmp.app.cli import main
 
         # 1. Upload
         with patch.object(

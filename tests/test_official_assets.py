@@ -5,14 +5,14 @@ Unit tests for Official Assets and Data Standardization Engine.
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.official_assets import (
+from veraxi_ymmp.graphics.official_assets import (
     OfficialSourceCitation,
     OfficialAssetRegistry,
     _coerce_citation,
     render_official_image_slide,
     render_official_data_slide,
 )
-from veraxi_ymmp.broll import render_from_manifest
+from veraxi_ymmp.graphics.broll import render_from_manifest
 
 
 def test_official_source_citation_formatting() -> None:

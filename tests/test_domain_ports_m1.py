@@ -14,7 +14,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
     RetentionPoint,
@@ -22,7 +22,7 @@ from veraxi_ymmp.ir import (
     VideoPublishMetadata,
     VideoRetentionReport,
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     CutRetentionMetric as PortCutRetentionMetric,
     ProgressCallback,
     RetentionDropoffPoint as PortRetentionDropoffPoint,
@@ -271,7 +271,7 @@ class TestProtocolRuntimeChecking:
             def fetch_variant_metrics(self, video_id, start_date=None, end_date=None):
                 return {}
             def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
-                from veraxi_ymmp.ports import VideoStatsReport
+                from veraxi_ymmp.core.ports import VideoStatsReport
                 return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
             def get_channel_info(self):
                 return ("id", "title")
@@ -371,7 +371,7 @@ class TestDataclassSemantics:
 
 
 class TestPortsReExports:
-    """Verify identical identity between veraxi_ymmp.ir and veraxi_ymmp.ports."""
+    """Verify identical identity between veraxi_ymmp.core.ir and veraxi_ymmp.core.ports."""
 
     def test_reexported_types_identity(self) -> None:
         assert PortVideoPublishMetadata is VideoPublishMetadata

@@ -46,8 +46,8 @@ dependencies = [
 ]
 
 [project.scripts]
-veraxi-ymmp = "veraxi_ymmp.cli:main"
-veraxi-ymmp-mcp = "veraxi_ymmp.mcp_server:mcp.run"
+veraxi-ymmp = "veraxi_ymmp.app.cli:main"
+veraxi-ymmp-mcp = "veraxi_ymmp.app.mcp_server:mcp.run"
 
 [project.optional-dependencies]
 dev = [

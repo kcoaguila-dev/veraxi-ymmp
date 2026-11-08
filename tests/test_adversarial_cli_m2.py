@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 import pytest
-from veraxi_ymmp.cli import main
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
-from veraxi_ymmp.youtube_adapter import MockYouTubeAdapter
+from veraxi_ymmp.app.cli import main
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
 
 
@@ -138,14 +138,14 @@ class TestAdversarialISOStrings:
         real_mock = MockYouTubeAdapter()
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=stress_project_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
+                "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter",
                 return_value=real_mock,
             ),
             patch.object(
@@ -304,12 +304,12 @@ class TestAdversarialMissingFiles:
         dummy_wav = stress_project_dir / "audio" / "001_Zundamon.wav"
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=stress_project_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch.object(
                 sys,
                 "argv",
@@ -367,10 +367,10 @@ class TestAdversarialCombinedFlags:
         real_mock = MockYouTubeAdapter()
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
+                "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter",
                 return_value=real_mock,
             ),
             patch.object(
@@ -449,18 +449,18 @@ class TestAdversarialCombinedFlags:
         real_mock = MockYouTubeAdapter()
 
         with (
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=stress_project_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch(
-                "veraxi_ymmp.youtube_adapter.MockYouTubeAdapter",
+                "veraxi_ymmp.exporters.youtube_adapter.MockYouTubeAdapter",
                 return_value=real_mock,
             ),
             patch(
-                "veraxi_ymmp.audio_normalizer.normalize_video_audio",
+                "veraxi_ymmp.audio.audio_normalizer.normalize_video_audio",
                 side_effect=RuntimeError("FFmpeg normalization error simulation"),
             ),
             patch.object(
@@ -512,12 +512,12 @@ class TestAdversarialCombinedFlags:
 
         with (
             patch.dict(os.environ, {}, clear=True),
-            patch("veraxi_ymmp.pipeline.MoviePyRenderer"),
+            patch("veraxi_ymmp.app.pipeline.MoviePyRenderer"),
             patch(
-                "veraxi_ymmp.pipeline.generate_project_thumbnail",
+                "veraxi_ymmp.app.pipeline.generate_project_thumbnail",
                 return_value=stress_project_dir / "thumbnail.png",
             ),
-            patch("veraxi_ymmp.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
+            patch("veraxi_ymmp.app.pipeline.YMMPCompiler.build_ir") as mock_build_ir,
             patch.object(
                 sys,
                 "argv",

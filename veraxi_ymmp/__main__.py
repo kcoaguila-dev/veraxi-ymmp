@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from veraxi_ymmp.cli import main
+from veraxi_ymmp.app.cli import main
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, Mock
 import io
 import wave
-from veraxi_ymmp.voicevox import VoicevoxClient, VoicevoxError
+from veraxi_ymmp.audio.voicevox import VoicevoxClient, VoicevoxError
 import requests
 
 def create_mock_wav(frames, rate):

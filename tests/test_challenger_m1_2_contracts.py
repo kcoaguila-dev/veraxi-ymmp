@@ -18,7 +18,7 @@ from typing import Callable, List, Optional, Tuple, get_args, get_origin
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
     RetentionPoint,
@@ -26,7 +26,7 @@ from veraxi_ymmp.ir import (
     VideoPublishMetadata,
     VideoRetentionReport,
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     ProgressCallback,
     VideoAnalyticsProvider,
     VideoPublisher,
@@ -67,7 +67,7 @@ class DummyAnalyticsComplete:
     def fetch_variant_metrics(self, video_id, start_date=None, end_date=None):
         return {}
     def fetch_stats_report(self, video_ids, start_date, end_date, metrics, granularity="total"):
-        from veraxi_ymmp.ports import VideoStatsReport
+        from veraxi_ymmp.core.ports import VideoStatsReport
         return VideoStatsReport(video_id=video_ids[0], title="", published_at="", rows=[])
     def get_channel_info(self):
         return ("id", "title")
@@ -395,7 +395,7 @@ def test_domain_models_edge_cases():
 
 
 def test_import_purity_in_clean_subprocess():
-    """Run an isolated Python process that imports veraxi_ymmp.ir and veraxi_ymmp.ports and asserts no side effects."""
+    """Run an isolated Python process that imports veraxi_ymmp.core.ir and veraxi_ymmp.core.ports and asserts no side effects."""
     verification_code = """
 import sys
 import os
@@ -403,18 +403,18 @@ import os
 # Snapshot initial state
 initial_cwd_files = set(os.listdir('.'))
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     RetentionPoint, RetentionDropoffPoint, CutRetentionMetric,
     VideoRetentionReport, VideoPublishMetadata, UploadResult
 )
-from veraxi_ymmp.ports import (
+from veraxi_ymmp.core.ports import (
     VideoPublisher, VideoAnalyticsProvider, ProgressCallback
 )
 
 # 1. Check no external Google client or YouTube adapter libraries were loaded
 prohibited_submodules = [
     'google', 'googleapiclient', 'google_auth_oauthlib',
-    'veraxi_ymmp.youtube_adapter'
+    'veraxi_ymmp.exporters.youtube_adapter'
 ]
 loaded_prohibited = [m for m in prohibited_submodules if m in sys.modules]
 if loaded_prohibited:

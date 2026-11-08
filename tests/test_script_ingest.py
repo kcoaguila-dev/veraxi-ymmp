@@ -1,4 +1,4 @@
-from veraxi_ymmp.script_ingest import (
+from veraxi_ymmp.editorial.script_ingest import (
     parse_markdown_dialogue,
     split_text_to_char_limit,
     normalize_speaker,

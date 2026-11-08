@@ -6,7 +6,7 @@ Verifies rival-grade layout generation, dual character staging, and YouTube safe
 from pathlib import Path
 from PIL import Image
 
-from veraxi_ymmp.thumbnail import (
+from veraxi_ymmp.graphics.thumbnail import (
     ThumbnailConfig,
     generate_thumbnail,
     auto_extract_thumbnail_config,

@@ -1,18 +1,18 @@
 import json
 import pytest
 from pathlib import Path
-from veraxi_ymmp.history import (
+from veraxi_ymmp.app.history import (
     backup_project_script,
     list_script_history,
     restore_script_history,
     prune_history,
     cleanup_stale_audio,
 )
-from veraxi_ymmp.mcp_server import save_project_script
+from veraxi_ymmp.app.mcp_server import save_project_script
 
 
 def test_backup_and_restore_cycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("veraxi_ymmp.mcp_server.workspace_path", lambda p: tmp_path / p)
+    monkeypatch.setattr("veraxi_ymmp.app.mcp_server.workspace_path", lambda p: tmp_path / p)
 
     proj_dir = tmp_path / "projects" / "test_proj"
     proj_dir.mkdir(parents=True, exist_ok=True)

@@ -41,14 +41,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from veraxi_ymmp.ir import (
+from veraxi_ymmp.core.ir import (
     DynamicImageClip,
     TimelineIR,
     VideoPublishMetadata,
     VoiceClip,
 )
-from veraxi_ymmp.retention_qa import RetentionCorrelationEngine
-from veraxi_ymmp.youtube_adapter import (
+from veraxi_ymmp.editorial.retention_qa import RetentionCorrelationEngine
+from veraxi_ymmp.exporters.youtube_adapter import (
     CHUNK_SIZE_DEFAULT,
     THUMBNAIL_MAX_SIZE_BYTES,
     MockYouTubeAdapter,

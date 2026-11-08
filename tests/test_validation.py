@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from veraxi_ymmp.validation import (
+from veraxi_ymmp.editorial.validation import (
     ValidationError,
     sanitize_filename,
     validate_output_path,

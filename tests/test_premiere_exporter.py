@@ -5,13 +5,13 @@ from pathlib import Path
 from unittest.mock import MagicMock
 from xml.etree import ElementTree
 
-from veraxi_ymmp.premiere_exporter import (
+from veraxi_ymmp.exporters.premiere_exporter import (
     PremiereExporter,
     generate_fcp_xml,
     export_to_premiere,
     create_speech_bubble_png,
 )
-from veraxi_ymmp.ir import TimelineIR, VoiceClip
+from veraxi_ymmp.core.ir import TimelineIR, VoiceClip
 
 
 def _make_voice_clip(start_frame, length, text, character="ずんだもん", emotion="neutral", audio_path=None):

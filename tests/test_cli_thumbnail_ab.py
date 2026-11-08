@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from veraxi_ymmp import cli
+from veraxi_ymmp.app import cli
 
 
 def _run(monkeypatch, capsys, *args):
