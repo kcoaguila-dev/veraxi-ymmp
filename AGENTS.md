@@ -34,6 +34,10 @@ veraxi_ymmp/
      - **Epistemic Gate (`epistemic/`):** `pint` dimensional/unit compatibility, `mecab` morphological lemma & clause-scoped negation verification, `pypdf` / DOM-scoped table scale extraction, and SHA-256 primary source provenance.
      - **Editorial & Typography Gate (`editorial/`):** Google `budoux` Japanese phrase segmentation (protecting `{Kanji|ruby}` tags, $\le 38$ chars/cut, $\le 2$ lines/bubble) and $\ge 80/100$ Retention Score.
 5. **Privacy & Security:** Zero hardcoded local machine paths or developer usernames (`scripts/check_no_local_paths.py`). Zero committed API keys or secrets.
+6. **Temporal Invariant & Recency Grounding:**
+   - **Current Operational Year:** **2026** (Local Anchor: November 2026).
+   - **Strict Recency Mandate:** When authoring scripts, claims, and financial sources, default strictly to the latest available filings for 2026 (e.g. MSFT FY2026 10-K, AMZN FY2025 10-K + FY2026 Q3 10-Q).
+   - **Negative Rule:** Never treat 2023, 2024, or 2025 as the "current year" out of pretraining memory. Any citation older than trailing 12 months requires explicit historical framing.
 
 ---
 
