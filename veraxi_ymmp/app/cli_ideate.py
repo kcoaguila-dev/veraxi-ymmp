@@ -49,7 +49,7 @@ def _slugify(text: str) -> str:
 
 
 def generate_dossier_markdown(topic: str, archetype_key: str) -> str:
-    """Generate ready-to-paste NotebookLM prompt pack."""
+    """Generate ready-to-paste NotebookLM prompt pack with multi-turn prompt chaining."""
     arch = ARCHETYPES.get(archetype_key, ARCHETYPES["post_mortem"])
     return f"""# 📋 NotebookLM Interrogation Dossier: {topic}
 **Archetype Selected:** {arch['title']}
@@ -64,28 +64,60 @@ def generate_dossier_markdown(topic: str, archetype_key: str) -> str:
 
 ---
 
-## 💬 Step 2: Copy-Paste Extraction Prompt (The Forensic Evidence Extraction Matrix)
-*Paste this prompt into NotebookLM chat to extract factual bedrock without corporate fluff:*
-
+## 📌 Step 2: Add Pinned Note Inside NotebookLM (System Rules)
+*Create a new Note inside the notebook titled `System Rules` so constraints persist across all turns:*
 ```text
-Act as an investigative forensic analyst and auditor. Analyze all attached sources regarding:
-"{topic}"
-
-Extract the key evidence into this exact Markdown table:
-| # | Point of Contention / Claim | Canonical Period (e.g. 2026-Q3) | Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | Root Cause / Hard Metric |
-|---|---|---|---|---|---|
-
-Strict constraints:
-1. Output ONLY the Markdown table. No conversational intro, no outro, and NO creative dialogue.
-2. Every single row must cite an exact verbatim quote and page/section number from the uploaded sources.
-3. Highlight any contradictions between public claims and actual data.
-4. Baseline & Denominator Context: For every quantitative figure, extract the baseline denominator (sample size, total market, global population).
-5. Counter-Evidence & Boundary Conditions: Extract any cited dissenting view, vendor mitigation, or boundary limitation to prevent cherry-picking.
+Role: Forensic Investigative Researcher and Fact Auditor.
+Rule 1: Ground every answer strictly in verbatim quotes from uploaded documents.
+Rule 2: Never generate summaries, promotional marketing fluff, or AI-slop prose.
+Rule 3: Enforce temporal and contextual parity across all cited periods and comparative metrics.
+Rule 4: Every claim must cite the exact document and section/page number.
+Rule 5: For any quantitative figure, include the baseline denominator (sample size, market scale, total spend).
 ```
 
 ---
 
-## 💬 Step 3: Bring Evidence Table into Antigravity (The Script-Hygiene Engine)
+## 💬 Step 3: Multi-Turn Forensic Extraction (Prompt Chaining Protocol)
+*Run each turn as an independent message in NotebookLM chat to avoid context competition and output truncation:*
+
+### Turn 1: Primary Metrics & Stated Claims (Baseline Extraction)
+```text
+Analyze the primary anchor documents regarding: "{topic}".
+What are the official baseline figures, stated timelines, core metrics, or public claims made by the primary parties?
+Quote the exact verbatim text, line items, and page/section numbers.
+```
+
+### Turn 2: Anomalies, Counter-Evidence & Omissions (Dissecting the Contention)
+```text
+Now examine the counter-analyses, audit reports, or dissenting findings for: "{topic}".
+Where do the official claims conflict with observed data, internal memos, financial disclosures, or external benchmarks?
+Extract verbatim quotes showing any discrepancies, omitted costs, or ignored warning signs.
+```
+
+### Turn 3: Technical / Root Cause Mechanism (The Domino Effect)
+```text
+Focusing on the conflict identified in Turn 2:
+What is the specific technical, physical, legal, or economic mechanism driving this issue?
+Explain the causal chain (how Action A triggered Failure/Bottleneck B) with verbatim citations from the sources.
+```
+
+### Turn 4: Forensic Evidence Matrix Assembly (Structured 5-Column Table)
+```text
+Synthesize all findings from Turns 1, 2, and 3 into this exact Markdown table:
+
+| # | Point of Contention / Claim | Canonical Period / Scope | Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | Root Cause / Hard Metric |
+|---|---|---|---|---|---|
+
+Strict constraints:
+1. Output ONLY the Markdown table. No conversational intro, no outro, and NO creative dialogue.
+2. Every row must include an exact verbatim quote and page/section number.
+3. Highlight contradictions between public claims and documented reality.
+4. Include the baseline denominator for every quantitative figure.
+```
+
+---
+
+## 💬 Step 4: Bring Evidence Table into Antigravity (The Script-Hygiene Engine)
 Save NotebookLM's evidence table into `projects/<project>/evidence.md` or paste it directly into Antigravity.
 
 **Why we never ask NotebookLM to write dialogue:**
@@ -100,7 +132,7 @@ Antigravity authors the screenplay directly using the extracted evidence table:
 
 ---
 
-## 💬 Step 4: Compile & Run Static Analysis Gates
+## 💬 Step 5: Compile & Run Static Analysis Gates
 Save the finished script + evidence into `projects/<project>/dialogue_raw.md`, then execute:
 ```powershell
 # 1. Ingest dialogue (script.json) and evidence matrix (claims.json) via BudouX phrase tokenizer:
@@ -110,7 +142,6 @@ python -m veraxi_ymmp ingest-script projects/<project>/dialogue_raw.md
 python -m veraxi_ymmp validate projects/<project>/script.json --audit-facts --audit-pacing
 ```
 """
-
 
 def cmd_ideate(argv: List[str]) -> None:
     """Handle 'veraxi-ymmp ideate' subcommand."""

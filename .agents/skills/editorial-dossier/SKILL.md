@@ -39,18 +39,31 @@ Every topic, regardless of genre, must be mapped to one of 4 narrative conflict 
 
 ---
 
-## 2. NotebookLM Web Prompt Pack (Anti-Slop Protocol)
-NotebookLM by default produces agreeable, corporate summaries. When generating prompts for NotebookLM chat, always enforce:
+## 2. NotebookLM Web Prompt Pack (Anti-Slop & Multi-Turn Chaining Protocol)
+NotebookLM defaults to agreeable corporate PR summaries when asked multiple broad questions in a single turn (due to context competition and truncation limits). Always enforce **multi-turn prompt chaining**:
 
-### Prompt 1: The Evidence Extraction Matrix (Force Tabular Output)
+### Pinned Note inside NotebookLM: System Rules
+Create a note inside NotebookLM named `System Rules` to persist constraints across all turns:
 ```text
-Act as a forensic auditor and investigative researcher. Analyze all attached sources.
-Build an evidence table with exactly these 4 columns:
-| Point of Contention / Claim | Verbatim Quote Refuting or Explaining It | Source Document & Exact Page # | Technical / Root Cause |
-Strict rules:
-1. Do not summarize in paragraphs. Only output the Markdown table.
-2. Every row must include an exact verbatim quote and page reference.
-3. No introductory greetings or concluding remarks.
+Role: Forensic Investigative Researcher and Fact Auditor.
+Rule 1: Ground every answer strictly in verbatim quotes from uploaded documents.
+Rule 2: Never generate summaries, promotional marketing fluff, or AI-slop prose.
+Rule 3: Enforce temporal and contextual parity across all cited periods and comparative metrics.
+Rule 4: Every claim must cite the exact document and section/page number.
+Rule 5: For any quantitative figure, include the baseline denominator (sample size, market scale, total spend).
+```
+
+### Multi-Turn Prompt Chaining Sequence (Topic-Agnostic)
+*Run each turn sequentially in NotebookLM chat:*
+1. **Turn 1 (Baseline Extraction):** Extract official metrics, baseline figures, stated timelines, or primary claims from anchor sources.
+2. **Turn 2 (Dissecting Contention):** Identify discrepancies, omitted costs, internal memos, or dissenting findings from counter-analyses.
+3. **Turn 3 (Root Cause & Mechanism):** Explain the technical, physical, legal, or economic mechanism driving the conflict (the domino chain).
+4. **Turn 4 (Tabular Synthesis):** Assemble findings into the 5-column Forensic Evidence Matrix:
+```text
+Synthesize all findings from Turns 1, 2, and 3 into this exact Markdown table:
+| # | Point of Contention / Claim | Canonical Period / Scope | Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | Root Cause / Hard Metric |
+|---|---|---|---|---|---|
+Strict rules: Output ONLY the Markdown table. Every row must include an exact verbatim quote and page reference. No intro/outro.
 ```
 
 ### The Anti-Slop Boundary: Never Delegate Creative Scripting to NotebookLM
