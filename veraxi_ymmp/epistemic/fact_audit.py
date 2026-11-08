@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 from bs4 import BeautifulSoup
 from veraxi_ymmp.epistemic.dialectical import DialecticalAuditOutcome, audit_dialectical_balance
+from veraxi_ymmp.epistemic.temporal_gate import audit_temporal_recency
 
 
 from veraxi_ymmp.epistemic.fact_report import render_report
@@ -611,6 +612,19 @@ def audit_project_facts(
                     verdict=Verdict.UNVERIFIED,
                     reason=sif.message,
                     quote_errors=[sif.message],
+                )
+            )
+
+    temporal_violations = audit_temporal_recency(claims)
+    for tv in temporal_violations:
+        matching_claim = next((c for c in claims if c.id == tv.claim_id), None)
+        if matching_claim:
+            results.append(
+                ClaimResult(
+                    claim=matching_claim,
+                    verdict=Verdict.REFUTED if tv.severity == "ERROR" else Verdict.UNVERIFIED,
+                    reason=tv.message,
+                    quote_errors=[tv.message] if tv.severity == "ERROR" else [],
                 )
             )
 

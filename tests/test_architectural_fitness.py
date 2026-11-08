@@ -533,3 +533,10 @@ def test_runtime_tier1_import_isolation() -> None:
         stdin=subprocess.DEVNULL,
     )
     assert res.returncode == 0, f"Runtime import isolation failed: {res.stderr}"
+
+
+def test_temporal_recency_gate_registered() -> None:
+    """Ensure epistemic temporal recency gate is active and imported in epistemic package."""
+    from veraxi_ymmp.epistemic import audit_temporal_recency, enforce_temporal_recency
+    assert callable(audit_temporal_recency)
+    assert callable(enforce_temporal_recency)
