@@ -387,6 +387,19 @@ def test_epistemic_profiles_primary_authority_allowlist() -> None:
     assert is_primary_authority_url("https://github.com/python/cpython", EpistemicProfile.LORE) is True
     assert is_primary_authority_url("https://docs.python.org/3/whatsnew", EpistemicProfile.LORE) is True
 
+    # Tech profile: CVE, IETF, Kernel, and patent authorities are primary
+    assert is_primary_authority_url("https://www.cve.org/CVERecord?id=CVE-2024-0001", EpistemicProfile.TECH) is True
+    assert is_primary_authority_url("https://ietf.org/rfc/rfc9110.html", EpistemicProfile.TECH) is True
+    assert is_primary_authority_url("https://kernel.org/pub/linux", EpistemicProfile.TECH) is True
+    assert is_primary_authority_url("https://wipo.int/patents", EpistemicProfile.TECH) is True
+
+    # Default profile is GENERAL: accepts primary authorities across all disciplines
+    assert is_primary_authority_url("https://en.wikipedia.org/wiki/Python") is True
+    assert is_primary_authority_url("https://www.sec.gov/edgar") is True
+    assert is_primary_authority_url("https://arxiv.org/abs/2301.00001") is True
+    assert is_primary_authority_url("https://www.cve.org/CVERecord?id=CVE-2024-0001") is True
+    assert is_primary_authority_url("https://techcrunch.com/article") is False
+
 
 def test_central_claim_with_academic_and_general_profiles() -> None:
     from veraxi_ymmp.epistemic.facts import EpistemicProfile

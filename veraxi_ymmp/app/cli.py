@@ -239,9 +239,9 @@ def _cmd_validate(argv: List[str]) -> None:
     parser.add_argument(
         "--epistemic-profile",
         "--profile",
-        choices=["finance", "academic", "general", "lore"],
+        choices=["general", "tech", "academic", "finance", "lore"],
         default=None,
-        help="Epistemic profile for primary authority allowlist (finance, academic, general, lore)",
+        help="Epistemic profile for primary authority allowlist (general, tech, academic, finance, lore)",
     )
     parser.add_argument("--allow-unverified", action="store_true", help="Do not fail when fact-check gate blocks (recorded in output)")
     args = parser.parse_args(argv)
@@ -413,7 +413,7 @@ def _cmd_capture_sec(argv: list[str]) -> None:
 
 
 def _cmd_capture(argv: list[str]) -> None:
-    """Capture and highlight an official document passage from SEC or FRED."""
+    """Capture and highlight a primary source document passage (Web, PDF/HTML, Academic, SEC, FRED)."""
     from veraxi_ymmp.app.cli_capture import cmd_capture
     cmd_capture(argv)
 

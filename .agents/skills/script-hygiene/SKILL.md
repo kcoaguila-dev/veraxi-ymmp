@@ -23,7 +23,7 @@ This skill governs all dialogue generation, staging metadata, and pacing rules f
   - NEVER write him as a B2B corporate consultant, IT procurement analyst, or financial lecturer.
   - He must NEVER lecture the audience (`大企業ほど〜`, `〜見るべきなのだ`). He reacts with visceral emotion, shock, and money worries (`「ええっ、一社に全部握られたら、言い値でカモにされるのだ！？」`, `「ボクの株、明日売っ払ってくるのだー！」`).
 - **四国めたん (The Cold Intellectual / Sadistic Realist):**
-  - Aristocratic, sharp realist who punctures Zundamon's naive illusions with dry sarcasm, financial ruthlessness, and devastating calm.
+  - Aristocratic, sharp realist who punctures Zundamon's naive illusions with dry sarcasm, forensic ruthlessness, and devastating calm.
   - **Banned 'Yes-Man Metan':** Metan must NEVER agree with Zundamon in more than 35% of her cuts (`はい。`, `その通りですわ。` spam is strictly forbidden).
   - Punishing quips: `「おめでたい頭ですわね」`, `「底値で狼狽売りする養分の鑑ですわね」`.
 - **春日部つむぎ (The Trench Insider / High-Energy Gal):**
@@ -53,10 +53,10 @@ This skill governs all dialogue generation, staging metadata, and pacing rules f
 ## 5. Narrative Conflict Structure (Dramatic Conflict)
 NEVER structure videos as boring corporate lectures with generic bullet lists (`「3つのポイント」`, `「3大視点」`, `「3大潮流」` are strictly banned). Top-tier YouTube retention requires **Dramatic Conflict (認知的不協和)**:
 1. **世間の大いなる勘違い (The Public Illusion):** `「マイクロソフトがOpenAIで完全勝利…と思っていませんか？」`
-2. **決算・現場の冷酷な真実 (The Unvarnished Financial Truth):** Real numbers, margins, and customer friction.
+2. **一次資料・現場の冷酷な真実 (The Unvarnished Forensic Truth):** Real numbers, engineering limits, or financial disclosures.
 3. **つむぎ参戦のちゃぶ台返し (The Contrarian Whistleblower):** Tsumugi enters from the tech/engineering trenches to overturn assumptions.
 4. **逃げられないチキンレース (The Game-Theory Trap):** Why both giants must keep burning billions or face extinction.
-5. **忖度なしの最終審判 (The Real Winner/Loser Verdict):** Cash-flow backed investment conclusion.
+5. **忖度なしの最終審判 (The Real Winner/Loser Verdict):** Grounded causal conclusion.
 
 ---
 
@@ -78,7 +78,7 @@ NEVER structure videos as boring corporate lectures with generic bullet lists (`
 - **Primary Authority Citations:** Anchor scripts to verifiable primary data sources (Technical RFC/CVE specs, PubMed/arXiv, Court dockets, FRED, SEC filings, government statistics).
 - **4-Phase Domino Causality:** Structure narrative as a mechanistic chain reaction:
   *Consensus Illusion $\to$ Primary Evidence Fracture $\to$ Structural Domino Cascade $\to$ Cold Survival Verdict*.
-- **High-Stakes Packaging:** Titles and thumbnails MUST NEVER use passive match-up cliches (e.g. bare `「勝つのはどっち！？」` is banned). Deploy high-tension curiosity gaps with concrete financial stakes (e.g. `「【全員騙されていた】60兆円AIバブルの罠…生き残る真の1社」`).
+- **High-Stakes Packaging:** Titles and thumbnails MUST NEVER use passive match-up cliches (e.g. bare `「勝つのはどっち！？」` is banned). Deploy high-tension curiosity gaps with concrete stakes (e.g. `「【全員騙されていた】60兆円AIバブルの罠…生き残る真の1社」` or `「【脆弱性CVE-2024】99%のエンジニアが見落とす致命的欠陥」`).
 
 ---
 

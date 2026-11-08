@@ -173,7 +173,7 @@ def audit_project_facts(
                         break
                 except Exception:
                     pass
-    active_profile = EpistemicProfile(profile) if profile else EpistemicProfile.FINANCE
+    active_profile = EpistemicProfile(profile) if profile else EpistemicProfile.GENERAL
 
     claims = load_claims(claims_path)
     sources = load_project_sources(project_dir)

@@ -312,8 +312,8 @@ def render_domino_slide(
     is_vertical: bool = False,
 ) -> Path:
     """
-    Renders a Lehman-Style Mechanistic Domino Causality Chain slide.
-    Visualizes the structural trap (Investment -> Fixed Cost -> FCF Depletion -> Multiples).
+    Renders a 4-Stage Mechanistic Domino Causality Chain slide.
+    Visualizes structural domino causality (Trigger -> Bottleneck -> Cascade -> Outcome).
     """
     col = resolve_color(theme_color)
     flat_texts = [title, step_tag, bottom_tag, bottom_text]

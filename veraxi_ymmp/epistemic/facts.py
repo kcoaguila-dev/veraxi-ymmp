@@ -70,7 +70,7 @@ class Evidence:
     url: str
     quote: str
     stance: Stance
-    tier: int = 2  # 1 = primary (SEC/FRED/gov), 2 = reputable secondary, 3 = other
+    tier: int = 2  # 1 = primary authority (gov/academic/standards/regulatory), 2 = reputable secondary, 3 = other
     page: int | None = None
     retrieved_at: str = ""
     source_id: str = ""  # ID/filename under projects/<project>/sources/<source_id>.*
@@ -200,7 +200,12 @@ TECH_AUTHORITY_HOSTS = frozenset({
 
 LORE_AUTHORITY_HOSTS = TECH_AUTHORITY_HOSTS
 
-PRIMARY_AUTHORITY_HOSTS = FINANCE_AUTHORITY_HOSTS
+PRIMARY_AUTHORITY_HOSTS = (
+    FINANCE_AUTHORITY_HOSTS
+    | ACADEMIC_AUTHORITY_HOSTS
+    | GENERAL_AUTHORITY_HOSTS
+    | TECH_AUTHORITY_HOSTS
+)
 
 
 PRIMARY_INSTITUTIONS: Dict[str, str] = {
@@ -301,7 +306,7 @@ def canonical_institution(url: str) -> str:
 
 def is_primary_authority_url(
     url: str,
-    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+    profile: EpistemicProfile | str = EpistemicProfile.GENERAL,
 ) -> bool:
     """Return True if URL host is recognized as an official primary authority for profile."""
     if not url:
@@ -320,9 +325,6 @@ def is_primary_authority_url(
     if clean_host.endswith(".gov") or clean_host.endswith(".go.jp") or clean_host.endswith(".gov.uk"):
         return True
 
-    # Tier 1 for finance: official institutional / central bank / regulatory authorities
-    if clean_host in FINANCE_AUTHORITY_HOSTS or host in FINANCE_AUTHORITY_HOSTS:
-        return True
     finance_domains = (
         "sec.gov",
         "stlouisfed.org",
@@ -338,17 +340,12 @@ def is_primary_authority_url(
         "oecd.org",
         "bis.org",
     )
-    if any(clean_host == d or clean_host.endswith("." + d) for d in finance_domains):
-        return True
+    is_finance = (
+        clean_host in FINANCE_AUTHORITY_HOSTS
+        or host in FINANCE_AUTHORITY_HOSTS
+        or any(clean_host == d or clean_host.endswith("." + d) for d in finance_domains)
+    )
 
-    if prof == EpistemicProfile.FINANCE:
-        return False
-
-    # Tier 1 for academic: peer-reviewed journals, preprint archives, higher ed domains
-    if clean_host.endswith(".edu") or clean_host.endswith(".ac.jp") or clean_host.endswith(".ac.uk"):
-        return True
-    if clean_host in ACADEMIC_AUTHORITY_HOSTS or host in ACADEMIC_AUTHORITY_HOSTS:
-        return True
     academic_domains = (
         "arxiv.org",
         "doi.org",
@@ -364,15 +361,15 @@ def is_primary_authority_url(
         "biorxiv.org",
         "medrxiv.org",
     )
-    if any(clean_host == d or clean_host.endswith("." + d) for d in academic_domains):
-        return True
+    is_academic = (
+        clean_host.endswith(".edu")
+        or clean_host.endswith(".ac.jp")
+        or clean_host.endswith(".ac.uk")
+        or clean_host in ACADEMIC_AUTHORITY_HOSTS
+        or host in ACADEMIC_AUTHORITY_HOSTS
+        or any(clean_host == d or clean_host.endswith("." + d) for d in academic_domains)
+    )
 
-    if prof == EpistemicProfile.ACADEMIC:
-        return False
-
-    # Tier 1 for general: encyclopedias, wire services, public archives
-    if clean_host in GENERAL_AUTHORITY_HOSTS or host in GENERAL_AUTHORITY_HOSTS:
-        return True
     general_domains = (
         "wikipedia.org",
         "wikidata.org",
@@ -385,15 +382,12 @@ def is_primary_authority_url(
         "archive.org",
         "britannica.com",
     )
-    if any(clean_host == d or clean_host.endswith("." + d) for d in general_domains):
-        return True
+    is_general = (
+        clean_host in GENERAL_AUTHORITY_HOSTS
+        or host in GENERAL_AUTHORITY_HOSTS
+        or any(clean_host == d or clean_host.endswith("." + d) for d in general_domains)
+    )
 
-    if prof == EpistemicProfile.GENERAL:
-        return False
-
-    # Tier 1 for lore / tech: official source trees, language documentation, standards, CVEs
-    if clean_host in TECH_AUTHORITY_HOSTS or host in TECH_AUTHORITY_HOSTS:
-        return True
     tech_domains = (
         "github.com",
         "python.org",
@@ -410,8 +404,23 @@ def is_primary_authority_url(
         "wipo.int",
         "epo.org",
     )
-    if any(clean_host == d or clean_host.endswith("." + d) for d in tech_domains):
-        return True
+    is_tech = (
+        clean_host in TECH_AUTHORITY_HOSTS
+        or host in TECH_AUTHORITY_HOSTS
+        or any(clean_host == d or clean_host.endswith("." + d) for d in tech_domains)
+    )
+
+    if prof == EpistemicProfile.FINANCE:
+        return is_finance
+
+    if prof == EpistemicProfile.ACADEMIC:
+        return is_academic or is_finance
+
+    if prof in (EpistemicProfile.TECH, EpistemicProfile.LORE):
+        return is_tech or is_academic
+
+    if prof == EpistemicProfile.GENERAL:
+        return is_general or is_tech or is_academic or is_finance
 
     return False
 
@@ -419,7 +428,7 @@ def is_primary_authority_url(
 def enforce_source_tier(
     url: str,
     declared_tier: int = 2,
-    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+    profile: EpistemicProfile | str = EpistemicProfile.GENERAL,
 ) -> int:
     """Derive/enforce tier.
 
@@ -664,7 +673,7 @@ def required_primary_sources(claim: Claim) -> int:
 def verdict_for(
     claim: Claim,
     quote_errors: Sequence[str] = (),
-    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+    profile: EpistemicProfile | str = EpistemicProfile.GENERAL,
 ) -> ClaimResult:
     """Deterministic verdict. Any contradiction from tier<=2 refutes; missing proof is UNVERIFIED."""
     if getattr(claim, "axiom", False):
@@ -729,7 +738,7 @@ def verdict_for(
 
 def audit(
     claims: Sequence[Claim],
-    profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
+    profile: EpistemicProfile | str = EpistemicProfile.GENERAL,
 ) -> List[ClaimResult]:
     return [verdict_for(c, profile=profile) for c in claims]
 

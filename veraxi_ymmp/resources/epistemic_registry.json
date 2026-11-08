@@ -84,6 +84,32 @@
       "developer.mozilla.org",
       "w3.org",
       "www.w3.org"
+    ],
+    "tech": [
+      "cve.org",
+      "developer.mozilla.org",
+      "docs.python.org",
+      "github.com",
+      "go.dev",
+      "ietf.org",
+      "kernel.org",
+      "kubernetes.io",
+      "mozilla.org",
+      "nvd.nist.gov",
+      "owasp.org",
+      "python.org",
+      "rfc-editor.org",
+      "rust-lang.org",
+      "w3.org",
+      "www.cve.org",
+      "www.github.com",
+      "www.ietf.org",
+      "www.kernel.org",
+      "www.kubernetes.io",
+      "www.owasp.org",
+      "www.rfc-editor.org",
+      "www.rust-lang.org",
+      "www.w3.org"
     ]
   },
   "authority_domains": {
@@ -142,6 +168,22 @@
       "python.org",
       "mozilla.org",
       "w3.org"
+    ],
+    "tech": [
+      "cve.org",
+      "epo.org",
+      "github.com",
+      "go.dev",
+      "ietf.org",
+      "kernel.org",
+      "kubernetes.io",
+      "mozilla.org",
+      "owasp.org",
+      "python.org",
+      "rfc-editor.org",
+      "rust-lang.org",
+      "w3.org",
+      "wipo.int"
     ]
   },
   "primary_institutions": {
@@ -193,6 +235,12 @@
     "ietf.org": "ietf",
     "nist.gov": "nist",
     "loc.gov": "loc",
-    "ndl.go.jp": "ndl"
+    "ndl.go.jp": "ndl",
+    "rfc-editor.org": "ietf",
+    "cve.org": "cve",
+    "owasp.org": "owasp",
+    "kernel.org": "linux",
+    "wipo.int": "wipo",
+    "epo.org": "epo"
   }
 }

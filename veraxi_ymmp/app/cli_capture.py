@@ -1,5 +1,5 @@
 """
-CLI Command Handlers for Official Document Capture (SEC EDGAR & FRED).
+CLI Command Handlers for Primary Authority Document Capture (Web, SEC EDGAR & FRED).
 """
 
 from __future__ import annotations
@@ -13,16 +13,16 @@ from veraxi_ymmp.epistemic.facts import DocumentCaptureSpec, DocumentSourceType
 
 
 def cmd_capture(argv: list[str]) -> None:
-    """Capture and highlight official primary authority document proof (SEC or FRED)."""
+    """Capture and highlight primary authority document proof (Web, PDF/HTML, Academic, SEC, FRED)."""
     parser = argparse.ArgumentParser(
         prog="veraxi-ymmp capture",
         description="Capture and highlight primary source document proof (Web, PDF/HTML, Academic, SEC, FRED).",
     )
     parser.add_argument(
         "--source",
-        choices=["sec", "sec_edgar", "fred", "web"],
-        default="sec",
-        help="Primary authority source (default: sec)",
+        choices=["web", "sec", "sec_edgar", "fred"],
+        default="web",
+        help="Primary authority source (default: web)",
     )
     parser.add_argument(
         "--identifier",
@@ -57,9 +57,14 @@ def cmd_capture(argv: list[str]) -> None:
     args = parser.parse_args(argv)
 
     source_norm = args.source.lower()
-    # Auto-detect source: if URL is provided without a ticker/identifier and --source was not explicitly passed, route to web
-    if args.url and not args.identifier and source_norm in ("sec", "sec_edgar") and ("--source" not in argv):
-        source_norm = "web"
+    # Auto-detect source if --source was not explicitly specified:
+    if "--source" not in argv:
+        if any(t in argv for t in ("-t", "--ticker", "--accession", "--form")):
+            source_norm = "sec"
+        elif any(f in argv for f in ("--series", "--units")):
+            source_norm = "fred"
+        elif args.url:
+            source_norm = "web"
 
     if source_norm in ("sec", "sec_edgar"):
         source_type = DocumentSourceType.SEC_EDGAR

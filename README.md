@@ -74,12 +74,12 @@ Open **`http://localhost:1420`** in your browser.
 
 | Target Format | Implementation | Description |
 |---|---|---|
-| **YMM4 Project (`.ymmp`)** | [`YMMPRenderer`](veraxi_ymmp/ymmp_renderer.py) | Clones template timeline items, embeds Brotli-compressed voice caches, and configures phonetic mouth animations. |
-| **Premiere Pro (`.xml`)** | [`PremiereExporter`](veraxi_ymmp/premiere_exporter.py) | Generates Final Cut Pro XML (xmeml) with 4 video tracks (BG, Tachie, B-Roll, Subtitle speech bubbles) and 3 audio tracks. |
-| **MoviePy Preview (`.mp4`)** | [`MoviePyRenderer`](veraxi_ymmp/moviepy_renderer.py) | High-speed software renderer producing 1080p preview videos with speech bubbles and audio ducking for CI/CD and pre-flight QA. |
-| **After Effects (`.jsx`)** | [`AfterEffectsRenderer`](veraxi_ymmp/ae_renderer.py) | Generates ExtendScript automation files with slider-driven lip-sync and character bounce effects. |
-| **SRT Subtitles (`.srt`)** | [`generate_srt`](veraxi_ymmp/srt_generator.py) | Generates standard SRT subtitle files with millisecond precision for Premiere Pro caption tracks. |
-| **YouTube Thumbnail (`.png`)** | [`ThumbnailGenerator`](veraxi_ymmp/thumbnail.py) | 1920x1080 publication-ready thumbnails using 3-split rule (3分割法), outline typography (袋文字), and timestamp dead-zone protection. |
+| **YMM4 Project (`.ymmp`)** | [`YMMPRenderer`](veraxi_ymmp/exporters/ymmp_renderer.py) | Clones template timeline items, embeds Brotli-compressed voice caches, and configures phonetic mouth animations. |
+| **Premiere Pro (`.xml`)** | [`PremiereExporter`](veraxi_ymmp/exporters/premiere_exporter.py) | Generates Final Cut Pro XML (xmeml) with 4 video tracks (BG, Tachie, B-Roll, Subtitle speech bubbles) and 3 audio tracks. |
+| **MoviePy Preview (`.mp4`)** | [`MoviePyRenderer`](veraxi_ymmp/exporters/moviepy_renderer.py) | High-speed software renderer producing 1080p preview videos with speech bubbles and audio ducking for CI/CD and pre-flight QA. |
+| **After Effects (`.jsx`)** | [`AfterEffectsRenderer`](veraxi_ymmp/exporters/ae_renderer.py) | Generates ExtendScript automation files with slider-driven lip-sync and character bounce effects. |
+| **SRT Subtitles (`.srt`)** | [`generate_srt`](veraxi_ymmp/exporters/srt_generator.py) | Generates standard SRT subtitle files with millisecond precision for Premiere Pro caption tracks. |
+| **YouTube Thumbnail (`.png`)** | [`ThumbnailGenerator`](veraxi_ymmp/graphics/thumbnail.py) | 1920x1080 publication-ready thumbnails using 3-split rule (3分割法), outline typography (袋文字), and timestamp dead-zone protection. |
 
 ---
 
@@ -92,7 +92,7 @@ Open **`http://localhost:1420`** in your browser.
 - **Module Size Ceilings:** Strict 900-line limit per module preventing monolithic God objects.
 - **Privacy & Local Path Scanner:** Automated scanner ([`scripts/check_no_local_paths.py`](scripts/check_no_local_paths.py)) guarantees zero hardcoded developer usernames or local machine paths in repository source code.
 - **Secret Detection:** Gitleaks and Yelp detect-secrets guard commit history and staging against credential leakage.
-- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`veraxi_ymmp/audio_normalizer.py`](veraxi_ymmp/audio_normalizer.py)).
+- **EBU R128 Audio Normalization:** Automated loudness leveling via FFmpeg loudnorm targeting YouTube (-14 LUFS), TikTok/Instagram (-13 LUFS), and broadcast standards ([`veraxi_ymmp/audio/audio_normalizer.py`](veraxi_ymmp/audio/audio_normalizer.py)).
 
 ---
 
