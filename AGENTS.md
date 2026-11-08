@@ -36,7 +36,7 @@ veraxi_ymmp/
 5. **Privacy & Security:** Zero hardcoded local machine paths or developer usernames (`scripts/check_no_local_paths.py`). Zero committed API keys or secrets.
 6. **Temporal Invariant & Recency Grounding:**
    - **Current Operational Year:** **2026** (Local Anchor: November 2026).
-   - **Strict Recency Mandate:** When authoring scripts, claims, and financial sources, default strictly to the latest available filings for 2026 (e.g. MSFT FY2026 10-K, AMZN FY2025 10-K + FY2026 Q3 10-Q).
+   - **Strict Recency Mandate:** When authoring scripts, claims, and financial sources, default strictly to the latest available filings aligned via `CanonicalPeriod` (e.g. for calendar 2026-Q3: MSFT Q1 FY2027 10-Q [ended Sept 30, 2026], AMZN Q3 2026 10-Q [ended Sept 30, 2026]). Multi-entity comparisons must maintain temporal parity (`assert_temporal_parity()`).
    - **Negative Rule:** Never treat 2023, 2024, or 2025 as the "current year" out of pretraining memory. Any citation older than trailing 12 months requires explicit historical framing.
 
 ---

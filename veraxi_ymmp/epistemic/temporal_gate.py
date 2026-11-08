@@ -19,6 +19,26 @@ class StaleTemporalSourceError(RuntimeError):
     """Raised when a claim cites a stale temporal source as current."""
 
 
+class TemporalParityMismatchError(RuntimeError):
+    """Raised when compared entities in a multi-entity script have asymmetric temporal windows."""
+
+
+@dataclass(frozen=True)
+class CanonicalPeriod:
+    """Represents a normalized canonical calendar reporting period for an entity."""
+
+    entity: str
+    fiscal_label: str
+    period_start: datetime.date
+    period_end: datetime.date
+    calendar_quarter: str
+    is_annual: bool = False
+
+    @property
+    def duration_days(self) -> int:
+        return (self.period_end - self.period_start).days + 1
+
+
 @dataclass(frozen=True)
 class TemporalViolation:
     """Represents a detected temporal recency violation in a claim."""
@@ -167,3 +187,175 @@ def enforce_temporal_recency(
         raise StaleTemporalSourceError(
             f"Epistemic temporal gate failed with {len(errors)} error(s):\n{error_msgs}"
         )
+
+
+def _calendar_quarter_for_date(d: datetime.date) -> str:
+    q = (d.month - 1) // 3 + 1
+    return f"{d.year}-Q{q}"
+
+
+def normalize_to_canonical_period(
+    entity: str,
+    fiscal_label: str,
+    period_end: Optional[datetime.date | str] = None,
+) -> CanonicalPeriod:
+    """Normalize an entity's reporting period into a canonical calendar window.
+
+    Handles non-standard fiscal years (such as Microsoft's June year-end and
+    NVIDIA's January year-end) so cross-company comparisons operate on identical
+    calendar windows.
+    """
+    clean_ticker = entity.strip().upper()
+    label_upper = fiscal_label.strip().upper()
+
+    # Parse period_end if provided
+    end_date: Optional[datetime.date] = None
+    if isinstance(period_end, str):
+        end_date = datetime.date.fromisoformat(period_end)
+    elif isinstance(period_end, datetime.date):
+        end_date = period_end
+
+    is_annual = "10-K" in label_upper or (
+        ("FY" in label_upper or "ANNUAL" in label_upper) and not any(f"Q{i}" in label_upper for i in range(1, 5))
+    )
+
+    # Extract year and quarter tokens
+    q_match = re.search(r"Q([1-4])", label_upper)
+    quarter_num = int(q_match.group(1)) if q_match else None
+
+    yr_match = re.search(r"(?:FY)?\s*([12]\d{3}|[12]\d)", label_upper)
+    yr_token = None
+    if yr_match:
+        val = int(yr_match.group(1))
+        yr_token = val if val > 2000 else val + 2000
+
+    if end_date is None:
+        if yr_token is None:
+            raise ValueError(f"Cannot deduce canonical period without year or period_end for {entity} '{fiscal_label}'")
+
+        if clean_ticker == "MSFT":
+            # Microsoft fiscal year ends June 30 of yr_token
+            # Q1 FY[Y]: Jul 1 - Sep 30 of (Y - 1)
+            # Q2 FY[Y]: Oct 1 - Dec 31 of (Y - 1)
+            # Q3 FY[Y]: Jan 1 - Mar 31 of Y
+            # Q4 FY[Y]: Apr 1 - Jun 30 of Y
+            if quarter_num == 1:
+                start_date = datetime.date(yr_token - 1, 7, 1)
+                end_date = datetime.date(yr_token - 1, 9, 30)
+            elif quarter_num == 2:
+                start_date = datetime.date(yr_token - 1, 10, 1)
+                end_date = datetime.date(yr_token - 1, 12, 31)
+            elif quarter_num == 3:
+                start_date = datetime.date(yr_token, 1, 1)
+                end_date = datetime.date(yr_token, 3, 31)
+            elif quarter_num == 4:
+                start_date = datetime.date(yr_token, 4, 1)
+                end_date = datetime.date(yr_token, 6, 30)
+            else:
+                # Annual FY[Y]: Jul 1 (Y - 1) to Jun 30 (Y)
+                start_date = datetime.date(yr_token - 1, 7, 1)
+                end_date = datetime.date(yr_token, 6, 30)
+                is_annual = True
+        elif clean_ticker == "NVDA":
+            # NVIDIA fiscal year ends Jan 31 of yr_token
+            if quarter_num == 1:
+                start_date = datetime.date(yr_token - 1, 2, 1)
+                end_date = datetime.date(yr_token - 1, 4, 30)
+            elif quarter_num == 2:
+                start_date = datetime.date(yr_token - 1, 5, 1)
+                end_date = datetime.date(yr_token - 1, 7, 31)
+            elif quarter_num == 3:
+                start_date = datetime.date(yr_token - 1, 8, 1)
+                end_date = datetime.date(yr_token - 1, 10, 31)
+            elif quarter_num == 4:
+                start_date = datetime.date(yr_token - 1, 11, 1)
+                end_date = datetime.date(yr_token, 1, 31)
+            else:
+                start_date = datetime.date(yr_token - 1, 2, 1)
+                end_date = datetime.date(yr_token, 1, 31)
+                is_annual = True
+        elif clean_ticker == "AAPL":
+            # Apple fiscal year ends Sep 30 of yr_token
+            if quarter_num == 1:
+                start_date = datetime.date(yr_token - 1, 10, 1)
+                end_date = datetime.date(yr_token - 1, 12, 31)
+            elif quarter_num == 2:
+                start_date = datetime.date(yr_token, 1, 1)
+                end_date = datetime.date(yr_token, 3, 31)
+            elif quarter_num == 3:
+                start_date = datetime.date(yr_token, 4, 1)
+                end_date = datetime.date(yr_token, 6, 30)
+            elif quarter_num == 4:
+                start_date = datetime.date(yr_token, 7, 1)
+                end_date = datetime.date(yr_token, 9, 30)
+            else:
+                start_date = datetime.date(yr_token - 1, 10, 1)
+                end_date = datetime.date(yr_token, 9, 30)
+                is_annual = True
+        else:
+            # Standard calendar year (AMZN, GOOGL, META, etc.)
+            if quarter_num == 1:
+                start_date = datetime.date(yr_token, 1, 1)
+                end_date = datetime.date(yr_token, 3, 31)
+            elif quarter_num == 2:
+                start_date = datetime.date(yr_token, 4, 1)
+                end_date = datetime.date(yr_token, 6, 30)
+            elif quarter_num == 3:
+                start_date = datetime.date(yr_token, 7, 1)
+                end_date = datetime.date(yr_token, 9, 30)
+            elif quarter_num == 4:
+                start_date = datetime.date(yr_token, 10, 1)
+                end_date = datetime.date(yr_token, 12, 31)
+            else:
+                start_date = datetime.date(yr_token, 1, 1)
+                end_date = datetime.date(yr_token, 12, 31)
+                is_annual = True
+    else:
+        # Deduce start_date from end_date
+        if is_annual:
+            start_date = end_date - datetime.timedelta(days=364)
+        else:
+            # Standard quarter ~ 90-92 days
+            start_date = end_date - datetime.timedelta(days=91)
+
+    cal_q = _calendar_quarter_for_date(end_date)
+
+    return CanonicalPeriod(
+        entity=clean_ticker,
+        fiscal_label=fiscal_label,
+        period_start=start_date,
+        period_end=end_date,
+        calendar_quarter=cal_q,
+        is_annual=is_annual,
+    )
+
+
+def assert_temporal_parity(
+    periods: Sequence[CanonicalPeriod],
+    max_discrepancy_days: int = 14,
+) -> None:
+    """Assert that compared entity periods maintain temporal symmetry.
+
+    Raises:
+        TemporalParityMismatchError: If the end dates diverge by more than
+        max_discrepancy_days, or if an annual filing is asymmetrically compared
+        against a single quarter.
+    """
+    if len(periods) < 2:
+        return
+
+    first = periods[0]
+    for other in periods[1:]:
+        if first.is_annual != other.is_annual:
+            raise TemporalParityMismatchError(
+                f"TEMPORAL_PARITY_MISMATCH: Comparing annual filing {first.entity} ({first.fiscal_label}) "
+                f"against quarterly filing {other.entity} ({other.fiscal_label}) violates parity."
+            )
+
+        diff_days = abs((first.period_end - other.period_end).days)
+        if diff_days > max_discrepancy_days:
+            raise TemporalParityMismatchError(
+                f"TEMPORAL_PARITY_MISMATCH: {first.entity} ({first.fiscal_label}, ended {first.period_end}) "
+                f"and {other.entity} ({other.fiscal_label}, ended {other.period_end}) "
+                f"diverge by {diff_days} days (maximum permitted: {max_discrepancy_days}d)."
+            )

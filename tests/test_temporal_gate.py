@@ -4,9 +4,12 @@ import pytest
 from veraxi_ymmp.epistemic.facts import Claim, Evidence, Stance
 from veraxi_ymmp.epistemic.temporal_gate import (
     StaleTemporalSourceError,
+    TemporalParityMismatchError,
+    assert_temporal_parity,
     audit_temporal_recency,
     enforce_temporal_recency,
     extract_referenced_years,
+    normalize_to_canonical_period,
 )
 
 
@@ -85,3 +88,32 @@ def test_enforce_temporal_recency_raises_error() -> None:
 
     with pytest.raises(StaleTemporalSourceError, match="STALE_TEMPORAL_SOURCE_ERROR"):
         enforce_temporal_recency([stale_claim], operational_year=2026)
+
+
+def test_canonical_period_normalization_msft_q1_fy27_vs_amzn_q3_2026() -> None:
+    msft = normalize_to_canonical_period("MSFT", "Q1 FY2027")
+    amzn = normalize_to_canonical_period("AMZN", "Q3 2026")
+
+    assert msft.calendar_quarter == "2026-Q3"
+    assert amzn.calendar_quarter == "2026-Q3"
+    assert msft.period_end.isoformat() == "2026-09-30"
+    assert amzn.period_end.isoformat() == "2026-09-30"
+
+    # Parity assertion must succeed without error
+    assert_temporal_parity([msft, amzn])
+
+
+def test_temporal_parity_fails_on_annual_vs_quarterly() -> None:
+    msft_annual = normalize_to_canonical_period("MSFT", "FY2026")
+    amzn_quarter = normalize_to_canonical_period("AMZN", "Q3 2026")
+
+    with pytest.raises(TemporalParityMismatchError, match="Comparing annual filing"):
+        assert_temporal_parity([msft_annual, amzn_quarter])
+
+
+def test_temporal_parity_fails_on_divergent_quarters() -> None:
+    msft_old_q = normalize_to_canonical_period("MSFT", "Q3 FY2026")  # Ended 2026-03-31
+    amzn_new_q = normalize_to_canonical_period("AMZN", "Q3 2026")   # Ended 2026-09-30
+
+    with pytest.raises(TemporalParityMismatchError, match="diverge by"):
+        assert_temporal_parity([msft_old_q, amzn_new_q])

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw
@@ -33,7 +33,12 @@ from veraxi_ymmp.epistemic.facts import (
     DocumentSourceType,
     ProvenanceRecord,
 )
+import datetime as dt_module
 from veraxi_ymmp.core.logging import logger
+from veraxi_ymmp.epistemic.temporal_gate import (
+    CanonicalPeriod,
+    normalize_to_canonical_period,
+)
 from veraxi_ymmp.epistemic.web_capture import HtmlHighlightCapturer
 
 DEFAULT_SEC_USER_AGENT = "VeraxiStudio-Research/1.0"
@@ -536,3 +541,145 @@ class EdgarDocumentCaptureAdapter:
                 "sidecar_path": str(sidecar_p),
             },
         )
+
+
+
+# ---------------------------------------------------------------------------
+# EdgarTools Fact Ingestion & Canonical Period Normalizer Adapter
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class EdgarFactRecord:
+    """Typed US-GAAP financial fact extracted via edgartools and anchored temporally."""
+
+    ticker: str
+    cik: str
+    concept: str
+    value: float
+    unit: str
+    period_start: Optional[dt_module.date]
+    period_end: dt_module.date
+    fiscal_year: int
+    fiscal_period: str
+    canonical_period: CanonicalPeriod
+    label: str = ""
+
+
+COMMON_GAAP_CONCEPTS: Dict[str, List[str]] = {
+    "capex": [
+        "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+        "us-gaap:PaymentsToAcquireProductiveAssets",
+        "us-gaap:AdditionsToPropertyAndEquipment",
+    ],
+    "depreciation": [
+        "us-gaap:DepreciationDepletionAndAmortization",
+        "us-gaap:DepreciationAndAmortization",
+    ],
+    "operating_income": [
+        "us-gaap:OperatingIncomeLoss",
+    ],
+    "revenue": [
+        "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "us-gaap:Revenues",
+    ],
+}
+
+
+class EdgarFactsAdapter:
+    """Deterministic SEC EDGAR facts and period extractor powered by edgartools."""
+
+    def __init__(self, user_agent: Optional[str] = None) -> None:
+        self.user_agent = user_agent or os.environ.get("SEC_EDGAR_USER_AGENT", DEFAULT_SEC_USER_AGENT)
+        try:
+            from edgar import set_identity
+            set_identity(self.user_agent)
+        except Exception as e:
+            logger.warning(f"Could not set edgar identity: {e}")
+
+    def fetch_company_facts(
+        self,
+        ticker: str,
+        metric_key: str,
+        target_quarter: Optional[str] = None,
+    ) -> List[EdgarFactRecord]:
+        """Fetch verified GAAP facts for a company, resolved to CanonicalPeriod.
+
+        Args:
+            ticker: Stock ticker symbol (e.g. MSFT, AMZN).
+            metric_key: Standard metric key ('capex', 'depreciation', 'revenue', etc.)
+                or explicit GAAP concept name.
+            target_quarter: Optional calendar quarter filter (e.g. '2026-Q3').
+
+        Returns:
+            List of EdgarFactRecord sorted chronologically by period_end.
+        """
+        clean_ticker = ticker.strip().upper()
+        concepts_to_try = COMMON_GAAP_CONCEPTS.get(metric_key.lower(), [metric_key])
+
+        try:
+            from edgar import Company
+            c = Company(clean_ticker)
+            cik_str = str(c.cik).zfill(10)
+            facts = c.get_facts()
+            if facts is None:
+                return []
+            df = facts.to_dataframe()
+        except Exception as err:
+            logger.warning(f"Live EDGAR fetch failed for {ticker}: {err}")
+            return []
+
+        matched_df = df[df["concept"].isin(concepts_to_try)]
+        if matched_df.empty:
+            return []
+
+        records: List[EdgarFactRecord] = []
+        for _, row in matched_df.iterrows():
+            val = row.get("numeric_value")
+            if val is None or str(val).lower() == "nan":
+                continue
+
+            end_d = row.get("period_end")
+            if end_d is None:
+                continue
+
+            if isinstance(end_d, dt_module.datetime):
+                end_d = end_d.date()
+            elif isinstance(end_d, str):
+                end_d = dt_module.date.fromisoformat(end_d)
+
+            start_d = row.get("period_start")
+            if isinstance(start_d, dt_module.datetime):
+                start_d = start_d.date()
+            elif isinstance(start_d, str):
+                start_d = dt_module.date.fromisoformat(start_d)
+
+            fy = int(row.get("fiscal_year", end_d.year))
+            fp = str(row.get("fiscal_period", "FY"))
+            fiscal_label = f"{fp} FY{fy}" if fp != "FY" else f"FY{fy}"
+
+            canon = normalize_to_canonical_period(
+                entity=clean_ticker,
+                fiscal_label=fiscal_label,
+                period_end=end_d,
+            )
+
+            if target_quarter and canon.calendar_quarter != target_quarter:
+                continue
+
+            records.append(
+                EdgarFactRecord(
+                    ticker=clean_ticker,
+                    cik=cik_str,
+                    concept=str(row.get("concept")),
+                    value=float(val),
+                    unit=str(row.get("unit", "USD")),
+                    period_start=start_d,
+                    period_end=end_d,
+                    fiscal_year=fy,
+                    fiscal_period=fp,
+                    canonical_period=canon,
+                    label=str(row.get("label", "")),
+                )
+            )
+
+        return sorted(records, key=lambda r: r.period_end)

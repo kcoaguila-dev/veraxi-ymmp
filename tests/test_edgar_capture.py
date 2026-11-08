@@ -207,3 +207,33 @@ def test_live_sec_request_requires_valid_user_agent(tmp_path: Path, monkeypatch)
     result = adapter.capture_document(spec, out_file)
     assert result.success is False
     assert "SEC_USER_AGENT" in result.error_message
+
+
+
+def test_edgar_facts_adapter_canonical_period_integration() -> None:
+    """Verify EdgarFactsAdapter resolves GAAP facts with CanonicalPeriod."""
+    import datetime
+    from veraxi_ymmp.epistemic.edgar_capture import EdgarFactsAdapter
+    from veraxi_ymmp.epistemic.temporal_gate import assert_temporal_parity
+
+    adapter = EdgarFactsAdapter()
+    msft_facts = adapter.fetch_company_facts("MSFT", "capex", target_quarter="2026-Q3")
+    assert len(msft_facts) > 0
+
+    msft_rec = msft_facts[-1]
+    assert msft_rec.ticker == "MSFT"
+    assert msft_rec.period_end == datetime.date(2026, 9, 30)
+    assert msft_rec.canonical_period.calendar_quarter == "2026-Q3"
+    assert msft_rec.value > 0
+
+    amzn_facts = adapter.fetch_company_facts("AMZN", "capex", target_quarter="2026-Q3")
+    assert len(amzn_facts) > 0
+
+    amzn_rec = amzn_facts[-1]
+    assert amzn_rec.ticker == "AMZN"
+    assert amzn_rec.period_end == datetime.date(2026, 9, 30)
+    assert amzn_rec.canonical_period.calendar_quarter == "2026-Q3"
+    assert amzn_rec.value > 0
+
+    # Assert temporal parity between the extracted facts
+    assert_temporal_parity([msft_rec.canonical_period, amzn_rec.canonical_period])
