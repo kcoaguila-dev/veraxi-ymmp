@@ -53,14 +53,14 @@ Strict rules:
 3. No introductory greetings or concluding remarks.
 ```
 
-### Prompt 2: Dialectic Tension Mapping
-```text
-Using the table above, extract 3 contrasting perspectives:
-1. The Public Illusion (What regular people or marketing claims say) -> For Zundamon
-2. The Forensic Truth (The documented failure, law, or hard metric) -> For Metan
-3. The Whistleblower Fact (The overlooked footnote, internal memo, or raw number) -> For Tsumugi
-Strict negative prompt: Do NOT use corporate filler words ("fascinating", "game changer", "vital to remember", "deep dive"). State facts plainly.
-```
+### The Anti-Slop Boundary: Never Delegate Creative Scripting to NotebookLM
+> [!IMPORTANT]
+> **Why NotebookLM is restricted to Evidence Extraction:**
+> As widely observed on Reddit (r/NotebookLM, r/LocalLLaMA) and creator communities, NotebookLM excels at reading dense filings without hallucination, but defaults to bland corporate PR brochure talk ("AI slop") when asked to write dialogue. It lacks Japanese manzai timing, 0.0s cold open hooks, and character archetypes.
+>
+> **Decoupled Workflow:**
+> 1. **NotebookLM:** Generates the raw Forensic Evidence Extraction Matrix (Tabular Markdown).
+> 2. **Antigravity / `veraxi-ymmp`:** Authors the Japanese dialogue using `script-hygiene` rules (0.0s cold open, 50/30/20 ratio, BudouX phrase wrapping <= 38 chars).
 
 ---
 

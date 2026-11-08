@@ -103,7 +103,7 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator structure
 
 1. **Topic Ideation & NotebookLM Dossier:**
    `veraxi-ymmp ideate "<Topic>" --archetype post_mortem`
-2. **Ingest NotebookLM Markdown (BudouX Dialogue + Evidence Table $\rightarrow$ `script.json` & `claims.json`):**
+2. **Evidence Table Ingestion & Antigravity Scripting (`script-hygiene` $\rightarrow$ `script.json` & `claims.json`):**
    `veraxi-ymmp ingest-script projects/<slug>/dialogue_raw.md -o projects/<slug>/script.json`
 3. **Epistemic Fact Audit & Retention Pacing Gate:**
    `veraxi-ymmp validate projects/<slug>/script.json --audit-facts --audit-pacing`

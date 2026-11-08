@@ -64,20 +64,20 @@ def generate_dossier_markdown(topic: str, archetype_key: str) -> str:
 
 ---
 
-## 💬 Step 2: Copy-Paste Extraction Prompt (The Evidence Extraction Matrix)
+## 💬 Step 2: Copy-Paste Extraction Prompt (The Forensic Evidence Extraction Matrix)
 *Paste this prompt into NotebookLM chat to extract factual bedrock without corporate fluff:*
 
 ```text
-Act as an investigative forensic analyst. Analyze all attached sources regarding:
+Act as an investigative forensic analyst and auditor. Analyze all attached sources regarding:
 "{topic}"
 
 Extract the key evidence into this exact Markdown table:
-| # | Point of Contention / Claim | Verbatim Quote Refuting or Explaining | Source Doc & Page # | Root Cause / Hard Metric |
-|---|---|---|---|---|
+| # | Point of Contention / Claim | Canonical Period (e.g. 2026-Q3) | Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | Root Cause / Hard Metric |
+|---|---|---|---|---|---|
 
 Strict constraints:
-1. Output ONLY the table. No conversational intro, no outro.
-2. Every single row must cite an exact verbatim quote and page/section number.
+1. Output ONLY the Markdown table. No conversational intro, no outro, and NO creative dialogue.
+2. Every single row must cite an exact verbatim quote and page/section number from the uploaded sources.
 3. Highlight any contradictions between public claims and actual data.
 4. Baseline & Denominator Context: For every quantitative figure, extract the baseline denominator (sample size, total market, global population).
 5. Counter-Evidence & Boundary Conditions: Extract any cited dissenting view, vendor mitigation, or boundary limitation to prevent cherry-picking.
@@ -85,39 +85,25 @@ Strict constraints:
 
 ---
 
-## 💬 Step 3: Copy-Paste Dialogue Tension Prompt
-*Paste this second prompt to structure Zundamon, Metan, and Tsumugi dialogue turns:*
+## 💬 Step 3: Bring Evidence Table into Antigravity (The Script-Hygiene Engine)
+Save NotebookLM's evidence table into `projects/<project>/evidence.md` or paste it directly into Antigravity.
 
-```text
-Based on the extracted table above, write a fast-paced dialogue between Zundamon, Metan, and Tsumugi.
-Format each line strictly as:
-[Character Name]: Dialogue text
+**Why we never ask NotebookLM to write dialogue:**
+NotebookLM defaults to agreeable corporate PR brochure talk ("AI slop") and lacks Japanese manzai timing, 0.0s cold open hooks, and character archetypes.
 
-Perspectives & Roles:
-1. [ずんだもん] (The Naive / Greedy Proxy):
-   {arch['zundamon']}
-2. [四国めたん] (The Cold Forensic Realist):
-   {arch['metan']}
-3. [春日部つむぎ] (The Trench Whistleblower):
-   {arch['tsumugi']}
-
-Strict constraints:
-1. Zero greeting cold open (start directly with character conflict).
-2. Maximum 38 characters per line.
-3. Every hard metric and verbatim fact must be spoken by Metan or Tsumugi.
-4. No filler words ("fascinating", "game changer", "deep dive", "vital to remember"). Keep tone sharp and analytical.
-5. Anti-Cherry-Picking Constraint: For every extreme or sensational metric, Metan must explicitly state the baseline scale or total denominator (e.g. "out of total X" / "<1% of all systems").
-6. Boundary Condition Requirement: Do not generalize an edge case into a universal rule. If a finding only applies under specific conditions, explicitly state the condition.
-```
+**Creative Scripting & Direction in Antigravity:**
+Antigravity authors the screenplay directly using the extracted evidence table:
+- **[ずんだもん] (Naive / Greedy Proxy):** {arch['zundamon']}
+- **[四国めたん] (Cold Forensic Realist):** {arch['metan']}
+- **[春日部つむぎ] (Trench Whistleblower):** {arch['tsumugi']}
+- **Rules:** 0.0s In Media Res cold open, character ping-pong with >= 5-10% micro-reactions, <= 38 chars per cut, 50/30/20 cast ratio.
 
 ---
 
-## 💬 Step 4: After NotebookLM Answers
-Copy NotebookLM's response (both the Evidence Extraction Table and the Dialogue cuts) and paste them directly into `projects/<project>/dialogue_raw.md`.
-
-Then run the automated compiler and audit:
+## 💬 Step 4: Compile & Run Static Analysis Gates
+Save the finished script + evidence into `projects/<project>/dialogue_raw.md`, then execute:
 ```powershell
-# 1. Ingest both dialogue (script.json) and evidence matrix (claims.json) in one step:
+# 1. Ingest dialogue (script.json) and evidence matrix (claims.json) via BudouX phrase tokenizer:
 python -m veraxi_ymmp ingest-script projects/<project>/dialogue_raw.md
 
 # 2. Run the deterministic epistemic & audience retention audit:
