@@ -226,7 +226,7 @@ def verify_project_assets(
             img_p = Path(img_val)
             if not img_p.is_absolute():
                 resolved: Optional[Path] = None
-                for base in [project_dir, project_dir / "broll", project_dir / "assets"]:
+                for base in [Path.cwd(), project_dir, project_dir / "broll", project_dir / "assets"]:
                     cand = base / img_p
                     if cand.is_file():
                         resolved = cand
@@ -266,6 +266,7 @@ def verify_project_assets(
                         Path("artifacts/.user_uploaded"),
                         Path("artifacts"),
                         Path("assets"),
+                        Path.cwd(),
                     ]:
                         cand = base / img_p
                         if cand.is_file():

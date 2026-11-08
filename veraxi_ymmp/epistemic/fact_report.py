@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Sequence
 
 from veraxi_ymmp.epistemic.facts import ClaimResult, ClaimWeight, Evidence, Stance, Verdict, gate_failures
+from veraxi_ymmp.epistemic.dialectical import DialecticalAuditOutcome
 
 _BADGE = {
     Verdict.SUPPORTED: "✅ supported",
@@ -67,6 +68,7 @@ def render_report(
     results: Sequence[ClaimResult],
     cut_times: Optional[Dict[int, float]] = None,
     live_verified: bool = False,
+    dialectical_outcome: Optional[DialecticalAuditOutcome] = None,
 ) -> str:
     """Render the dossier as Markdown. `cut_times` maps cut_index -> start seconds."""
     times = cut_times or {}
@@ -134,6 +136,36 @@ def render_report(
     lines += ["", "## Bibliography", ""]
     for i, e in enumerate(bibliography(results), 1):
         lines.append(f"{i}. [{_TIER.get(e.tier, 'Other')}] {_loc(e)}" + (f" — retrieved {e.retrieved_at}" if e.retrieved_at else ""))
+
+    if dialectical_outcome:
+        lines += [
+            "",
+            "## Adversarial & Dialectical Balance Audit",
+            "",
+            "> 🛡️ **Anti-Cherry-Picking Gate:** Automated adversarial inspection checking for scope inflation, uncontextualized metrics, and one-sided echo chambers.",
+            "",
+        ]
+        if dialectical_outcome.scope_inflation_issues:
+            lines.append("### 🚨 Scope Inflation Violations")
+            for sif in dialectical_outcome.scope_inflation_issues:
+                lines.append(f"- **Cut #{sif.cut_index} (`{sif.claim_id}`)**: {sif.message}")
+            lines.append("")
+        else:
+            lines += ["### ✅ Scope Inflation Guard: PASSED (No universal over-generalization)", ""]
+
+        if dialectical_outcome.baseline_warnings:
+            lines.append("### ⚠️ Contextual Baseline Warnings")
+            for bf in dialectical_outcome.baseline_warnings:
+                lines.append(f"- **Cut #{bf.cut_index} (`{bf.claim_id}`)**: {bf.message}")
+            lines.append("")
+        else:
+            lines += ["### ✅ Contextual Baseline Guard: PASSED (Scale/denominators verified)", ""]
+
+        if dialectical_outcome.adversarial_critique:
+            lines.append("### 🔍 Adversarial Red-Team Critique (Potential Bias Attack Surfaces)")
+            for crit in dialectical_outcome.adversarial_critique:
+                lines.append(f"- {crit}")
+            lines.append("")
 
     lines += ["", "## Description source list (paste into YouTube)", ""]
     for r in results:

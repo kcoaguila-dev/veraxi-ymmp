@@ -79,6 +79,8 @@ Strict constraints:
 1. Output ONLY the table. No conversational intro, no outro.
 2. Every single row must cite an exact verbatim quote and page/section number.
 3. Highlight any contradictions between public claims and actual data.
+4. Baseline & Denominator Context: For every quantitative figure, extract the baseline denominator (sample size, total market, global population).
+5. Counter-Evidence & Boundary Conditions: Extract any cited dissenting view, vendor mitigation, or boundary limitation to prevent cherry-picking.
 ```
 
 ---
@@ -104,6 +106,8 @@ Strict constraints:
 2. Maximum 38 characters per line.
 3. Every hard metric and verbatim fact must be spoken by Metan or Tsumugi.
 4. No filler words ("fascinating", "game changer", "deep dive", "vital to remember"). Keep tone sharp and analytical.
+5. Anti-Cherry-Picking Constraint: For every extreme or sensational metric, Metan must explicitly state the baseline scale or total denominator (e.g. "out of total X" / "<1% of all systems").
+6. Boundary Condition Requirement: Do not generalize an edge case into a universal rule. If a finding only applies under specific conditions, explicitly state the condition.
 ```
 
 ---

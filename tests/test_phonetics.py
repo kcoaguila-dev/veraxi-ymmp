@@ -308,3 +308,22 @@ def test_normalize_tts_text_preserves_declarative_words() -> None:
     # rather than mutating the source text with brittle regexes.
     raw = "データセンターを借り増ししてまでAIインフラを急拡大していますの。"
     assert normalize_tts_text(raw) == raw
+
+
+def test_find_unmapped_ascii_tokens_multi_domain() -> None:
+    from veraxi_ymmp.audio.phonetics import find_unmapped_ascii_tokens
+
+    # Standard computing & tech acronyms in dictionary or alkana should not trigger warnings
+    text_clean = "最新のCVE脆弱性とKubernetesのBGPルーティング障害を調査するのだ。"
+    unmapped = find_unmapped_ascii_tokens(text_clean)
+    assert unmapped == []
+
+    # Ruby-annotated unknown acronyms should expand and pass cleanly
+    text_ruby = "独自の{XYZFOOBAR|エックスワイゼット}プロトコルなのだ。"
+    unmapped_ruby = find_unmapped_ascii_tokens(text_ruby)
+    assert unmapped_ruby == []
+
+    # Truly unmapped obscure token should be caught
+    text_unmapped = "謎のアーキテクチャXYZFOOBARが暴走したのだ。"
+    unmapped_bad = find_unmapped_ascii_tokens(text_unmapped)
+    assert "XYZFOOBAR" in unmapped_bad

@@ -244,6 +244,7 @@ def _cmd_validate(argv: List[str]) -> None:
         help="Epistemic profile for primary authority allowlist (general, tech, academic, finance, lore)",
     )
     parser.add_argument("--allow-unverified", action="store_true", help="Do not fail when fact-check gate blocks (recorded in output)")
+    parser.add_argument("--adversarial", action="store_true", help="Run adversarial red-team audit for scope inflation, confirmation bias, and cherry-picking")
     args = parser.parse_args(argv)
 
     script_path = Path(args.script)
@@ -336,7 +337,7 @@ def _cmd_validate(argv: List[str]) -> None:
     if args.audit_facts:
         from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
         try:
-            outcome = audit_project_facts(script_path, profile=args.epistemic_profile, verify_urls=bool(args.verify_urls))
+            outcome = audit_project_facts(script_path, profile=args.epistemic_profile, verify_urls=bool(args.verify_urls), adversarial=bool(args.adversarial))
         except FileNotFoundError as e:
             errors.append(f"[FACTS] {e}")
         else:

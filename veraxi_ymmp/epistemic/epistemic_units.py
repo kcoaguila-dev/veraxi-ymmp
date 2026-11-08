@@ -14,7 +14,7 @@ import ast
 import operator
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 import pint
 
 try:
@@ -90,7 +90,7 @@ MULTIPLIERS_SI: Dict[str, float] = {
     "ms": 1e-3, "us": 1e-6, "ns": 1e-9,
 }
 
-_SAFE_MATH_OPS = {
+_SAFE_MATH_OPS: Dict[Type[ast.AST], Callable[..., Any]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,

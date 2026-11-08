@@ -191,6 +191,7 @@ _CATEGORY_HOSTS = {
     "academic": ACADEMIC_AUTHORITY_HOSTS,
     "general": GENERAL_AUTHORITY_HOSTS,
     "lore": LORE_AUTHORITY_HOSTS,
+    "tech": TECH_AUTHORITY_HOSTS,
 }
 
 def is_primary_authority_url(
@@ -226,7 +227,7 @@ def is_primary_authority_url(
         return True
 
     for cat in allowed_categories:
-        hosts = _CATEGORY_HOSTS.get(cat, set())
+        hosts: frozenset[str] = _CATEGORY_HOSTS.get(cat, frozenset())
         if clean_host in hosts or top_domain in hosts:
             return True
         domains = _AUTHORITY_DOMAINS.get(cat, ())
@@ -462,7 +463,7 @@ def extract_claim_numbers(text: str) -> List[str]:
     norm = unicodedata.normalize("NFKC", text)
     norm = re.sub(r"(?<=\d),(?=\d)", "", norm)
 
-    raw_matches = list(re.finditer(r"\d+(?:\.\d+)?", norm))
+    raw_matches = list(re.finditer(r"\d+(?:\.\d+)+|\d+", norm))
     if not raw_matches:
         return []
 
@@ -515,10 +516,12 @@ def extract_timeseries_observation(csv_or_text: str, as_of: str = "latest") -> T
     if not matches:
         return "", ""
     if not as_of or as_of.lower() == "latest":
-        return matches[-1]
+        last_m = matches[-1]
+        return str(last_m[0]), str(last_m[1])
     target = as_of.strip()
     candidates = [m for m in matches if m[0] <= target]
-    return candidates[-1] if candidates else matches[0]
+    chosen = candidates[-1] if candidates else matches[0]
+    return str(chosen[0]), str(chosen[1])
 
 def check_claim_numbers(claim: Claim, quotes: Sequence[str], source_texts: Sequence[str] = ()) -> List[str]:
     """Verify that numbers asserted in claim.text appear in confirmed evidence quotes."""

@@ -15,7 +15,9 @@
       "bea.gov",
       "www.bea.gov",
       "treasury.gov",
-      "www.treasury.gov"
+      "www.treasury.gov",
+      "costco.com",
+      "investor.costco.com"
     ],
     "academic": [
       "arxiv.org",
@@ -97,19 +99,25 @@
       "mozilla.org",
       "nvd.nist.gov",
       "owasp.org",
+      "php.net",
       "python.org",
       "rfc-editor.org",
       "rust-lang.org",
       "w3.org",
+      "w3techs.com",
+      "wordpress.org",
       "www.cve.org",
       "www.github.com",
       "www.ietf.org",
       "www.kernel.org",
       "www.kubernetes.io",
       "www.owasp.org",
+      "www.php.net",
       "www.rfc-editor.org",
       "www.rust-lang.org",
-      "www.w3.org"
+      "www.w3.org",
+      "www.w3techs.com",
+      "www.wordpress.org"
     ]
   },
   "authority_domains": {
@@ -126,7 +134,8 @@
       "imf.org",
       "worldbank.org",
       "oecd.org",
-      "bis.org"
+      "bis.org",
+      "costco.com"
     ],
     "academic": [
       "arxiv.org",

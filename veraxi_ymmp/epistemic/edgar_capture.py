@@ -64,20 +64,28 @@ def extract_ixbrl_facts(html_content: str) -> List[IxbrlFact]:
         except ValueError:
             continue
         try:
-            scale_power = int(tag.get("scale", 0))
+            scale_attr = tag.get("scale")
+            scale_power = int(str(scale_attr)) if scale_attr is not None else 0
         except (ValueError, TypeError):
             scale_power = 0
         scale = 10 ** scale_power
-        dec_str = str(tag.get("decimals", "0")).strip().upper()
+        dec_attr = tag.get("decimals")
+        dec_str = str(dec_attr if dec_attr is not None else "0").strip().upper()
         decimals = 999 if dec_str == "INF" else (int(dec_str) if dec_str.lstrip("-").isdigit() else 0)
+        unit_attr = tag.get("unitref")
+        unit_str = str(unit_attr if unit_attr is not None else "usd").lower()
+        name_attr = tag.get("name")
+        name_str = str(name_attr if name_attr is not None else "")
+        context_attr = tag.get("contextref")
+        context_str = str(context_attr if context_attr is not None else "")
         facts.append(
             IxbrlFact(
                 value=val * scale,
                 raw_text=tag.get_text(strip=True),
                 scale=float(scale),
-                unit=tag.get("unitref", "usd").lower(),
-                name=tag.get("name", ""),
-                context_ref=tag.get("contextref", ""),
+                unit=unit_str,
+                name=name_str,
+                context_ref=context_str,
                 decimals=decimals,
             )
         )

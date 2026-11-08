@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import urllib.request
 import urllib.error
 from bs4 import BeautifulSoup
+from veraxi_ymmp.epistemic.dialectical import DialecticalAuditOutcome, audit_dialectical_balance
+
 
 from veraxi_ymmp.epistemic.fact_report import render_report
 from veraxi_ymmp.epistemic.facts import (
@@ -155,11 +157,14 @@ def load_project_sources(project_dir: Path) -> Dict[str, StoredSource]:
     return out
 
 
+
+
 @dataclass
 class FactAuditOutcome:
     results: List[ClaimResult]
     blockers: List[ClaimResult]
     report_path: Path
+    dialectical: Optional[DialecticalAuditOutcome] = None
 
     @property
     def blocked(self) -> bool:
@@ -294,6 +299,7 @@ def audit_project_facts(
     cut_times: Optional[Dict[int, float]] = None,
     profile: Optional[EpistemicProfile | str] = None,
     verify_urls: bool = False,
+    adversarial: bool = False,
 ) -> FactAuditOutcome:
     """Read `claims.json` beside the script, verify quotes against sources/, write `sources.md`, return outcome.
 
@@ -595,12 +601,31 @@ def audit_project_facts(
     parity_blockers = audit_visual_and_metadata_parity(project_dir, claims, sources, results=results)
     results.extend(parity_blockers)
 
+    dialectical_outcome = audit_dialectical_balance(claims, results, adversarial_mode=adversarial)
+    for sif in dialectical_outcome.scope_inflation_issues:
+        matching_claim = next((c for c in claims if c.id == sif.claim_id), None)
+        if matching_claim:
+            results.append(
+                ClaimResult(
+                    claim=matching_claim,
+                    verdict=Verdict.UNVERIFIED,
+                    reason=sif.message,
+                    quote_errors=[sif.message],
+                )
+            )
+
     report_path = project_dir / REPORT_FILENAME
     report_path.write_text(
-        render_report(title or project_dir.name, results, cut_times=cut_times, live_verified=verify_urls),
+        render_report(
+            title or project_dir.name,
+            results,
+            cut_times=cut_times,
+            live_verified=verify_urls,
+            dialectical_outcome=dialectical_outcome,
+        ),
         encoding="utf-8",
     )
-    return FactAuditOutcome(results, gate_failures(results), report_path)
+    return FactAuditOutcome(results, gate_failures(results), report_path, dialectical=dialectical_outcome)
 
 
 def draft_project_claims(

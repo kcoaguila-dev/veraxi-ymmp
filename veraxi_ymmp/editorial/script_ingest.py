@@ -1,6 +1,7 @@
 """Parser and compiler converting raw Markdown dialogue into validated DirectorScriptEntry JSON and claims.json."""
 from __future__ import annotations
 
+import dataclasses
 import re
 from typing import List, Dict, Any, Optional, Sequence
 
@@ -275,13 +276,17 @@ def parse_markdown_evidence_table(markdown_content: str) -> List[Dict[str, str]]
 
 
 def ingest_notebooklm_markdown_to_claims(
-    script_entries: Sequence[Dict[str, Any]],
+    script_entries: Sequence[Any],
     markdown_content: str,
     manifest: Optional[Dict[str, Any]] = None,
 ) -> List[Claim]:
     """Ingest NotebookLM Markdown table and dialogue into a linked Claim ledger."""
     table_rows = parse_markdown_evidence_table(markdown_content)
-    draft_claims = extract_draft_claims(script_entries, extract_qualitative=True)
+    raw_dicts: List[Dict[str, Any]] = [
+        e if isinstance(e, dict) else dataclasses.asdict(e)
+        for e in script_entries
+    ]
+    draft_claims = extract_draft_claims(raw_dicts, extract_qualitative=True)
 
     if not table_rows:
         return draft_claims

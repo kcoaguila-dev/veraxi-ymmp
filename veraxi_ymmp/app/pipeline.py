@@ -370,6 +370,7 @@ class ProjectPipeline:
                     v_res = validate_ymmp_timeline(
                         v_data,
                         expected_voice_count=len(timeline_ir.voice_clips),
+                        require_audio=self.use_tts,
                     )
                     result.ymmp_validation = v_res
                 result.ymmp_path = ymmp_out

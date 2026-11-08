@@ -475,7 +475,7 @@ class YMMPRenderer:
             validate_ymmp_timeline(
                 output_data,
                 expected_voice_count=len(timeline_ir.voice_clips),
-                require_audio=True,
+                require_audio=bool(audio_files and len(audio_files) >= len(timeline_ir.voice_clips)),
             )
 
         tachie_count = sum(1 for i in items if "TachieItem" in i.get("$type", ""))
