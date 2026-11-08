@@ -66,6 +66,7 @@ def render_report(
     title: str,
     results: Sequence[ClaimResult],
     cut_times: Optional[Dict[int, float]] = None,
+    live_verified: bool = False,
 ) -> str:
     """Render the dossier as Markdown. `cut_times` maps cut_index -> start seconds."""
     times = cut_times or {}
