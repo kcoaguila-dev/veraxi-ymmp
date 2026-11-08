@@ -42,7 +42,7 @@ def mock_ymmp_timeline_validation(monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "veraxi_ymmp.editorial.validation.validate_ymmp_timeline",
+            "veraxi_ymmp.exporters.ymmp_utils.validate_ymmp_timeline",
             lambda *args, **kwargs: dummy_result,
         )
     except AttributeError:

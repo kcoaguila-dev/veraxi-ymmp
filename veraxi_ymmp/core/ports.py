@@ -26,7 +26,7 @@ from typing import (
 )
 
 from enum import Enum
-from veraxi_ymmp.core.director import DirectorProvider
+from veraxi_ymmp.core.script import DirectorScriptEntry, WriterScriptEntry
 from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
@@ -215,6 +215,16 @@ class FactChecker(Protocol):
 # Progress callback signature: (progress_ratio: float, bytes_uploaded: int, total_bytes: int) -> None
 ProgressCallback = Callable[[float, int, int], None]
 PipelineProgressCallback = Callable[[str, float, str], None]
+
+
+@runtime_checkable
+class DirectorProvider(Protocol):
+    """Protocol for providers that can convert a writer script into a director script."""
+
+    def generate_director_script(
+        self, writer_script: List[WriterScriptEntry]
+    ) -> List[DirectorScriptEntry]:
+        ...
 
 
 @runtime_checkable

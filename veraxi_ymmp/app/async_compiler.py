@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from veraxi_ymmp.app.compiler import CompilationResult, CompilerError, ScriptEntry, YMMPCompiler
 from veraxi_ymmp.audio.phonetics import normalize_tts_text
-from veraxi_ymmp.editorial.validation import sanitize_filename
+from veraxi_ymmp.core.utils import sanitize_filename
 
 
 class AsyncYMMPCompiler(YMMPCompiler):

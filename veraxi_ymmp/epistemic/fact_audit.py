@@ -7,11 +7,13 @@ from pathlib import Path
 import hashlib
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from veraxi_ymmp.epistemic.claim_extractor import extract_draft_claims
 from veraxi_ymmp.epistemic.fact_report import render_report
 from veraxi_ymmp.epistemic.facts import (
+    Claim,
+    ClaimKind,
+    Evidence,
     ClaimResult,
     ClaimWeight,
     EpistemicProfile,
@@ -256,3 +258,114 @@ def draft_project_claims(
     merged = extract_draft_claims(script, existing, extract_qualitative=extract_qualitative)
     claims_path.write_text(claims_to_json(merged), encoding="utf-8")
     return claims_path, len(merged) - len(existing)
+
+
+# --- Claim Extraction & Text Classification ---
+
+# Digits (incl. full-width), currency/scale words, percentages, years, quantities.
+_FACT_SIGNAL = re.compile(r"[0-9０-９]|[億兆万]|[%％]|ドル|円|年間|四半期|決算|シェア|倍")
+_REACTION_END = re.compile(r"[！？!?…]+$")
+_MAX_REACTION_LEN = 12
+_DECLARATIVE_JP_END = re.compile(r"(?:です|だ|である|ました|だった|となる|となった|と言われています|とされています)[。.]?$")
+_DECLARATIVE_EN_END = re.compile(r"[a-zA-Z0-9)]\.$")
+
+
+def classify_text(text: str, extract_qualitative: bool = False) -> ClaimKind | None:
+    """Return the claim kind, or None when the cut contains nothing to fact-check."""
+    stripped = text.strip()
+    if not stripped:
+        return None
+    # Short punctuated beats ("はぁ！？", "25兆円！？") echo a fact; the source cut owns it.
+    if len(stripped) <= _MAX_REACTION_LEN and _REACTION_END.search(stripped):
+        return ClaimKind.COMMENTARY
+    if _FACT_SIGNAL.search(stripped):
+        return ClaimKind.NUMBER
+    if extract_qualitative and len(stripped) >= 10:
+        if _DECLARATIVE_JP_END.search(stripped) or _DECLARATIVE_EN_END.search(stripped):
+            return ClaimKind.FACT
+    return None
+
+
+def extract_draft_claims(
+    script: Sequence[Dict[str, Any]],
+    existing: Sequence[Claim] = (),
+    extract_qualitative: bool = False,
+) -> List[Claim]:
+    """Draft claims for factual dialogue cuts, keeping any existing human-curated claims."""
+    known = {(c.cut_index, c.text) for c in existing}
+    next_id = len(existing) + 1
+    drafts: List[Claim] = []
+    for idx, entry in enumerate(script):
+        text = entry.get("text")
+        if not isinstance(text, str) or ("type" in entry and "character" not in entry):
+            continue
+        kind = classify_text(text, extract_qualitative=extract_qualitative)
+        if kind not in (ClaimKind.NUMBER, ClaimKind.FACT) or (idx, text) in known:
+            continue
+        drafts.append(Claim(f"d{next_id:02d}", idx, text, kind, ClaimWeight.MINOR))
+        next_id += 1
+    return list(existing) + drafts
+
+
+# --- Veraxi Proof Card & Grounding Helpers ---
+
+_PASSAGES = re.compile(r"\((\d+)\s+passages?\s+retrieved\)")
+_ROW = re.compile(r"^\|\s*(\d+)\s*\|(?P<doc>[^|]*)\|(?P<loc>[^|]*)\|(?P<quote>.*)\|\s*$")
+_PAGE = re.compile(r"(?:p\.?|page)\s*(\d+)", re.IGNORECASE)
+_URL = re.compile(r"https?://[^\s)\]>]+")
+
+
+def parse_proof_card(card: str, tier: int = 2, retrieved_at: str = "") -> List[Evidence]:
+    """Parse a proof card into confirming Evidence; returns [] for vacuous/empty cards."""
+    m = _PASSAGES.search(card)
+    if not m or int(m.group(1)) == 0:
+        return []
+    out: List[Evidence] = []
+    for line in card.splitlines():
+        row = _ROW.match(line.strip())
+        if not row:
+            continue
+        quote = row.group("quote").strip().strip('*_"“”')
+        if not quote:
+            continue
+        doc, loc = row.group("doc").strip(), row.group("loc").strip()
+        url = _URL.search(doc) or _URL.search(loc)
+        page = _PAGE.search(loc)
+        out.append(
+            Evidence(
+                url=url.group(0) if url else doc,
+                quote=quote,
+                stance=Stance.CONFIRMS,
+                tier=tier,
+                page=int(page.group(1)) if page else None,
+                retrieved_at=retrieved_at,
+            )
+        )
+    return out
+
+
+class ManualChecker:
+    """FactChecker backed by a pre-collected evidence ledger (CI / reruns)."""
+
+    def check(self, claim: Claim) -> List[Evidence]:
+        return list(claim.evidence)
+
+
+def evaluate_grounding_safe(
+    claim_text: str,
+    context_text: str,
+    mcp_client: Any = None,
+) -> float:
+    """Safely evaluate grounding with Veraxi MCP if available, falling back to deterministic."""
+    if mcp_client is not None:
+        try:
+            if hasattr(mcp_client, "evaluate_grounding"):
+                res = mcp_client.evaluate_grounding(
+                    context_text=context_text,
+                    response_text=claim_text,
+                )
+                if isinstance(res, (int, float)):
+                    return float(res)
+        except Exception:
+            pass
+    return compute_deterministic_grounding(claim_text, context_text)

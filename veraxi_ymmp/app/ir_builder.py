@@ -49,7 +49,7 @@ from veraxi_ymmp.core.staging import (
 )
 from veraxi_ymmp.core.template import get_timeline
 from veraxi_ymmp.core.utils import normalize_japanese_typography
-from veraxi_ymmp.editorial.validation import sanitize_filename
+from veraxi_ymmp.core.utils import sanitize_filename
 
 # Backwards compatibility aliases
 _calculate_cut_padding = calculate_cut_padding

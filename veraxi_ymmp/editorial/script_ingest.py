@@ -17,7 +17,7 @@ from veraxi_ymmp.epistemic.facts import (
     Evidence,
     Stance,
 )
-from veraxi_ymmp.epistemic.claim_extractor import extract_draft_claims
+from veraxi_ymmp.epistemic.fact_audit import extract_draft_claims
 from veraxi_ymmp.epistemic.epistemic_units import extract_scaled_magnitudes, extract_content_lemmas
 
 _BUDOUX_PARSER = None

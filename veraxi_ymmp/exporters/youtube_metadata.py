@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from veraxi_ymmp.core.ir import TimelineIR
 from veraxi_ymmp.core.logging import logger
 from veraxi_ymmp.audio.phonetics import strip_phonetic_ruby
-from veraxi_ymmp.editorial.validation import sanitize_filename
+from veraxi_ymmp.core.utils import sanitize_filename
 
 VOICEVOX_CREDITS_MAP: Dict[str, str] = {
     "ずんだもん": "VOICEVOX:ずんだもん",

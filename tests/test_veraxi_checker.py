@@ -1,6 +1,6 @@
 from veraxi_ymmp.epistemic.facts import Claim, Stance, Verdict, verdict_for
 from veraxi_ymmp.core.ports import FactChecker
-from veraxi_ymmp.epistemic.veraxi_checker import ManualChecker, parse_proof_card
+from veraxi_ymmp.epistemic.fact_audit import ManualChecker, parse_proof_card
 
 VACUOUS = """### 🛡️ VERAXI FORENSIC FACT-CHECK PROOF CARD
 - **Verification:** 🟢 **FACT CHECK PASSED [Factual alignment confirmed]**
@@ -35,7 +35,7 @@ def test_manual_checker_satisfies_port() -> None:
 
 def test_deterministic_grounding_lexical_overlap() -> None:
     from veraxi_ymmp.epistemic.facts import compute_deterministic_grounding
-    from veraxi_ymmp.epistemic.veraxi_checker import evaluate_grounding_safe
+    from veraxi_ymmp.epistemic.fact_audit import evaluate_grounding_safe
 
     # Substantial term overlap
     claim = "PythonはGuido van Rossumによって開発されました。"

@@ -11,7 +11,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw
@@ -21,9 +21,11 @@ from veraxi_ymmp.epistemic.facts import (
     DocumentCaptureResult,
     DocumentCaptureSpec,
     DocumentProvenance,
+    DocumentSourceType,
     is_primary_authority_url,
 )
 from veraxi_ymmp.core.logging import logger
+from veraxi_ymmp.core.ports import OfficialDocumentCapturePort
 
 
 @dataclass
@@ -352,3 +354,45 @@ class WebDocumentCaptureAdapter:
             provenance=DocumentProvenance.SYNTHETIC,
             matched_text=spec.target_text,
         )
+
+
+# --- Document Capture Registry ---
+
+class DocumentCaptureRegistry:
+    """Registry coordinating official primary authority document capture adapters."""
+
+    def __init__(self) -> None:
+        self._adapters: Dict[DocumentSourceType, OfficialDocumentCapturePort] = {}
+
+    def register(
+        self,
+        source_type: DocumentSourceType,
+        adapter: OfficialDocumentCapturePort,
+    ) -> None:
+        """Register an adapter for a document source type."""
+        self._adapters[source_type] = adapter
+
+    def get(self, source_type: DocumentSourceType) -> OfficialDocumentCapturePort:
+        """Retrieve adapter for source_type, raising KeyError if not found."""
+        if source_type not in self._adapters:
+            raise KeyError(
+                f"No document capture adapter registered for {source_type}. "
+                f"Available sources: {list(self._adapters.keys())}"
+            )
+        return self._adapters[source_type]
+
+    def has(self, source_type: DocumentSourceType) -> bool:
+        """Return True if an adapter is registered for source_type."""
+        return source_type in self._adapters
+
+
+def get_default_document_registry(prefer_offline: bool = False) -> DocumentCaptureRegistry:
+    """Instantiate and populate default capture registry with official sources."""
+    from veraxi_ymmp.epistemic.edgar_capture import EdgarDocumentCaptureAdapter
+    from veraxi_ymmp.epistemic.fred_capture import FredDocumentCaptureAdapter
+
+    registry = DocumentCaptureRegistry()
+    registry.register(DocumentSourceType.SEC_EDGAR, EdgarDocumentCaptureAdapter(prefer_offline=prefer_offline))
+    registry.register(DocumentSourceType.FRED, FredDocumentCaptureAdapter(prefer_offline=prefer_offline))
+    registry.register(DocumentSourceType.WEB, WebDocumentCaptureAdapter(prefer_offline=prefer_offline))
+    return registry

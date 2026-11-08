@@ -24,7 +24,7 @@ from veraxi_ymmp.core.ports import VideoPublisher, PipelineProgressCallback
 from veraxi_ymmp.exporters.premiere_exporter import PremiereExporter, export_to_premiere as export_to_premiere
 from veraxi_ymmp.exporters.srt_generator import generate_srt
 from veraxi_ymmp.graphics.thumbnail import generate_project_thumbnail
-from veraxi_ymmp.editorial.validation import validate_ymmp_timeline
+from veraxi_ymmp.exporters.ymmp_utils import validate_ymmp_timeline
 from veraxi_ymmp.audio.voicevox import VoicevoxClient
 
 try:

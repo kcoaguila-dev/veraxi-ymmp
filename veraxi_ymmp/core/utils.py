@@ -2,9 +2,49 @@
 Utility functions for veraxi-ymmp.
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
+
+
+class ValidationError(ValueError):
+    """Exception raised when path traversal or project validation fails."""
+
+    pass
+
+
+def validate_output_path(output_path: Path, base_dir: Optional[Path] = None) -> Path:
+    """
+    Ensure output path doesn't escape base directory.
+    If base_dir is None, it uses the current working directory.
+    """
+    explicit_base = base_dir is not None
+    if base_dir is None:
+        base_dir = Path.cwd()
+
+    resolved_base = base_dir.resolve()
+    resolved_out = output_path.resolve()
+
+    # Check if resolved_out is a subpath of resolved_base
+    try:
+        resolved_out.relative_to(resolved_base)
+    except ValueError:
+        if explicit_base or ".." in str(output_path):
+            raise ValidationError(f"Path traversal detected: {output_path} is outside {base_dir}")
+
+    return resolved_out
+
+
+def sanitize_filename(name: str) -> str:
+    """
+    Remove dangerous characters from filenames.
+    """
+    # Remove any path separators and null bytes
+    sanitized = re.sub(r'[/\\:\*\?"<>\|]', "", name)
+    sanitized = sanitized.replace("\0", "")
+    return sanitized.strip()
 
 
 def ensure_path(path: Union[str, Path]) -> Path:

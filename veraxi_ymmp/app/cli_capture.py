@@ -8,7 +8,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from veraxi_ymmp.epistemic.document_registry import get_default_document_registry
+from veraxi_ymmp.epistemic.web_capture import get_default_document_registry
 from veraxi_ymmp.epistemic.facts import DocumentCaptureSpec, DocumentSourceType
 
 

@@ -7,7 +7,7 @@ from veraxi_ymmp.graphics.subtitle_plate import create_speech_plate
 from veraxi_ymmp.graphics.typography import (
     calculate_ymm4_subtitle_y,
 )
-from veraxi_ymmp.editorial.validation import ValidationError, validate_ymmp_timeline
+from veraxi_ymmp.exporters.ymmp_utils import ValidationError, validate_ymmp_timeline
 
 import base64
 import brotli

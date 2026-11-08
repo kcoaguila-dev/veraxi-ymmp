@@ -470,7 +470,7 @@ class YMMPRenderer:
             bool(c.audio_path and c.audio_path.exists()) for c in timeline_ir.voice_clips
         )
         if has_voice_audio:
-            from veraxi_ymmp.editorial.validation import validate_ymmp_timeline
+            from veraxi_ymmp.exporters.ymmp_utils import validate_ymmp_timeline
 
             validate_ymmp_timeline(
                 output_data,
@@ -821,7 +821,7 @@ class YMMPRenderer:
     @staticmethod
     def _write_output(output_data: Dict[str, Any], output_path: Path, use_bom: bool) -> None:
         """Writes project JSON to disk with optional UTF-8 BOM after schema validation."""
-        from veraxi_ymmp.editorial.validation import validate_ymmp_schema
+        from veraxi_ymmp.exporters.ymmp_utils import validate_ymmp_schema
 
         validate_ymmp_schema(output_data)
         encoding = "utf-8-sig" if use_bom else "utf-8"

@@ -1,4 +1,4 @@
-from veraxi_ymmp.epistemic.claim_extractor import classify_text, extract_draft_claims
+from veraxi_ymmp.epistemic.fact_audit import classify_text, extract_draft_claims
 from veraxi_ymmp.epistemic.facts import Claim, ClaimKind, ClaimWeight, Verdict, audit, gate_failures
 
 

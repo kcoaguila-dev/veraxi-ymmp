@@ -401,7 +401,6 @@ def test_ports_layer_purity() -> None:
         "veraxi_ymmp.core.ir",
         "veraxi_ymmp.core.script",
         "veraxi_ymmp.core.constants",
-        "veraxi_ymmp.core.director",
     }
 
     violations: List[str] = []
@@ -428,7 +427,13 @@ def test_strict_three_tier_compiler_dag() -> None:
     - Exporters: Never import from peer exporters.
     """
     lib_dir = REPO_ROOT / "veraxi_ymmp"
-    tier2_subs = {"epistemic", "editorial", "graphics", "audio", "exporters"}
+    tier2_allowed = {
+        "epistemic": {"core", "epistemic"},
+        "audio": {"core", "audio"},
+        "graphics": {"core", "graphics"},
+        "editorial": {"core", "editorial", "epistemic"},
+        "exporters": {"core", "exporters", "audio", "graphics"},
+    }
     violations: List[str] = []
 
     for py_file in lib_dir.rglob("*.py"):
@@ -454,10 +459,11 @@ def test_strict_three_tier_compiler_dag() -> None:
                             violations.append(
                                 f"{rel_path}:{node.lineno} Tier 1 violation: core cannot import '{m}'"
                             )
-                        elif sub in tier2_subs and target_sub == "app":
-                            violations.append(
-                                f"{rel_path}:{node.lineno} Tier 2->3 violation: Tier 2 cannot import from app ('{m}')"
-                            )
+                        elif sub in tier2_allowed:
+                            if target_sub not in tier2_allowed[sub]:
+                                violations.append(
+                                    f"{rel_path}:{node.lineno} Tier 2 DAG violation: {sub} cannot import from {target_sub} ('{m}')"
+                                )
 
     assert not violations, (
         f"Compiler DAG violations found ({len(violations)}):\n" + "\n".join(violations)
@@ -509,3 +515,21 @@ def test_no_loose_scripts_in_repo_root() -> None:
     loose_jsx = [p.name for p in REPO_ROOT.glob("*.jsx")]
     loose = sorted([p for p in loose_py + loose_jsx if p not in ("render_video.py",)])
     assert not loose, f"Loose scripts found in repository root (move to veraxi_ymmp/cli.py or scripts/): {loose}"
+
+
+def test_runtime_tier1_import_isolation() -> None:
+    """Ensure importing Tier 1 modules does not eagerly load Tier 2 or Tier 3 packages at runtime."""
+    code = (
+        "import sys; "
+        "import veraxi_ymmp.core.ir; "
+        "assert 'veraxi_ymmp.app.compiler' not in sys.modules, 'Tier 3 leaked into runtime'; "
+        "assert 'veraxi_ymmp.exporters.ymmp_renderer' not in sys.modules, 'Tier 2 exporter leaked into runtime';"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+    assert res.returncode == 0, f"Runtime import isolation failed: {res.stderr}"
