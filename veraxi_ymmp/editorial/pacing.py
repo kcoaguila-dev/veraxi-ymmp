@@ -316,19 +316,20 @@ def audit_script_pacing(
                 )
             )
 
-    # 8. Check Zundamon Persona Contamination (No corporate B2B consultant lecturing)
+    # 8. Check Zundamon Persona Contamination (No didactic lecturing / analytical corporate consulting)
     zundamon_consultant_patterns = [
+        # Didactic audience-lecturing verb patterns across all domains
+        r"(?:見る|判断する|分析する|注視する|検証する|理解する)べきなのだ",
+        r"(?:計画|構造|要因|仕様|定義|傾向)です[。！]?",
+        # Academic / Corporate / Analytical consulting jargon
         r"特定の.*依存を嫌がる",
-        r"原価と現金の推移を見るべき",
         r"ポートフォリオ",
+        r"アーキテクチャの観点",
         r"基幹システムの乗り換え",
         r"粗利益率で圧倒する",
+        r"原価と現金の推移",
         r"減価償却費が",
-        r"設備投資の金額が.*異常",
-        r"設備投資計画です",
-        r"見るべきなのだ",
-        r"判断すべきなのだ",
-        r"分析すべきなのだ",
+        r"設備投資",
     ]
     zundamon_violations = []
     for idx, entry in enumerate(dialogue_entries):
@@ -348,9 +349,9 @@ def audit_script_pacing(
                 message=f"Zundamon speaks like a corporate B2B consultant/analyst at {len(zundamon_violations)} cut(s): "
                 + ", ".join(f"#{i} ('{t[:20]}...')" for i, t in zundamon_violations[:3]),
                 remedy=(
-                    "Zundamon represents viewer greed, panic, and vulnerability. "
-                    "Never have him lecture on enterprise procurement or equity analysis. "
-                    "Translate his lines into visceral emotional reactions, panic over money, or naive misunderstandings."
+                    "Zundamon represents viewer curiosity, emotion, vulnerability, and naive misconceptions. "
+                    "Never have him deliver didactic lectures, technical specs, or corporate/equity analysis. "
+                    "Translate his lines into visceral reactions, confusion, naive questions, or emotional astonishment."
                 ),
             )
         )

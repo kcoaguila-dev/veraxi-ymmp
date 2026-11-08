@@ -30,7 +30,7 @@ def cmd_capture(argv: list[str]) -> None:
         "--ticker",
         "--series",
         default="",
-        help="Identifier: Ticker symbol (e.g. MSFT, NVDA) or FRED series ID (e.g. WALCL, FEDFUNDS)",
+        help="Primary authority identifier (URL, CVE/RFC ID, DOI/arXiv ID, docket, ticker, or series ID)",
     )
     parser.add_argument("--form", "-f", default="10-Q", help="SEC Form type (default: 10-Q)")
     parser.add_argument(

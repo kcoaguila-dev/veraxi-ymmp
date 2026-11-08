@@ -263,7 +263,7 @@ def draft_project_claims(
 # --- Claim Extraction & Text Classification ---
 
 # Digits (incl. full-width), currency/scale words, percentages, years, quantities.
-_FACT_SIGNAL = re.compile(r"[0-9０-９]|[億兆万]|[%％]|ドル|円|年間|四半期|決算|シェア|倍")
+_FACT_SIGNAL = re.compile(r"[0-9０-９]|[億兆万]|[%％]|ドル|円|年間|四半期|決算|シェア|倍|世紀|年代|ワット|バイト|ナノ|ヘルツ|ジュール|条|項")
 _REACTION_END = re.compile(r"[！？!?…]+$")
 _MAX_REACTION_LEN = 12
 _DECLARATIVE_JP_END = re.compile(r"(?:です|だ|である|ました|だった|となる|となった|と言われています|とされています)[。.]?$")

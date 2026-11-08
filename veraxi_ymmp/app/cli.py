@@ -312,10 +312,23 @@ def _cmd_validate(argv: List[str]) -> None:
 
     if args.draft_claims:
         from veraxi_ymmp.epistemic.fact_audit import draft_project_claims
+        prof = args.epistemic_profile
+        if not prof:
+            for cfg_name in ("project.json", "config.json"):
+                cfg_file = script_path.parent / cfg_name
+                if cfg_file.is_file():
+                    try:
+                        cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                        prof = cfg_data.get("epistemic_profile") or cfg_data.get("profile")
+                        if prof:
+                            break
+                    except Exception:
+                        pass
+        active_prof = (prof or "general").lower()
         ledger, added = draft_project_claims(
             script_path,
             script_data,
-            extract_qualitative=bool(args.epistemic_profile and args.epistemic_profile != "finance"),
+            extract_qualitative=(active_prof != "finance"),
         )
         print(f"Claim ledger updated: {ledger} (+{added} draft claims; review kind/weight, then add evidence)")
 

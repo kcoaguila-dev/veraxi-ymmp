@@ -142,5 +142,80 @@
   "失業率": [
     "unemployment rate",
     "jobless rate"
+  ],
+  "脆弱性": [
+    "vulnerability",
+    "cve",
+    "exploit",
+    "security flaw"
+  ],
+  "メモリ破壊": [
+    "memory corruption",
+    "use-after-free",
+    "buffer overflow",
+    "heap overflow"
+  ],
+  "オープンソース": [
+    "open source",
+    "oss",
+    "floss"
+  ],
+  "カーネル": [
+    "kernel",
+    "linux kernel"
+  ],
+  "リモートコード実行": [
+    "remote code execution",
+    "rce"
+  ],
+  "ゼロデイ": [
+    "zero-day",
+    "0-day"
+  ],
+  "温室効果ガス": [
+    "greenhouse gas",
+    "ghg",
+    "co2",
+    "carbon dioxide"
+  ],
+  "熱力学": [
+    "thermodynamics",
+    "entropy"
+  ],
+  "統計的有意": [
+    "statistically significant",
+    "p-value",
+    "significance"
+  ],
+  "再生可能エネルギー": [
+    "renewable energy",
+    "renewables",
+    "solar",
+    "wind"
+  ],
+  "特許": [
+    "patent",
+    "prior art",
+    "claims"
+  ],
+  "独占禁止法": [
+    "antitrust",
+    "anti-monopoly",
+    "competition law"
+  ],
+  "判例": [
+    "precedent",
+    "case law",
+    "court ruling"
+  ],
+  "条約": [
+    "treaty",
+    "convention",
+    "accord"
+  ],
+  "著作権": [
+    "copyright",
+    "fair use",
+    "intellectual property"
   ]
 }

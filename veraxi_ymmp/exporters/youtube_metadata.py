@@ -41,7 +41,9 @@ BGM_CREDITS_MAP: Dict[str, str] = {
     "2_23_AM.mp3": "しゃろう 様「2:23 AM」（DOVA-SYNDROME）",
 }
 
-FINANCE_KEYWORDS = ("株", "投資", "市場", "金利", "相場", "銘柄", "資産", "キャッシュフロー", "インデックス")
+FINANCE_KEYWORDS = (
+    "株式投資", "株価", "金利", "銘柄", "資産運用", "キャッシュフロー", "インデックス投資", "決算発表", "有価証券", "配当金"
+)
 
 
 TITLE_MAX_CHARS = 32
@@ -236,7 +238,21 @@ def generate_project_youtube_metadata(
         characters_used = ["ずんだもん", "四国めたん"]
 
     full_text = "\n".join(full_script_text_parts)
-    is_finance = any(kw in full_text for kw in FINANCE_KEYWORDS)
+    # Require explicit finance epistemic profile or multiple (>= 2) unambiguous finance keyword occurrences
+    ep_prof = ""
+    for cfg_name in ("project.json", "config.json"):
+        cfg_file = proj_dir / cfg_name
+        if cfg_file.is_file():
+            try:
+                cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                ep_prof = (cfg_data.get("epistemic_profile") or cfg_data.get("profile") or "").lower()
+                if ep_prof:
+                    break
+            except Exception:
+                pass
+
+    finance_hit_count = sum(1 for kw in FINANCE_KEYWORDS if kw in full_text)
+    is_finance = (ep_prof == "finance") or (finance_hit_count >= 2)
 
     # 2. Construct Title & Variants
     t_line1 = str(thumb_cfg.get("title_line1", "")).strip()
@@ -313,22 +329,18 @@ def generate_project_youtube_metadata(
     if is_finance:
         topic_tags = [
             "株式投資",
-            "2026年相場",
-            "AI投資",
-            "半導体株",
-            "電力インフラ",
-            "米国株",
-            "日本株",
-            "キャッシュフロー",
-            "資産運用",
             "経済解説",
+            "資産運用",
+            t_line1,
+            t_line2,
+            first_slide_title,
         ]
     else:
         topic_tags = [t_line1, t_line2, first_slide_title]
     tags = [t for t in (yt_cfg.get("tags") or (base_tags + topic_tags)) if t]
     hashtags = ["#ずんだもん", "#四国めたん", "#ずんだもん解説", "#VOICEVOX"]
     if is_finance:
-        hashtags.extend(["#株式投資", "#米国株", "#AI半導体"])
+        hashtags.extend(["#株式投資", "#経済解説"])
 
     # 7. Assemble Full Description
     intro_hook = yt_cfg.get("intro_hook") or (

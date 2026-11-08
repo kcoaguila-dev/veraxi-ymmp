@@ -80,7 +80,7 @@ TOPIC_PRESETS: List[Dict[str, Any]] = [
         "emotion": "surprised",
     },
     {
-        "keywords": ["capex", "rotation", "資金移動", "大移動", "ai投資", "電力"],
+        "keywords": ["半導体 vs 電力", "capex rotation", "電力インフラ相場"],
         "title_line1": "半導体 vs 電力",
         "title_line2": "勝つのはどっち！？",
         "highlight_word": "勝つのはどっち！？",
@@ -96,7 +96,7 @@ TOPIC_PRESETS: List[Dict[str, Any]] = [
         "zabuton_color": "red",
     },
     {
-        "keywords": ["market", "株価", "金利"],
+        "keywords": ["market", "株式市場", "株式大暴落"],
         "title_line1": "株式市場",
         "title_line2": "大暴落！？",
         "highlight_word": "大暴落",
@@ -106,7 +106,7 @@ TOPIC_PRESETS: List[Dict[str, Any]] = [
         "emotion": "surprised",
     },
     {
-        "keywords": ["msft", "amzn", "マイクロソフト", "アマゾン", "対決", "ai_war"],
+        "keywords": ["msft vs amzn", "マイクロソフト vs アマゾン", "ai_war"],
         "title_line1": "マイクロソフト vs アマゾン",
         "title_line2": "勝つのはどっち！？",
         "highlight_word": "勝つのはどっち！？",
@@ -713,7 +713,52 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
             best_emotion = cand_emo
             break
 
-    # Topic-specific intelligence via data-driven preset dictionary
+    # 1. Dynamic slide-based extraction: inspect broll_manifest or embedded slides
+    broll_manifest = []
+    if script:
+        for item in script:
+            if isinstance(item, dict) and item.get("type") == "broll_manifest":
+                broll_manifest.append(item)
+    if not broll_manifest and proj_dir:
+        for b_name in ("broll_manifest.json", "slides.json"):
+            b_path = proj_dir / b_name
+            if b_path.is_file():
+                try:
+                    loaded = json.loads(b_path.read_text(encoding="utf-8-sig"))
+                    if isinstance(loaded, list):
+                        broll_manifest = loaded
+                        break
+                except Exception:
+                    pass
+
+    # If a VS comparison slide exists, generate dynamic VS Duel thumbnail
+    for slide in broll_manifest:
+        if isinstance(slide, dict) and slide.get("slide_type") in ("vs", "vs_duel", "comparison"):
+            left_b = slide.get("left_box") or []
+            right_b = slide.get("right_box") or []
+            left_label = str(left_b[0] if left_b else slide.get("left_label") or "").strip()
+            right_label = str(right_b[0] if right_b else slide.get("right_label") or "").strip()
+            title = str(slide.get("title") or slide.get("hero_title") or "").strip()
+            if left_label and right_label:
+                t1 = title if (title and len(title) <= 22) else f"{left_label} vs {right_label}"
+                return ThumbnailConfig(
+                    title_line1=t1,
+                    title_line2="勝つのはどっち！？",
+                    highlight_word="勝つのはどっち！？",
+                    sub_hook="",
+                    badge="【宿命の対決】",
+                    character=lead_char,
+                    emotion="surprised",
+                    theme=slide.get("theme_color") or "gold",
+                    layout="vs_duel",
+                    opponent_character="四国めたん" if lead_char == "ずんだもん" else "ずんだもん",
+                    left_label=left_label,
+                    right_label=right_label,
+                    speech_bubble="",
+                    zabuton_color="red",
+                )
+
+    # 2. Topic-specific intelligence via data-driven preset dictionary
     dir_name = proj_dir.name.lower() if proj_dir else ""
     full_text = " ".join(all_texts)
     combined_context = f"{dir_name} {full_text}"
@@ -800,7 +845,7 @@ def auto_extract_variant_configs(project_dir_or_script: Union[str, Path, list, T
                     logger.warning("Failed to parse variants from %s: %s", cfg_file, e)
     base = project_dir_or_script if isinstance(project_dir_or_script, ThumbnailConfig) else auto_extract_thumbnail_config(project_dir_or_script)
     bd = base.to_dict()
-    w_t2, w_hw = ("大損の罠！？", "大損の罠") if "大損" not in base.title_line2 else (base.title_line2, base.highlight_word)
+    w_t2, w_hw = ("崩壊の罠！？", "崩壊の罠") if "崩壊" not in base.title_line2 else (base.title_line2, base.highlight_word)
     if base.layout == "vs_duel":
         cfg_a = ThumbnailConfig.from_dict({**bd, "theme": "gold", "zabuton_color": "red", "speech_bubble": "", "badge": base.badge or "【宿命の対決】"})
         cfg_b = ThumbnailConfig.from_dict({**bd, "theme": "red", "zabuton_color": "gold", "badge": "【緊急警告】", "title_line2": "完全敗北！？", "highlight_word": "完全敗北", "speech_bubble": "", "emotion": "angry"})

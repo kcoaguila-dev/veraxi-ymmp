@@ -108,19 +108,19 @@ Use one of the 3 exact schemas:
 ```
 
 ### Type 4: `"official_data"` (Authoritative Primary Source / Technical Specs, Benchmarks, Filings, or Stats)
-Use whenever citing technical specs (CVE/RFC), academic benchmarks, court filings, SEC filings, or macroeconomic statistics:
+Use whenever citing technical specs (CVE/RFC), academic benchmarks, court filings, regulatory disclosures, or official statistics:
 ```json
 {
   "type": "official_data",
   "filename": "slide_04.png",
-  "title": "データセンター償却の重圧",
-  "step_tag": "決算の罠",
-  "hero_metric": "年間60兆円の償却爆弾",
-  "metric_label": "四半期利益を削る維持費と電力費",
-  "source_citation": "SEC Form 10-Q (米証券取引委員会)",
-  "verification_badge": "公式決算データ",
-  "impact_tag": "警告",
-  "impact_text": "借り増しインフラが収益を圧迫",
+  "title": "脆弱性実測データと深刻度",
+  "step_tag": "一次資料検証",
+  "hero_metric": "CVSS 9.8 Critical",
+  "metric_label": "共通脆弱性評価システム (CVSS v3.1)",
+  "source_citation": "NVD / CVE-2024-XXXX (米国立標準技術研究所)",
+  "verification_badge": "公式セキュリティ勧告",
+  "impact_tag": "緊急警告",
+  "impact_text": "遠隔コード実行による完全掌握リスク",
   "theme_color": "red"
 }
 ```
