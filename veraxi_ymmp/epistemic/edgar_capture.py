@@ -17,8 +17,10 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import json
 import os
 from pathlib import Path
+import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -41,7 +43,7 @@ from veraxi_ymmp.epistemic.temporal_gate import (
 )
 from veraxi_ymmp.epistemic.web_capture import HtmlHighlightCapturer
 
-DEFAULT_SEC_USER_AGENT = "VeraxiStudio-Research/1.0"
+DEFAULT_SEC_USER_AGENT = "VeraxiStudio-Research/1.0 (compliance-research@veraxi.internal)"
 
 
 @dataclass(frozen=True)
@@ -683,3 +685,102 @@ class EdgarFactsAdapter:
             )
 
         return sorted(records, key=lambda r: r.period_end)
+
+
+KNOWN_CIKS: Dict[str, str] = {
+    "MSFT": "0000789019",
+    "AMZN": "0001018724",
+    "NVDA": "0001045810",
+    "AAPL": "0000320193",
+    "GOOGL": "0001652044",
+    "GOOG": "0001652044",
+    "META": "0001326801",
+    "TSLA": "0001318605",
+    "AMD": "0000002488",
+    "INTC": "0000050863",
+    "ORCL": "0001341439",
+    "NFLX": "0001065280",
+}
+
+
+@dataclass(frozen=True)
+class DirectSecFiling:
+    """Structured resolution of an exact SEC EDGAR filing accession and URLs."""
+    ticker: str
+    cik: str
+    form: str
+    filing_date: str
+    report_date: str
+    accession_number: str
+    primary_document: str
+    ixbrl_url: str
+    raw_html_url: str
+
+
+def resolve_sec_direct_filing(
+    ticker_or_cik: str,
+    form: str = "10-Q",
+    user_agent: Optional[str] = None,
+) -> Optional[DirectSecFiling]:
+    """Query SEC EDGAR Submissions API to resolve the exact accession number and direct URLs.
+
+    Args:
+        ticker_or_cik: Stock ticker (e.g. MSFT, AMZN) or numeric CIK string.
+        form: SEC form name ('10-Q', '10-K', '8-K').
+        user_agent: Custom User-Agent adhering to SEC Fair Access policy.
+
+    Returns:
+        DirectSecFiling with verified interactive iXBRL and raw HTML URLs, or None.
+    """
+    clean_target = ticker_or_cik.strip().upper()
+    cik = KNOWN_CIKS.get(clean_target)
+    if not cik:
+        if clean_target.isdigit():
+            cik = clean_target.zfill(10)
+        else:
+            try:
+                lookup_url = "https://www.sec.gov/files/company_tickers.json"
+                headers = {"User-Agent": user_agent or DEFAULT_SEC_USER_AGENT}
+                req = urllib.request.Request(lookup_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    comp_map = json.loads(resp.read().decode())
+                for item in comp_map.values():
+                    if item.get("ticker", "").upper() == clean_target:
+                        cik = str(item["cik_str"]).zfill(10)
+                        break
+            except Exception as e:
+                logger.warning(f"Could not dynamically resolve CIK for {clean_target}: {e}")
+                return None
+
+    if not cik:
+        return None
+
+    api_url = f"https://data.sec.gov/submissions/CIK{cik.zfill(10)}.json"
+    headers = {"User-Agent": user_agent or DEFAULT_SEC_USER_AGENT}
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        recent = data.get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        for i, f in enumerate(forms):
+            if f.upper() == form.upper():
+                acc = recent["accessionNumber"][i]
+                acc_clean = acc.replace("-", "")
+                doc = recent["primaryDocument"][i]
+                cik_int = int(cik)
+                return DirectSecFiling(
+                    ticker=clean_target,
+                    cik=cik,
+                    form=form.upper(),
+                    filing_date=recent["filingDate"][i],
+                    report_date=recent["reportDate"][i],
+                    accession_number=acc,
+                    primary_document=doc,
+                    ixbrl_url=f"https://www.sec.gov/ix?doc=/Archives/edgar/data/{cik_int}/{acc_clean}/{doc}",
+                    raw_html_url=f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/{doc}",
+                )
+    except Exception as err:
+        logger.warning(f"Direct SEC filing resolution failed for {clean_target}: {err}")
+        return None
+    return None

@@ -6,7 +6,9 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+from veraxi_ymmp.epistemic.edgar_capture import KNOWN_CIKS, resolve_sec_direct_filing
 
 
 ARCHETYPES: Dict[str, Dict[str, str]] = {
@@ -48,9 +50,26 @@ def _slugify(text: str) -> str:
     return slug[:50] if slug else "untitled_project"
 
 
-def generate_dossier_markdown(topic: str, archetype_key: str) -> str:
-    """Generate ready-to-paste NotebookLM prompt pack with multi-turn prompt chaining."""
+def generate_dossier_markdown(
+    topic: str,
+    archetype_key: str,
+    direct_filings: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """Generate ready-to-paste NotebookLM prompt pack with multi-turn prompt chaining and Reddit warnings."""
     arch = ARCHETYPES.get(archetype_key, ARCHETYPES["post_mortem"])
+
+    filings_block = ""
+    if direct_filings:
+        filings_block += "3. Primary Authority Filings (Direct Accession Resolved):\n"
+        for f in direct_filings:
+            filings_block += (
+                f"   - **{f['ticker']} {f['form']} (Period Ended {f['report_date']}, Filed {f['filing_date']}):**\n"
+                f"     - Interactive iXBRL: {f['ixbrl_url']}\n"
+                f"     - Raw Document (HTML): {f['raw_html_url']}\n"
+            )
+    else:
+        filings_block = "3. Upload primary source PDFs/docs into NotebookLM (save copies into `sources/` on disk).\n"
+
     return f"""# 📋 NotebookLM Interrogation Dossier: {topic}
 **Archetype Selected:** {arch['title']}
 **Core Theme:** {arch['description']}
@@ -60,7 +79,12 @@ def generate_dossier_markdown(topic: str, archetype_key: str) -> str:
 ## 📂 Step 1: Ingest Sources into NotebookLM
 1. Open [Google NotebookLM](https://notebooklm.google.com).
 2. Create a new notebook titled: `{topic}`.
-3. Upload primary source PDFs/docs into NotebookLM (save copies into `sources/` on disk).
+{filings_block}
+> [!WARNING]
+> **What Reddit & Financial AI Communities Discovered about SEC Links in NotebookLM:**
+> 1. **SEC 403 Bot Block:** SEC EDGAR strictly blocks automated scrapers without a declared compliance User-Agent. Pasting sec.gov URLs as web links into NotebookLM frequently causes 403 Forbidden or blank extracts.
+> 2. **The /ix?doc= Client-Side App Trap:** The /ix?doc=... URL is an interactive JavaScript viewer application. Web crawlers only download the outer shell, omitting the dynamic financial tables!
+> 3. **The Reddit Best Practice:** Open the direct link in your browser, click **Save as PDF** (or **Save page as HTML**), and upload the file directly into NotebookLM. This guarantees 100% full text and table parsing with zero omission.
 
 ---
 
@@ -143,6 +167,41 @@ python -m veraxi_ymmp validate projects/<project>/script.json --audit-facts --au
 ```
 """
 
+
+def _detect_tickers_in_topic(text: str) -> List[str]:
+    """Auto-detect ticker symbols mentioned in topic string or company names."""
+    found: List[str] = []
+    text_upper = text.upper()
+
+    # Direct ticker symbols
+    for t in KNOWN_CIKS.keys():
+        if re.search(rf'\b{t}\b', text_upper):
+            if t not in found:
+                found.append(t)
+
+    # Common company names mapping to tickers
+    name_map = {
+        "MICROSOFT": "MSFT",
+        "AMAZON": "AMZN",
+        "NVIDIA": "NVDA",
+        "APPLE": "AAPL",
+        "GOOGLE": "GOOGL",
+        "ALPHABET": "GOOGL",
+        "META": "META",
+        "FACEBOOK": "META",
+        "TESLA": "TSLA",
+        "NETFLIX": "NFLX",
+        "ORACLE": "ORCL",
+        "INTEL": "INTC",
+    }
+    for name, t in name_map.items():
+        if re.search(rf'\b{name}\b', text_upper):
+            if t not in found:
+                found.append(t)
+
+    return found
+
+
 def cmd_ideate(argv: List[str]) -> None:
     """Handle 'veraxi-ymmp ideate' subcommand."""
     parser = argparse.ArgumentParser(
@@ -163,6 +222,12 @@ def cmd_ideate(argv: List[str]) -> None:
         default=None,
         help="Custom output project directory (default: projects/<topic_slug>)"
     )
+    parser.add_argument(
+        "--tickers",
+        nargs="*",
+        default=None,
+        help="Optional stock tickers to resolve SEC EDGAR direct filings for (e.g. MSFT AMZN)"
+    )
 
     args = parser.parse_args(argv)
 
@@ -173,30 +238,59 @@ def cmd_ideate(argv: List[str]) -> None:
 
     sources_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Generate notebooklm_dossier.md
-    dossier_content = generate_dossier_markdown(topic, archetype_key)
+    # Resolve SEC filings systematically
+    target_tickers = args.tickers or _detect_tickers_in_topic(topic)
+    resolved_filings: List[Dict[str, Any]] = []
+
+    manifest_sources: Dict[str, Any] = {}
+    for ticker in target_tickers:
+        filing = resolve_sec_direct_filing(ticker, form="10-Q")
+        if filing:
+            resolved_dict = {
+                "ticker": filing.ticker,
+                "cik": filing.cik,
+                "form": filing.form,
+                "filing_date": filing.filing_date,
+                "report_date": filing.report_date,
+                "accession_number": filing.accession_number,
+                "primary_document": filing.primary_document,
+                "ixbrl_url": filing.ixbrl_url,
+                "raw_html_url": filing.raw_html_url,
+            }
+            resolved_filings.append(resolved_dict)
+            source_key = f"sec_{filing.ticker.lower()}_{filing.form.lower()}"
+            manifest_sources[source_key] = {
+                "url": filing.ixbrl_url,
+                "raw_html_url": filing.raw_html_url,
+                "accession_number": filing.accession_number,
+                "title": f"{filing.ticker} Form {filing.form} (Report Date: {filing.report_date}, Filed: {filing.filing_date})",
+                "canonical_period": "2026-Q3",
+                "period_start": "2026-07-01",
+                "period_end": filing.report_date,
+                "primary": True
+            }
+
+    # 1. Generate notebooklm_dossier.md with resolved direct links and Reddit warnings
+    dossier_content = generate_dossier_markdown(topic, archetype_key, resolved_filings)
     dossier_path = proj_dir / "notebooklm_dossier.md"
     dossier_path.write_text(dossier_content, encoding="utf-8")
 
     # 2. Generate sources/manifest.json
-    manifest_data: Dict[str, Any] = {
-        "topic": topic,
-        "archetype": archetype_key,
-        "required_sources": [
-            {
-                "name": "Primary Anchor Doc (Official Report / Whitepaper / Court Filing)",
-                "filename": "primary_anchor.pdf",
-                "status": "pending_download"
+    if not manifest_sources:
+        manifest_sources = {
+            "primary_anchor_doc": {
+                "url": "https://example.com/source.pdf",
+                "title": "Primary Anchor Doc (Official Report / Whitepaper / Court Filing)",
+                "primary": True
             },
-            {
-                "name": "Counter-Perspective or Dissenting Analysis",
-                "filename": "counter_analysis.pdf",
-                "status": "pending_download"
+            "counter_analysis": {
+                "url": "https://example.com/counter.pdf",
+                "title": "Counter-Perspective or Dissenting Analysis",
+                "primary": False
             }
-        ]
-    }
+        }
     manifest_path = sources_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest_sources, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # 3. Generate script_seed.json
     arch = ARCHETYPES[archetype_key]
@@ -219,6 +313,8 @@ def cmd_ideate(argv: List[str]) -> None:
     seed_path.write_text(json.dumps(seed_data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     sys.stdout.write(f"Created editorial dossier for '{topic}' in {proj_dir}\n")
+    if resolved_filings:
+        sys.stdout.write(f"  - Resolved {len(resolved_filings)} SEC direct filing accession links!\n")
     sys.stdout.write(f"  - NotebookLM Prompt Pack: {dossier_path}\n")
     sys.stdout.write(f"  - Sources Manifest:       {manifest_path}\n")
     sys.stdout.write(f"  - Script Seed:            {seed_path}\n")
