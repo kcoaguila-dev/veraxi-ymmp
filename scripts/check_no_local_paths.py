@@ -282,6 +282,10 @@ def run_checks(targets: Iterable[str | Path]) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Windows consoles default to cp1252; the report uses emoji.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         description="Verify no local paths, OS usernames, or secrets exist in repository files."
     )
