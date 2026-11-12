@@ -53,6 +53,7 @@ def capture(outdir: Path) -> None:
     (outdir / "ir_dump.json").write_text(
         json.dumps(ir_to_data(ir), indent=2, ensure_ascii=False, sort_keys=True),
         encoding="utf-8",
+        newline="\n",
     )
 
     compiler2 = YMMPCompiler(str(template))

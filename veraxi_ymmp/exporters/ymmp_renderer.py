@@ -850,7 +850,9 @@ class YMMPRenderer:
 
         validate_ymmp_schema(output_data)
         encoding = "utf-8-sig" if use_bom else "utf-8"
-        with open(output_path, "w", encoding=encoding) as f:
+        # Golden .ymmp files are LF byte-for-byte. Windows text mode would
+        # translate those newlines to CRLF and fail the regression check.
+        with open(output_path, "w", encoding=encoding, newline="\n") as f:
             json.dump(output_data, f, ensure_ascii=False, indent=4)
 
     def export(
