@@ -7,9 +7,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ['3.10', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v5
@@ -17,6 +19,7 @@ jobs:
           fetch-depth: 0
 
       - name: Gitleaks Secret & Local Path Scan
+        if: runner.os == 'Linux'
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,9 +32,9 @@ jobs:
           cache: pip
 
       - name: Install system dependencies
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y ffmpeg; else choco install ffmpeg -y --no-progress; fi
 
       - name: Check No Local Paths or Secrets
         run: python scripts/check_no_local_paths.py --all

@@ -74,7 +74,7 @@ def test_no_wildcard_imports_in_library() -> None:
             if isinstance(node, ast.ImportFrom):
                 for alias in node.names:
                     if alias.name == "*":
-                        wildcards.append((str(py_file.relative_to(REPO_ROOT)), node.lineno))
+                        wildcards.append((py_file.relative_to(REPO_ROOT).as_posix(), node.lineno))
 
     assert not wildcards, f"Wildcard imports ('from module import *') found in library: {wildcards}"
 
@@ -88,7 +88,7 @@ def test_module_size_ceiling() -> None:
     for py_file in lib_dir.rglob("*.py"):
         lines = len(py_file.read_text(encoding="utf-8", errors="replace").splitlines())
         if lines > max_allowed_lines:
-            oversized_modules.append((str(py_file.relative_to(REPO_ROOT)), lines))
+            oversized_modules.append((py_file.relative_to(REPO_ROOT).as_posix(), lines))
 
     assert not oversized_modules, (
         f"The following modules exceed the {max_allowed_lines} line ceiling: {oversized_modules}"
@@ -441,7 +441,7 @@ def test_strict_three_tier_compiler_dag() -> None:
             continue
         sub = py_file.parent.name if py_file.parent != lib_dir else "root"
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-        rel_path = str(py_file.relative_to(REPO_ROOT))
+        rel_path = py_file.relative_to(REPO_ROOT).as_posix()
 
         for node in ast.walk(tree):
             mods: List[str] = []

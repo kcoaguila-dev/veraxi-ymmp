@@ -1242,9 +1242,21 @@ class TestCLIAdversarialUploadAndStatus:
                 assert exc.value.code == 1
 
     def test_upload_production_mode_without_credentials_exits_1(
-        self, dummy_video: Path
+        self, dummy_video: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Running upload without --mock in offline environment fails initialization and exits 1."""
+        # Hermetic: never read the developer's real ~/.veraxi-ymmp credentials.
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setenv("USERPROFILE", str(fake_home))
+        for var in (
+            "VERAXI_YOUTUBE_CLIENT_SECRETS",
+            "YOUTUBE_CLIENT_SECRETS",
+            "VERAXI_YOUTUBE_TOKEN_PATH",
+            "YOUTUBE_TOKEN_PATH",
+        ):
+            monkeypatch.delenv(var, raising=False)
         with patch.object(
             sys,
             "argv",

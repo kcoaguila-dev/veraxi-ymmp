@@ -84,14 +84,29 @@ class VoicevoxClient:
 
         logger.info("VOICEVOX is not running. Attempting to start it automatically...")
 
-        # Common installation paths on Windows
-        local_app_data = os.environ.get("LOCALAPPDATA", "")
-        possible_paths = [
-            Path(local_app_data) / "Programs" / "VOICEVOX" / "run.exe",
-            Path(local_app_data) / "Programs" / "VOICEVOX" / "VOICEVOX.exe",
-            Path("C:/Program Files/VOICEVOX/run.exe"),
-            Path("C:/Program Files/VOICEVOX/VOICEVOX.exe"),
-        ]
+        # Explicit override first (works on every OS), then per-OS defaults.
+        possible_paths = []
+        env_path = os.environ.get("VOICEVOX_PATH", "")
+        if env_path:
+            possible_paths.append(Path(env_path))
+        if os.name == "nt":
+            local_app_data = os.environ.get("LOCALAPPDATA", "")
+            if local_app_data:
+                possible_paths += [
+                    Path(local_app_data) / "Programs" / "VOICEVOX" / "run.exe",
+                    Path(local_app_data) / "Programs" / "VOICEVOX" / "VOICEVOX.exe",
+                ]
+            possible_paths += [
+                Path("C:/Program Files/VOICEVOX/run.exe"),
+                Path("C:/Program Files/VOICEVOX/VOICEVOX.exe"),
+            ]
+        else:
+            possible_paths += [
+                Path.home() / ".local" / "share" / "voicevox" / "run",
+                Path("/opt/voicevox_engine/run"),
+                Path("/opt/voicevox/run"),
+                Path("/usr/local/bin/voicevox_engine"),
+            ]
 
         exe_path = None
         for p in possible_paths:
