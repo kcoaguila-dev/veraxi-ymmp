@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from veraxi_ymmp.app.compiler import YMMPCompiler
 from veraxi_ymmp.core.ir import TimelineIR, UploadResult, VideoPublishMetadata
@@ -63,6 +63,49 @@ class PipelineResult:
     errors: List[str] = field(default_factory=list)
 
 
+@dataclass
+class _RunContext:
+    """Mutable state shared by the ProjectPipeline.run stage functions.
+
+    ``run`` is a thin sequencer; each ``_stage_*`` method performs one stage
+    and reads/writes the fields it needs here instead of threading dozens of
+    locals through the old 495-line monolith.
+    """
+
+    project_path: Union[str, Path]
+    do_premiere: bool = True
+    do_ymmp: bool = True
+    do_qa: bool = True
+    render_video: bool = False
+    qa_duration: Optional[float] = None
+    do_thumbnail: bool = True
+    upload_to_youtube: bool = False
+    mock_upload: bool = False
+    publish_at: Optional[str] = None
+    privacy_status: str = "private"
+    title: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    language: str = "ja"
+    normalize_loudness: bool = False
+    publisher: Optional[VideoPublisher] = None
+    allow_synthetic: bool = False
+    allow_unverified: bool = False
+    verify_urls: bool = False
+    # Stage outputs, filled in as the sequencer advances.
+    proj_dir: Path = Path(".")
+    result: PipelineResult = field(
+        default_factory=lambda: PipelineResult(project_dir=Path("."))
+    )
+    script_path: Path = Path("script.json")
+    script_data: Any = None
+    broll_manifest_path: Path = Path("broll_manifest.json")
+    compiler: Optional[YMMPCompiler] = None
+    timeline_ir: Optional[TimelineIR] = None
+    audio_files: List[Path] = field(default_factory=list)
+
+
+
 class ProjectPipeline:
     """End-to-end project orchestration pipeline for Veraxi YMMP."""
 
@@ -96,6 +139,13 @@ class ProjectPipeline:
                 return shorts_tmpl
         return self.template_path
 
+    def _notify(self, stage: str, progress: float, message: str) -> None:
+        if self.progress_callback:
+            try:
+                self.progress_callback(stage, progress, message)
+            except Exception as cb_err:
+                logger.debug(f"Progress callback raised an unhandled exception: {cb_err}")
+
     def run(
         self,
         project_path: Union[str, Path],
@@ -120,42 +170,82 @@ class ProjectPipeline:
         verify_urls: bool = False,
     ) -> PipelineResult:
         """Execute the end-to-end video synthesis pipeline for a project directory."""
-        def _notify(stage: str, progress: float, message: str) -> None:
-            if self.progress_callback:
-                try:
-                    self.progress_callback(stage, progress, message)
-                except Exception as cb_err:
-                    logger.debug(f"Progress callback raised an unhandled exception: {cb_err}")
+        """Execute the end-to-end pipeline: a thin sequencer over the _stage_* methods."""
+        ctx = _RunContext(
+            project_path=project_path,
+            do_premiere=do_premiere,
+            do_ymmp=do_ymmp,
+            do_qa=do_qa,
+            render_video=render_video,
+            qa_duration=qa_duration,
+            do_thumbnail=do_thumbnail,
+            upload_to_youtube=upload_to_youtube,
+            mock_upload=mock_upload,
+            publish_at=publish_at,
+            privacy_status=privacy_status,
+            title=title,
+            description=description,
+            tags=tags,
+            language=language,
+            normalize_loudness=normalize_loudness,
+            publisher=publisher,
+            allow_synthetic=allow_synthetic,
+            allow_unverified=allow_unverified,
+            verify_urls=verify_urls,
+        )
+        if not self._stage_load_script(ctx):
+            return ctx.result
+        self._stage_preflight(ctx)
+        self._stage_setup_compiler(ctx)
+        if not self._stage_gates(ctx):
+            return ctx.result
+        if not self._stage_build_ir(ctx):
+            return ctx.result
+        self._stage_export_premiere(ctx)
+        self._stage_export_ymmp(ctx)
+        self._stage_render_qa(ctx)
+        self._stage_render_master(ctx)
+        self._stage_thumbnail(ctx)
+        if not self._stage_upload(ctx):
+            return ctx.result
+        if ctx.result.errors:
+            ctx.result.success = False
 
-        proj_dir = Path(project_path).resolve()
-        result = PipelineResult(project_dir=proj_dir)
+        logger.info(f"Project '{ctx.proj_dir.name}' Execution Finished!")
+        return ctx.result
 
-        if not proj_dir.exists():
-            err_msg = f"Project directory '{project_path}' does not exist."
+
+    def _stage_load_script(self, ctx: _RunContext) -> bool:
+        """Resolve the project, load and validate script.json. False = abort."""
+        ctx.proj_dir = Path(ctx.project_path).resolve()
+        ctx.result = PipelineResult(project_dir=ctx.proj_dir)
+
+        if not ctx.proj_dir.exists():
+            err_msg = f"Project directory '{ctx.project_path}' does not exist."
             logger.error(err_msg)
-            result.errors.append(err_msg)
-            result.success = False
-            return result
+            ctx.result.errors.append(err_msg)
+            ctx.result.success = False
+            return False
 
-        script_path = proj_dir / "script.json"
-        if not script_path.exists():
-            err_msg = f"No script.json found in '{project_path}'."
+        ctx.script_path = ctx.proj_dir / "script.json"
+        if not ctx.script_path.exists():
+            err_msg = f"No script.json found in '{ctx.project_path}'."
             logger.error(err_msg)
-            result.errors.append(err_msg)
-            result.success = False
-            return result
+            ctx.result.errors.append(err_msg)
+            ctx.result.success = False
+            return False
 
-        logger.info(f"Running Veraxi YMMP Project: {proj_dir.name} ({proj_dir})")
+        logger.info(f"Running Veraxi YMMP Project: {ctx.proj_dir.name} ({ctx.proj_dir})")
 
         try:
-            script_data = json.loads(script_path.read_text(encoding="utf-8-sig"))
-            logger.info(f"Loaded script: {len(script_data)} lines.")
+            ctx.script_data = json.loads(ctx.script_path.read_text(encoding="utf-8-sig"))
+            logger.info(f"Loaded script: {len(ctx.script_data)} lines.")
         except Exception as e:
             err_msg = f"Failed to parse script.json: {e}"
             logger.error(err_msg)
-            result.errors.append(err_msg)
-            result.success = False
-            return result
+            ctx.result.errors.append(err_msg)
+            ctx.result.success = False
+            return False
 
         validator = validate_production_script
         if validator is None:
@@ -164,15 +254,19 @@ class ProjectPipeline:
             validator = getattr(_script_mod, "validate_production_script", None)
         if validator is not None:
             try:
-                validator(script_data)
+                validator(ctx.script_data)
             except ValueError as e:
                 logger.warning(f"Production script validation warning: {e}")
 
+        return True
+
+    def _stage_preflight(self, ctx: _RunContext) -> None:
+        """Pacing preflight and the first B-Roll manifest pass."""
         # Audience Retention Pacing Preflight
         try:
             from veraxi_ymmp.editorial.pacing import audit_script_pacing
-            pacing_report = audit_script_pacing(script_data)
-            result.pacing_report = pacing_report
+            pacing_report = audit_script_pacing(ctx.script_data)
+            ctx.result.pacing_report = pacing_report
             logger.info(
                 f"Audience Retention Pacing: Score {pacing_report.retention_score}/100 "
                 f"({pacing_report.num_characters} characters, healthy={pacing_report.is_healthy})"
@@ -184,15 +278,17 @@ class ProjectPipeline:
             logger.debug(f"Pacing preflight skipped: {e}")
 
         # Optional B-Roll manifest pre-step
-        broll_manifest_path = proj_dir / "broll_manifest.json"
-        if broll_manifest_path.exists():
+        ctx.broll_manifest_path = ctx.proj_dir / "broll_manifest.json"
+        if ctx.broll_manifest_path.exists():
             logger.info("Found broll_manifest.json; rendering B-Roll assets...")
             try:
                 from veraxi_ymmp.graphics.broll import render_from_manifest
-                render_from_manifest(broll_manifest_path, proj_dir / "broll")
+                render_from_manifest(ctx.broll_manifest_path, ctx.proj_dir / "broll")
             except Exception as e:
                 logger.warning(f"Failed rendering B-Roll manifest: {e}")
 
+    def _stage_setup_compiler(self, ctx: _RunContext) -> None:
+        """Initialise the TTS backend and compiler; second B-Roll pass."""
         # 1. Initialize TTS backend & build IR
         backend = self.tts_backend or self.voicevox_client
         if self.use_tts and backend is None:
@@ -205,138 +301,150 @@ class ProjectPipeline:
         elif not self.use_tts:
             backend = None
 
-        compiler = YMMPCompiler(
-            template_path=self._resolve_project_template(proj_dir),
+        ctx.compiler = YMMPCompiler(
+            template_path=self._resolve_project_template(ctx.proj_dir),
             voicevox_client=backend if isinstance(backend, VoicevoxClient) else self.voicevox_client,
             tts_backend=backend,
             speaker_map=self.speaker_map,
         )
         if not self.use_tts:
-            compiler.config.use_tts = False
+            cast(YMMPCompiler, ctx.compiler).config.use_tts = False
 
         # Optional B-Roll manifest pre-step
-        broll_manifest_path = proj_dir / "broll_manifest.json"
-        if broll_manifest_path.exists():
-            _notify("rendering_broll", 0.05, "Rendering B-Roll slides from manifest...")
+        ctx.broll_manifest_path = ctx.proj_dir / "broll_manifest.json"
+        if ctx.broll_manifest_path.exists():
+            self._notify("rendering_broll", 0.05, "Rendering B-Roll slides from manifest...")
             try:
                 from veraxi_ymmp.graphics.broll import render_from_manifest
-                render_from_manifest(broll_manifest_path, proj_dir / "broll")
-                _notify("rendering_broll", 0.10, "B-Roll slides rendered successfully.")
+                render_from_manifest(ctx.broll_manifest_path, ctx.proj_dir / "broll")
+                self._notify("rendering_broll", 0.10, "B-Roll slides rendered successfully.")
             except Exception as e:
                 logger.warning(f"Failed rendering B-Roll manifest: {e}")
-                _notify("rendering_broll", 0.10, f"B-Roll rendering skipped: {e}")
+                self._notify("rendering_broll", 0.10, f"B-Roll rendering skipped: {e}")
         else:
             # If no B-Roll manifest exists, advance progress smoothly so the GUI doesn't stall
-            _notify("rendering_broll", 0.10, "No B-Roll manifest found, skipping.")
+            self._notify("rendering_broll", 0.10, "No B-Roll manifest found, skipping.")
 
+    def _stage_gates(self, ctx: _RunContext) -> bool:
+        """Fail-closed asset provenance and fact-ledger gates. False = abort."""
         # Fail-closed asset provenance & cryptographic verification guard
         try:
             from veraxi_ymmp.epistemic.asset_guard import verify_project_assets
 
             broll_data = None
-            if broll_manifest_path.exists():
+            if ctx.broll_manifest_path.exists():
                 try:
-                    with open(broll_manifest_path, "r", encoding="utf-8-sig") as f:
+                    with open(ctx.broll_manifest_path, "r", encoding="utf-8-sig") as f:
                         broll_data = json.load(f)
                 except Exception:
                     broll_data = None
 
             verify_project_assets(
-                project_dir=proj_dir,
-                script_entries=script_data if isinstance(script_data, list) else None,
+                project_dir=ctx.proj_dir,
+                script_entries=ctx.script_data if isinstance(ctx.script_data, list) else None,
                 broll_manifest=broll_data,
-                allow_synthetic=allow_synthetic,
+                allow_synthetic=ctx.allow_synthetic,
             )
         except Exception as guard_err:
             logger.error(f"Asset integrity check failed: {guard_err}")
-            result.errors.append(str(guard_err))
-            result.success = False
-            return result
+            ctx.result.errors.append(str(guard_err))
+            ctx.result.success = False
+            return False
 
         # Fail-closed Fact Ledger Audit & Quote Verification Gate
-        claims_path = proj_dir / "claims.json"
+        claims_path = ctx.proj_dir / "claims.json"
         if not claims_path.is_file():
-            if not allow_unverified:
+            if not ctx.allow_unverified:
                 err_msg = (
                     f"Fact-check gate failed: No claim ledger found at '{claims_path}'. "
                     f"Every production project must have a claims.json (pass allow_unverified=True or --allow-unverified to bypass)."
                 )
                 logger.error(err_msg)
-                result.errors.append(err_msg)
-                result.success = False
-                return result
+                ctx.result.errors.append(err_msg)
+                ctx.result.success = False
+                return False
             else:
                 logger.warning("Fact-check gate bypassed: No claims.json found, but allow_unverified=True.")
         else:
             try:
                 from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
 
-                outcome = audit_project_facts(script_path, title=proj_dir.name, verify_urls=verify_urls)
-                result.fact_audit_outcome = outcome
-                if outcome.blocked and not allow_unverified:
+                outcome = audit_project_facts(ctx.script_path, title=ctx.proj_dir.name, verify_urls=ctx.verify_urls)
+                ctx.result.fact_audit_outcome = outcome
+                if outcome.blocked and not ctx.allow_unverified:
                     err_msg = f"Fact-check gate blocked project execution ({len(outcome.blockers)} blockers in claims.json):"
                     logger.error(err_msg)
-                    result.errors.append(err_msg)
+                    ctx.result.errors.append(err_msg)
                     for b in outcome.blockers:
                         b_detail = f"[FACTS] {b.claim.id} (cut {b.claim.cut_index}) {b.verdict.value}: {b.reason}"
                         logger.error(f"  - {b_detail}")
-                        result.errors.append(b_detail)
-                    result.success = False
-                    return result
-                elif outcome.blocked and allow_unverified:
+                        ctx.result.errors.append(b_detail)
+                    ctx.result.success = False
+                    return False
+                elif outcome.blocked and ctx.allow_unverified:
                     logger.warning(
                         f"Fact-check gate has {len(outcome.blockers)} blockers, but overridden by allow_unverified=True."
                     )
             except Exception as fact_err:
                 logger.error(f"Fact audit failed with error: {fact_err}")
-                result.errors.append(f"Fact audit error: {fact_err}")
-                result.success = False
-                return result
+                ctx.result.errors.append(f"Fact audit error: {fact_err}")
+                ctx.result.success = False
+                return False
 
 
 
-        audio_dir = proj_dir / "audio"
+        return True
+
+    def _stage_build_ir(self, ctx: _RunContext) -> bool:
+        """TTS synthesis and TimelineIR build (the 'tts' / IR stage). False = abort."""
+        audio_dir = ctx.proj_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Building Timeline IR & Synthesizing Audio...")
-        _notify("synthesizing_audio", 0.15, f"Synthesizing voice audio for {len(script_data)} lines via VOICEVOX...")
+        self._notify("synthesizing_audio", 0.15, f"Synthesizing voice audio for {len(ctx.script_data)} lines via VOICEVOX...")
         try:
-            timeline_ir, audio_files = compiler.build_ir(script_data, audio_dir)
-            result.timeline_ir = timeline_ir
-            result.audio_files = audio_files
-            logger.info(f"Synthesized {len(timeline_ir.voice_clips)} voice clips successfully.")
-            _notify(
+            compiler = cast(YMMPCompiler, ctx.compiler)
+            ctx.timeline_ir, ctx.audio_files = compiler.build_ir(ctx.script_data, audio_dir)
+            ctx.result.timeline_ir = ctx.timeline_ir
+            ctx.result.audio_files = ctx.audio_files
+            logger.info(f"Synthesized {len(ctx.timeline_ir.voice_clips)} voice clips successfully.")
+            self._notify(
                 "synthesizing_audio",
                 0.40,
-                f"Synthesized {len(timeline_ir.voice_clips)} audio clips successfully.",
+                f"Synthesized {len(ctx.timeline_ir.voice_clips)} audio clips successfully.",
             )
         except Exception as e:
             err_msg = f"Failed during IR compilation: {e}"
             logger.error(err_msg)
-            _notify("synthesizing_audio", 0.40, f"Error synthesizing audio: {e}")
-            result.errors.append(err_msg)
-            result.success = False
-            return result
+            self._notify("synthesizing_audio", 0.40, f"Error synthesizing audio: {e}")
+            ctx.result.errors.append(err_msg)
+            ctx.result.success = False
+            return False
 
+        return True
+
+    def _stage_export_premiere(self, ctx: _RunContext) -> None:
+        """Premiere Pro FCPXML export."""
+        timeline_ir = cast(TimelineIR, ctx.timeline_ir)
         # 2. Premiere Pro XML Export
-        if do_premiere:
+        if ctx.do_premiere:
             logger.info("--- [1/3] Generating Premiere Pro FCPXML ---")
             try:
-                premiere_dir = proj_dir / "premiere"
+                premiere_dir = ctx.proj_dir / "premiere"
                 premiere_dir.mkdir(parents=True, exist_ok=True)
-                xml_out = premiere_dir / f"{proj_dir.name}.xml"
+                xml_out = premiere_dir / f"{ctx.proj_dir.name}.xml"
                 premiere_exporter = self.exporters.get("premiere") if self.exporters else None
                 if premiere_exporter is not None:
                     exported_xml = premiere_exporter.export(
                         timeline_ir,
                         xml_out,
-                        options={"project_name": proj_dir.name, "output_dir": premiere_dir},
+                        options={"project_name": ctx.proj_dir.name, "output_dir": premiere_dir},
                     )
                 else:
                     exported_xml = PremiereExporter(timeline_ir).export(
                         timeline_ir,
                         xml_out,
-                        options={"project_name": proj_dir.name, "output_dir": premiere_dir},
+                        options={"project_name": ctx.proj_dir.name, "output_dir": premiere_dir},
                     )
                 if hasattr(exported_xml, "output_path"):
                     xml_path = Path(exported_xml.output_path)
@@ -344,19 +452,23 @@ class ProjectPipeline:
                     xml_path = Path(exported_xml)
                 else:
                     xml_path = xml_out
-                result.premiere_xml = xml_path
+                ctx.result.premiere_xml = xml_path
                 logger.info(f"Premiere XML generated at: {xml_path}")
             except Exception as e:
                 err_msg = f"Failed generating Premiere Pro XML: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
+                ctx.result.errors.append(err_msg)
 
+    def _stage_export_ymmp(self, ctx: _RunContext) -> None:
+        """YMM4 .ymmp export and timeline validation."""
+        timeline_ir = cast(TimelineIR, ctx.timeline_ir)
+        compiler = cast(YMMPCompiler, ctx.compiler)
         # 3. YMM4 Project Export
-        if do_ymmp:
-            _notify("exporting_ymmp_and_xml", 0.60, "Exporting YMMP")
+        if ctx.do_ymmp:
+            self._notify("exporting_ymmp_and_xml", 0.60, "Exporting YMMP")
             logger.info("--- [2/3] Generating Yukkuri Movie Maker 4 (.ymmp) ---")
             try:
-                ymmp_dir = proj_dir / "ymmp"
+                ymmp_dir = ctx.proj_dir / "ymmp"
                 ymmp_dir.mkdir(parents=True, exist_ok=True)
                 ymmp_out = ymmp_dir / "final_video.ymmp"
                 ymmp_exporter = self.exporters.get("ymmp") if self.exporters else None
@@ -372,18 +484,21 @@ class ProjectPipeline:
                         expected_voice_count=len(timeline_ir.voice_clips),
                         require_audio=self.use_tts,
                     )
-                    result.ymmp_validation = v_res
-                result.ymmp_path = ymmp_out
+                    ctx.result.ymmp_validation = v_res
+                ctx.result.ymmp_path = ymmp_out
                 logger.info(f"YMM4 project generated at: {ymmp_out}")
             except Exception as e:
                 err_msg = f"Failed generating YMM4 project: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
+                ctx.result.errors.append(err_msg)
 
+    def _stage_render_qa(self, ctx: _RunContext) -> None:
+        """MoviePy QA preview render."""
+        timeline_ir = cast(TimelineIR, ctx.timeline_ir)
         # 4. MoviePy QA Video
-        if do_qa and not render_video:
+        if ctx.do_qa and not ctx.render_video:
             target_qa_duration = (
-                qa_duration if qa_duration is not None else self.fast_qa_duration
+                ctx.qa_duration if ctx.qa_duration is not None else self.fast_qa_duration
             )
             effective_qa_duration = target_qa_duration
             if effective_qa_duration is not None and hasattr(
@@ -392,13 +507,13 @@ class ProjectPipeline:
                 effective_qa_duration = timeline_ir.min_all_speakers_duration(
                     effective_qa_duration
                 )
-            _notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
-            _notify("moviepy_rendering", 0.70, "Rendering QA")
+            self._notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
+            self._notify("moviepy_rendering", 0.70, "Rendering QA")
             logger.info(
                 f"--- [3/4] Rendering MoviePy QA Preview Video ({effective_qa_duration}s) ---"
             )
             try:
-                qa_out = proj_dir / "qa_test.mp4"
+                qa_out = ctx.proj_dir / "qa_test.mp4"
                 qa_exporter = (
                     (self.exporters.get("qa") or self.exporters.get("moviepy"))
                     if self.exporters
@@ -419,20 +534,23 @@ class ProjectPipeline:
                         qa_out,
                         options={"fast_qa_duration": effective_qa_duration},
                     )
-                result.qa_video_path = qa_out
+                ctx.result.qa_video_path = qa_out
                 logger.info(f"QA preview video ready at: {qa_out}")
-                _notify("moviepy_rendering", 0.85, "QA Render Complete")
+                self._notify("moviepy_rendering", 0.85, "QA Render Complete")
             except Exception as e:
                 err_msg = f"Failed generating MoviePy QA video: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
+                ctx.result.errors.append(err_msg)
 
-        if render_video:
-            _notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
-            _notify("production_rendering", 0.70, "Rendering Production Master Video")
+    def _stage_render_master(self, ctx: _RunContext) -> None:
+        """Headless production master render."""
+        timeline_ir = cast(TimelineIR, ctx.timeline_ir)
+        if ctx.render_video:
+            self._notify("exporting_ymmp_and_xml", 0.70, "YMMP Export Complete")
+            self._notify("production_rendering", 0.70, "Rendering Production Master Video")
             logger.info("--- Headless Production Video Rendering ---")
             try:
-                master_video_path = proj_dir / "final_video.mp4"
+                master_video_path = ctx.proj_dir / "final_video.mp4"
                 exporter = (
                     (self.exporters.get("production") or self.exporters.get("moviepy"))
                     if self.exporters
@@ -447,93 +565,97 @@ class ProjectPipeline:
                         "preset": "medium",
                         "crf": 18,
                         "fast_qa_duration": None,
-                        "normalize_loudness": normalize_loudness,
+                        "normalize_loudness": ctx.normalize_loudness,
                     },
                 )
-                result.final_video_path = master_video_path
-                result.qa_video_path = master_video_path
+                ctx.result.final_video_path = master_video_path
+                ctx.result.qa_video_path = master_video_path
                 logger.info(f"Production video ready at: {master_video_path}")
-                _notify("production_rendering", 0.85, "Production Video Complete")
+                self._notify("production_rendering", 0.85, "Production Video Complete")
             except Exception as e:
                 err_msg = f"Failed generating Production video: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
+                ctx.result.errors.append(err_msg)
 
+    def _stage_thumbnail(self, ctx: _RunContext) -> None:
+        """YouTube thumbnail and metadata text."""
         # 5. High-CTR YouTube Thumbnail
-        if do_thumbnail:
+        if ctx.do_thumbnail:
             logger.info("--- [4/4] Generating High-CTR YouTube Thumbnail ---")
             try:
-                thumb_out = proj_dir / "thumbnail.png"
-                generate_project_thumbnail(proj_dir, out_path=thumb_out)
-                result.thumbnail_path = thumb_out
+                thumb_out = ctx.proj_dir / "thumbnail.png"
+                generate_project_thumbnail(ctx.proj_dir, out_path=thumb_out)
+                ctx.result.thumbnail_path = thumb_out
                 logger.info(f"High-CTR YouTube thumbnail ready at: {thumb_out}")
             except Exception as e:
                 err_msg = f"Failed generating thumbnail: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
+                ctx.result.errors.append(err_msg)
 
-        # 5b. Copy-paste YouTube title / description / credits (youtube_metadata.txt)
+        # 5b. Copy-paste YouTube ctx.title / ctx.description / credits (youtube_metadata.txt)
         try:
             from veraxi_ymmp.exporters.youtube_metadata import generate_project_youtube_metadata
 
-            generate_project_youtube_metadata(proj_dir, timeline_ir=result.timeline_ir)
-            logger.info(f"YouTube metadata ready at: {proj_dir / 'youtube_metadata.txt'}")
+            generate_project_youtube_metadata(ctx.proj_dir, timeline_ir=ctx.result.timeline_ir)
+            logger.info(f"YouTube metadata ready at: {ctx.proj_dir / 'youtube_metadata.txt'}")
         except Exception as e:
             logger.warning(f"Failed generating YouTube metadata: {e}")
 
+    def _stage_upload(self, ctx: _RunContext) -> bool:
+        """YouTube publishing automation. False = abort (no video artifact)."""
         # 6. YouTube Publishing Automation
-        if upload_to_youtube:
+        if ctx.upload_to_youtube:
             logger.info("--- [5/5] YouTube Publishing Automation ---")
             target_video: Optional[Path] = None
-            final_video_candidate = proj_dir / "final_video.mp4"
-            if result.final_video_path and result.final_video_path.exists():
-                target_video = result.final_video_path
+            final_video_candidate = ctx.proj_dir / "final_video.mp4"
+            if ctx.result.final_video_path and ctx.result.final_video_path.exists():
+                target_video = ctx.result.final_video_path
             elif final_video_candidate.exists():
                 target_video = final_video_candidate
-            elif result.qa_video_path and result.qa_video_path.exists():
-                target_video = result.qa_video_path
+            elif ctx.result.qa_video_path and ctx.result.qa_video_path.exists():
+                target_video = ctx.result.qa_video_path
 
             if target_video is None:
                 err_msg = "No video artifact found for YouTube upload (checked final_video.mp4 and qa_test.mp4)."
                 logger.error(err_msg)
-                result.errors.append(err_msg)
-                result.success = False
-                return result
+                ctx.result.errors.append(err_msg)
+                ctx.result.success = False
+                return False
 
-            if result.thumbnail_path is None:
-                default_thumb = proj_dir / "thumbnail.png"
+            if ctx.result.thumbnail_path is None:
+                default_thumb = ctx.proj_dir / "thumbnail.png"
                 if default_thumb.exists():
-                    result.thumbnail_path = default_thumb
+                    ctx.result.thumbnail_path = default_thumb
 
             video_to_upload = target_video
-            if normalize_loudness and not render_video:
-                _notify("audio_normalization", 0.85, "Normalizing Audio")
+            if ctx.normalize_loudness and not ctx.render_video:
+                self._notify("audio_normalization", 0.85, "Normalizing Audio")
                 logger.info("Normalizing video audio loudness for YouTube (-14.0 LUFS)...")
                 from veraxi_ymmp.audio.audio_normalizer import normalize_video_audio
 
-                norm_out = proj_dir / f"{target_video.stem}_normalized{target_video.suffix}"
+                norm_out = ctx.proj_dir / f"{target_video.stem}_normalized{target_video.suffix}"
                 try:
                     video_to_upload = normalize_video_audio(target_video, norm_out, target_i=-14.0)
                     logger.info(f"Loudness normalized video ready: {video_to_upload}")
-                    _notify("audio_normalization", 0.95, "Normalization Complete")
+                    self._notify("audio_normalization", 0.95, "Normalization Complete")
                 except Exception as e:
                     logger.warning(f"Loudness normalization failed, using original video: {e}")
                     video_to_upload = target_video
 
-            if result.timeline_ir is not None:
+            if ctx.result.timeline_ir is not None:
                 logger.info("Auto-generating SRT captions from TimelineIR...")
-                srt_out = proj_dir / f"{proj_dir.name}.srt"
+                srt_out = ctx.proj_dir / f"{ctx.proj_dir.name}.srt"
                 try:
-                    generate_srt(result.timeline_ir, srt_out)
-                    result.srt_path = srt_out
+                    generate_srt(ctx.result.timeline_ir, srt_out)
+                    ctx.result.srt_path = srt_out
                     logger.info(f"SRT captions generated at: {srt_out}")
                 except Exception as e:
                     logger.warning(f"Failed to generate SRT captions: {e}")
 
             pub: VideoPublisher
-            if publisher is not None:
-                pub = publisher
-            elif mock_upload:
+            if ctx.publisher is not None:
+                pub = ctx.publisher
+            elif ctx.mock_upload:
                 from veraxi_ymmp.exporters.youtube_adapter import MockYouTubeAdapter
 
                 pub = MockYouTubeAdapter()
@@ -544,32 +666,32 @@ class ProjectPipeline:
 
             try:
                 meta = VideoPublishMetadata(
-                    title=title or proj_dir.name,
-                    description=description or "",
-                    tags=tags or [],
+                    title=ctx.title or ctx.proj_dir.name,
+                    description=ctx.description or "",
+                    tags=ctx.tags or [],
                     category_id="22",
-                    privacy_status=privacy_status,
-                    publish_at=publish_at,
-                    language=language,
-                    thumbnail_path=result.thumbnail_path,
+                    privacy_status=ctx.privacy_status,
+                    publish_at=ctx.publish_at,
+                    language=ctx.language,
+                    thumbnail_path=ctx.result.thumbnail_path,
                 )
                 upload_res = pub.upload_video(video_path=video_to_upload, metadata=meta)
-                result.upload_result = upload_res
+                ctx.result.upload_result = upload_res
 
                 if upload_res.status in ("completed", "uploaded"):
-                    if result.thumbnail_path and result.thumbnail_path.exists() and not upload_res.thumbnail_uploaded:
+                    if ctx.result.thumbnail_path and ctx.result.thumbnail_path.exists() and not upload_res.thumbnail_uploaded:
                         try:
-                            pub.upload_thumbnail(upload_res.video_id, result.thumbnail_path)
+                            pub.upload_thumbnail(upload_res.video_id, ctx.result.thumbnail_path)
                             upload_res.thumbnail_uploaded = True
                             logger.info(f"Thumbnail uploaded for video {upload_res.video_id}")
                         except Exception as e:
                             logger.warning(f"Failed to upload thumbnail: {e}")
-                    if result.srt_path and result.srt_path.exists():
+                    if ctx.result.srt_path and ctx.result.srt_path.exists():
                         try:
                             pub.upload_caption(
                                 upload_res.video_id,
-                                result.srt_path,
-                                language=language,
+                                ctx.result.srt_path,
+                                language=ctx.language,
                                 name="Japanese",
                             )
                             logger.info(f"Captions uploaded for video {upload_res.video_id}")
@@ -578,19 +700,15 @@ class ProjectPipeline:
                 else:
                     err_msg = f"YouTube upload failed: {upload_res.error_message or upload_res.status}"
                     logger.error(err_msg)
-                    result.errors.append(err_msg)
-                    result.success = False
+                    ctx.result.errors.append(err_msg)
+                    ctx.result.success = False
             except Exception as e:
                 err_msg = f"Failed during YouTube upload: {e}"
                 logger.error(err_msg)
-                result.errors.append(err_msg)
-                result.success = False
+                ctx.result.errors.append(err_msg)
+                ctx.result.success = False
 
-        if result.errors:
-            result.success = False
-
-        logger.info(f"Project '{proj_dir.name}' Execution Finished!")
-        return result
+        return True
 
 
 def run_project(

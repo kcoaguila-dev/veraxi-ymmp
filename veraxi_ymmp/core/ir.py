@@ -49,6 +49,57 @@ class DynamicImageClip(IRClip):
         )
 
 @dataclass
+class DynamicVideoClip(IRClip):
+    """A real video clip (e.g. a Muse/Gemini-generated clip) on the timeline.
+
+    ``in_point``/``out_point`` are seconds into the source file. The
+    timeline ``length`` (frames, from IRClip) is the placed duration,
+    which is shorter than ``out_point - in_point`` when the cut is
+    shorter than the clip. ``muted`` defaults to True: ingested clips
+    sit under the voice track unless the Director explicitly unmutes.
+    """
+
+    video_path: Path
+    clip_id: str = ""
+    in_point: float = 0.0
+    out_point: Optional[float] = None
+    muted: bool = True
+
+    @property
+    def source_span(self) -> Optional[float]:
+        """Seconds of source material spanned, or None when open-ended."""
+        if self.out_point is None:
+            return None
+        return max(0.0, self.out_point - self.in_point)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": "DynamicVideoClip",
+            "start_frame": self.start_frame,
+            "length": self.length,
+            "video_path": str(self.video_path),
+            "clip_id": self.clip_id,
+            "in_point": self.in_point,
+            "out_point": self.out_point,
+            "muted": self.muted,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DynamicVideoClip":
+        return cls(
+            start_frame=int(data["start_frame"]),
+            length=int(data["length"]),
+            video_path=Path(data["video_path"]),
+            clip_id=str(data.get("clip_id", "")),
+            in_point=float(data.get("in_point", 0.0)),
+            out_point=(
+                None if data.get("out_point") is None else float(data["out_point"])
+            ),
+            muted=bool(data.get("muted", True)),
+        )
+
+
+@dataclass
 class DynamicAudioClip(IRClip):
     """Represents a dynamic audio clip (BGM/SFX)."""
     audio_path: Path
@@ -73,6 +124,7 @@ class TimelineIR:
     character_clips: List[CharacterClip] = field(default_factory=list)
     global_clips: List[GlobalClip] = field(default_factory=list)
     dynamic_image_clips: List[DynamicImageClip] = field(default_factory=list)
+    dynamic_video_clips: List[DynamicVideoClip] = field(default_factory=list)
     dynamic_audio_clips: List[DynamicAudioClip] = field(default_factory=list)
     camera_shots: List[CameraShotIR] = field(default_factory=list)
 

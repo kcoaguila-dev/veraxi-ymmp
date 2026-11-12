@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass, field
 import os
 import shutil
 from pathlib import Path
@@ -29,6 +30,7 @@ from moviepy import (
     CompositeVideoClip,
     ImageClip,
     VideoClip,
+    VideoFileClip,
 )
 
 from veraxi_ymmp.core.constants import DEFAULT_BGM_DUCKING_VOLUME
@@ -123,6 +125,42 @@ def create_speech_bubble(
     return clip.with_effects([Resize(pop_in)])
 
 
+@dataclass
+class _RenderContext:
+    """Mutable state shared by the MoviePyRenderer.render stage functions.
+
+    ``render`` is a thin sequencer; each stage reads and writes the fields
+    it needs here instead of threading dozens of locals through the old
+    463-line monolith.
+    """
+
+    ir: TimelineIR
+    fps: int
+    total_duration: float
+    is_vertical: bool
+    target_w: int
+    target_h: int
+    video_clips: List[Any] = field(default_factory=list)
+    audio_clips: List[Any] = field(default_factory=list)
+    frame_to_time: Dict[int, float] = field(default_factory=lambda: {0: 0.0})
+    talk_times: List[Tuple[float, float, str, Any, str]] = field(default_factory=list)
+    bubbles_list: List[Any] = field(default_factory=list)
+    char_open_intervals: Dict[str, List[Tuple[float, float]]] = field(default_factory=dict)
+    unique_chars: List[str] = field(default_factory=list)
+    x_offsets: Dict[str, Union[str, int, float]] = field(default_factory=dict)
+    char_height: int = 1250
+    y_pos: float = 80.0
+    right_side_chars: List[str] = field(default_factory=list)
+    has_alternating_right: bool = False
+    broll_ranges: List[Tuple[float, float]] = field(default_factory=list)
+    bgs: List[Any] = field(default_factory=list)
+    brolls: List[Any] = field(default_factory=list)
+    get_active_right_char: Optional[Callable[[float], str]] = None
+    is_in_broll: Optional[Callable[[float], bool]] = None
+    get_active_speaker: Optional[Callable[[float], Optional[str]]] = None
+
+
+
 class MoviePyRenderer:
     def __init__(
         self,
@@ -134,71 +172,93 @@ class MoviePyRenderer:
         self.fast_qa_duration: Optional[float] = fast_qa_duration
         self.final_video: Optional[Any] = None
 
+    def _make_render_context(self) -> _RenderContext:
+        """Setup stage: validate the IR and resolve canvas geometry."""
+        if self.ir is None:
+            raise ValueError("TimelineIR must be provided to render")
+        ir = self.ir
+        fps = ir.fps
+        t_data = getattr(ir, "template_data", {})
+        tl = t_data.get("Timelines", [{}])[0] if t_data.get("Timelines") else t_data.get("Timeline", {})
+        v_info = tl.get("VideoInfo", {}) if isinstance(tl, dict) else {}
+        is_vertical = bool(v_info.get("Height", 1080) > v_info.get("Width", 1920))
+        return _RenderContext(
+            ir=ir,
+            fps=fps,
+            total_duration=ir.total_frames / fps,
+            is_vertical=is_vertical,
+            target_w=1080 if is_vertical else 1920,
+            target_h=1920 if is_vertical else 1080,
+        )
+
     def render(
         self,
         output_path: Optional[str] = None,
         preset: str = "ultrafast",
         crf: Optional[int] = None,
     ) -> None:
-        if self.ir is None:
-            raise ValueError("TimelineIR must be provided to render")
-        fps = self.ir.fps
-        total_duration = self.ir.total_frames / fps
-        t_data = getattr(self.ir, "template_data", {})
-        tl = t_data.get("Timelines", [{}])[0] if t_data.get("Timelines") else t_data.get("Timeline", {})
-        v_info = tl.get("VideoInfo", {}) if isinstance(tl, dict) else {}
-        is_vertical = bool(v_info.get("Height", 1080) > v_info.get("Width", 1920))
-        target_w = 1080 if is_vertical else 1920
-        target_h = 1920 if is_vertical else 1080
+        """Render the video: a thin sequencer over the stage functions."""
+        ctx = self._make_render_context()
+        self._build_voice_track(ctx)
+        self._add_global_clips(ctx)
+        self._add_dynamic_images(ctx)
+        self._add_base_background(ctx)
+        self._add_dynamic_videos(ctx)
+        self._layout_characters(ctx)
+        self._compose_characters(ctx)
+        final_video = self._compose_scene(ctx)
+        final_video = self._mix_audio(ctx, final_video)
+        self._write_output(ctx, final_video, output_path, preset, crf)
 
-        video_clips = []
-        audio_clips = []
-
+    def _build_voice_track(self, ctx: _RenderContext) -> None:
+        """Voice stage: real-time mapping, voice audio, bubbles, lip-sync intervals."""
         # 1. First, process voice clips to build a real-time mapping!
-        frame_to_time = {0: 0.0}
+        ctx.frame_to_time = {0: 0.0}
         current_time = 0.0
-        talk_times = []
+        ctx.talk_times = []
         audio_readers = []
-        bubbles_list = []
-        char_open_intervals: Dict[str, List[Tuple[float, float]]] = {}
+        ctx.bubbles_list = []
+        ctx.char_open_intervals = {}
 
-        for vc in self.ir.voice_clips:
+        for vc in ctx.ir.voice_clips:
             start_time = current_time
-            frame_to_time[vc.start_frame] = start_time
+            ctx.frame_to_time[vc.start_frame] = start_time
 
             if vc.audio_path:
                 ac = AudioFileClip(str(vc.audio_path))
                 dur = ac.duration + 0.3
             else:
-                dur = vc.length / fps
+                dur = vc.length / ctx.fps
 
-            talk_times.append((start_time, start_time + dur, vc.emotion, getattr(vc, "motion", "none"), vc.character))
+            ctx.talk_times.append((start_time, start_time + dur, vc.emotion, getattr(vc, "motion", "none"), vc.character))
             if vc.audio_path:
                 audio_readers.append((start_time, start_time + dur, ac, vc.character))
-                audio_clips.append(ac.with_start(start_time))
+                ctx.audio_clips.append(ac.with_start(start_time))
 
             # Sliced phonetic open intervals for speech lip-sync
-            if vc.character not in char_open_intervals:
-                char_open_intervals[vc.character] = []
-            blocks = extract_phonetic_blocks(vc.audio_query, dur, fps=fps)
+            if vc.character not in ctx.char_open_intervals:
+                ctx.char_open_intervals[vc.character] = []
+            blocks = extract_phonetic_blocks(vc.audio_query, dur, fps=ctx.fps)
             for b_s, b_e, is_open in blocks:
                 if is_open:
-                    char_open_intervals[vc.character].append((start_time + b_s, start_time + b_e))
+                    ctx.char_open_intervals[vc.character].append((start_time + b_s, start_time + b_e))
 
             border_color = get_char_color(vc.character)
 
-            bubble = create_speech_bubble(vc.text, dur, border_color, is_vertical=is_vertical).with_start(start_time)
-            bubble_y = getattr(bubble, "layout_y", 1380 if is_vertical else 725)
+            bubble = create_speech_bubble(vc.text, dur, border_color, is_vertical=ctx.is_vertical).with_start(start_time)
+            bubble_y = getattr(bubble, "layout_y", 1380 if ctx.is_vertical else 725)
             bubble = bubble.with_position(("center", bubble_y))
-            bubbles_list.append(bubble)
+            ctx.bubbles_list.append(bubble)
 
             current_time += dur
-            frame_to_time[vc.start_frame + vc.length] = current_time
+            ctx.frame_to_time[vc.start_frame + vc.length] = current_time
 
-        total_duration = current_time + 2.0
+        ctx.total_duration = current_time + 2.0
 
+    def _add_global_clips(self, ctx: _RenderContext) -> None:
+        """Global clips stage: template background and BGM items."""
         # 2. Global clips (BG, BGM)
-        for gc in self.ir.global_clips:
+        for gc in ctx.ir.global_clips:
             t_item = gc.template_item or {}
             file_path = gc.file_path or t_item.get("FilePath")
 
@@ -211,79 +271,114 @@ class MoviePyRenderer:
 
             if gc.item_type == "AudioItem" or "Volume" in t_item:
                 audio_clip = AudioFileClip(str(path))
-                if audio_clip.duration > total_duration:
-                    audio_clip = audio_clip.subclipped(0, total_duration)
+                if audio_clip.duration > ctx.total_duration:
+                    audio_clip = audio_clip.subclipped(0, ctx.total_duration)
                 audio_clip = audio_clip.with_volume_scaled(DEFAULT_BGM_DUCKING_VOLUME / 100.0)
-                audio_clips.append(audio_clip.with_start(0))
+                ctx.audio_clips.append(audio_clip.with_start(0))
             else:
-                img_clip = ImageClip(str(path)).with_duration(total_duration).with_position("center")
-                video_clips.append(img_clip)
+                img_clip = ImageClip(str(path)).with_duration(ctx.total_duration).with_position("center")
+                ctx.video_clips.append(img_clip)
 
+    def _add_dynamic_images(self, ctx: _RenderContext) -> None:
+        """Per-clip compose (images): dynamic B-roll and background slides."""
         # 2. Dynamic B-Roll (Shown directly, clean and normal)
-        bgs = []
-        brolls = []
-        for d_clip in self.ir.dynamic_image_clips:
+        ctx.bgs = []
+        ctx.brolls = []
+        for d_clip in ctx.ir.dynamic_image_clips:
             is_bg = _is_background_clip(d_clip)
 
             # Use real time mapping instead of raw frames!
-            start_t = frame_to_time.get(d_clip.start_frame, d_clip.start_frame / fps)
+            start_t = ctx.frame_to_time.get(d_clip.start_frame, d_clip.start_frame / ctx.fps)
             end_frame = d_clip.start_frame + d_clip.length
 
-            if d_clip.length == -1 or end_frame not in frame_to_time:
-                dur = total_duration - start_t
+            if d_clip.length == -1 or end_frame not in ctx.frame_to_time:
+                dur = ctx.total_duration - start_t
             else:
-                dur = frame_to_time[end_frame] - start_t
+                dur = ctx.frame_to_time[end_frame] - start_t
 
             if is_bg:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                if is_vertical:
+                if ctx.is_vertical:
                     img = img.resized(height=1920).with_position("center")
                 else:
                     img = img.resized((1920, 1080)).with_position("center")
-                bgs.append(img)
+                ctx.bgs.append(img)
             else:
                 img = ImageClip(str(d_clip.image_path)).with_start(start_t).with_duration(dur)
-                if is_vertical:
+                if ctx.is_vertical:
                     img = (img if getattr(img, "w", 0) == 1080 else img.resized(width=1080)).with_position(("center", 60))
                 else:
                     img = img.resized((1920, 1080)).with_position("center")
-                brolls.append(img)
+                ctx.brolls.append(img)
 
 
+    def _add_dynamic_videos(self, ctx: _RenderContext) -> None:
+        """Per-clip compose (videos): ingested DynamicVideoClips above B-roll.
+
+        Each clip is subclipped to [in_point, in_point + placed duration],
+        resized to the canvas like B-roll images, and stripped of audio
+        when muted (the default — voices/BGM are mixed separately).
+        """
+        for v_clip in ctx.ir.dynamic_video_clips:
+            if v_clip.length <= 0:
+                continue
+            start_t = ctx.frame_to_time.get(
+                v_clip.start_frame, v_clip.start_frame / ctx.fps
+            )
+            end_frame = v_clip.start_frame + v_clip.length
+            if end_frame in ctx.frame_to_time:
+                dur = ctx.frame_to_time[end_frame] - start_t
+            else:
+                dur = v_clip.length / ctx.fps
+            try:
+                src = VideoFileClip(str(v_clip.video_path))
+            except Exception as e:
+                logger.error(f"Failed to load video clip {v_clip.video_path}: {e}")
+                continue
+            end_t = min(v_clip.in_point + dur, src.duration)
+            clip = src.subclipped(v_clip.in_point, end_t)
+            if v_clip.muted:
+                clip = clip.without_audio()
+            if ctx.is_vertical:
+                clip = clip.resized(width=1080).with_position(("center", 60))
+            else:
+                clip = clip.resized((1920, 1080)).with_position("center")
+            ctx.video_clips.append(clip.with_start(start_t).with_duration(dur))
+
+    def _add_base_background(self, ctx: _RenderContext) -> None:
+        """Base background stage: classroom.jpg or the default_dark.png fallback."""
         # Base Background (Layer 0) - ensure default background is always present under slides
-        from veraxi_ymmp.core.constants import DEFAULT_BG_CANDIDATES, DEFAULT_BG_IMAGE_PATH
-        default_bg_path = Path(DEFAULT_BG_IMAGE_PATH)
-        if not default_bg_path.exists():
-            for cand in DEFAULT_BG_CANDIDATES:
-                p = Path(cand)
-                if p.exists():
-                    default_bg_path = p
-                    break
+        # Optional local classroom.jpg is preferred; default_dark.png is the
+        # committed fallback when it is absent (see assets/ASSETS.md).
+        from veraxi_ymmp.core.constants import resolve_background_image
+        default_bg_path = resolve_background_image()
         if default_bg_path.exists():
-            bg_img = ImageClip(str(default_bg_path)).with_duration(total_duration)
-            if is_vertical:
+            bg_img = ImageClip(str(default_bg_path)).with_duration(ctx.total_duration)
+            if ctx.is_vertical:
                 bg_img = bg_img.resized(height=1920).with_position("center")
             else:
                 bg_img = bg_img.resized((1920, 1080)).with_position("center")
-            video_clips.insert(0, bg_img)
+            ctx.video_clips.insert(0, bg_img)
         else:
             # Fallback to in-memory Pro Dark Slate (#0F172A) canvas
-            bg_size = (1080, 1920) if is_vertical else (1920, 1080)
-            fallback_bg = ColorClip(size=bg_size, color=(15, 23, 42), duration=total_duration).with_position("center")
-            video_clips.insert(0, fallback_bg)
+            bg_size = (1080, 1920) if ctx.is_vertical else (1920, 1080)
+            fallback_bg = ColorClip(size=bg_size, color=(15, 23, 42), duration=ctx.total_duration).with_position("center")
+            ctx.video_clips.insert(0, fallback_bg)
 
-        video_clips.extend(bgs)
-        video_clips.extend(brolls)
+        ctx.video_clips.extend(ctx.bgs)
+        ctx.video_clips.extend(ctx.brolls)
 
+    def _layout_characters(self, ctx: _RenderContext) -> None:
+        """Character layout stage: positions, offsets and b-roll ranges."""
         # 3. Dynamic Characters
-        unique_chars = []
-        for vc in self.ir.voice_clips:
-            if vc.character not in unique_chars:
-                unique_chars.append(vc.character)
+        ctx.unique_chars = []
+        for vc in ctx.ir.voice_clips:
+            if vc.character not in ctx.unique_chars:
+                ctx.unique_chars.append(vc.character)
 
         # Calculate X offsets based on number of characters
-        num_chars = len(unique_chars)
-        x_offsets: Dict[str, Union[str, int, float]] = {}
+        num_chars = len(ctx.unique_chars)
+        ctx.x_offsets = {}
 
         # YMM4 Convention: Zundamon is usually the reactor (Right), Metan is explainer (Left)
         def char_sort_key(c: str) -> int:
@@ -294,188 +389,199 @@ class MoviePyRenderer:
             }
             return convention.get(c, 5)
 
-        sorted_chars = sorted(unique_chars, key=char_sort_key)
+        sorted_chars = sorted(ctx.unique_chars, key=char_sort_key)
 
         char_positions: Dict[str, str] = {}
-        for cclip in getattr(self.ir, "character_clips", []):
+        for cclip in getattr(ctx.ir, "character_clips", []):
             if cclip.character not in char_positions:
                 char_positions[cclip.character] = cclip.position
 
-        right_side_chars = [
-            c for c in unique_chars
+        ctx.right_side_chars = [
+            c for c in ctx.unique_chars
             if char_positions.get(c) == "right" or c in ["ずんだもん", "春日部つむぎ"]
         ]
-        has_alternating_right = len(right_side_chars) > 1
+        ctx.has_alternating_right = len(ctx.right_side_chars) > 1
 
         def get_active_right_char(t: float) -> str:
-            active = right_side_chars[0] if right_side_chars else ""
-            for st, et, _, _, spk in talk_times:
-                if spk in right_side_chars:
+            active = ctx.right_side_chars[0] if ctx.right_side_chars else ""
+            for st, et, _, _, spk in ctx.talk_times:
+                if spk in ctx.right_side_chars:
                     if st <= t:
                         active = spk
                     if st <= t <= et:
                         return spk
             return active
 
-        if is_vertical:
-            char_height = 800
-            y_pos = 1920 - char_height - 300
-            if has_alternating_right:
-                for c in unique_chars:
-                    x_offsets[c] = 470 if c in right_side_chars else 30
+        if ctx.is_vertical:
+            ctx.char_height = 800
+            ctx.y_pos = 1920 - ctx.char_height - 300
+            if ctx.has_alternating_right:
+                for c in ctx.unique_chars:
+                    ctx.x_offsets[c] = 470 if c in ctx.right_side_chars else 30
             elif num_chars == 1:
-                x_offsets[sorted_chars[0]] = 'center'
+                ctx.x_offsets[sorted_chars[0]] = 'center'
             elif num_chars == 2:
-                x_offsets[sorted_chars[0]] = 30   # Left (Metan)
-                x_offsets[sorted_chars[1]] = 470  # Right (Zundamon)
+                ctx.x_offsets[sorted_chars[0]] = 30   # Left (Metan)
+                ctx.x_offsets[sorted_chars[1]] = 470  # Right (Zundamon)
             else:
                 spacing = (1080 - 400) / max(num_chars - 1, 1)
                 for i, c in enumerate(sorted_chars):
-                    x_offsets[c] = int(i * spacing)
+                    ctx.x_offsets[c] = int(i * spacing)
         else:
-            char_height = 1250
-            y_pos = 1080 - char_height + 250
-            if has_alternating_right:
-                for c in unique_chars:
-                    x_offsets[c] = 1180 if c in right_side_chars else 80
+            ctx.char_height = 1250
+            ctx.y_pos = 1080 - ctx.char_height + 250
+            if ctx.has_alternating_right:
+                for c in ctx.unique_chars:
+                    ctx.x_offsets[c] = 1180 if c in ctx.right_side_chars else 80
             elif num_chars == 1:
-                x_offsets[sorted_chars[0]] = 'center'
+                ctx.x_offsets[sorted_chars[0]] = 'center'
             elif num_chars == 2:
-                x_offsets[sorted_chars[0]] = 80   # Left (Metan)
-                x_offsets[sorted_chars[1]] = 1180 # Right (Zundamon)
+                ctx.x_offsets[sorted_chars[0]] = 80   # Left (Metan)
+                ctx.x_offsets[sorted_chars[1]] = 1180 # Right (Zundamon)
             else:
                 spacing = (1920 - 700) / (num_chars - 1)
                 for i, c in enumerate(sorted_chars):
-                    x_offsets[c] = int(i * spacing)
+                    ctx.x_offsets[c] = int(i * spacing)
 
-        broll_ranges = []
-        for d_clip in self.ir.dynamic_image_clips:
+        ctx.broll_ranges = []
+        for d_clip in ctx.ir.dynamic_image_clips:
             is_bg = _is_background_clip(d_clip)
             if not is_bg:
-                s_t = frame_to_time.get(d_clip.start_frame, d_clip.start_frame / fps)
+                s_t = ctx.frame_to_time.get(d_clip.start_frame, d_clip.start_frame / ctx.fps)
                 e_fr = d_clip.start_frame + d_clip.length
-                d_t = total_duration - s_t if d_clip.length == -1 or e_fr not in frame_to_time else (frame_to_time[e_fr] - s_t)
-                broll_ranges.append((s_t, s_t + d_t))
+                d_t = ctx.total_duration - s_t if d_clip.length == -1 or e_fr not in ctx.frame_to_time else (ctx.frame_to_time[e_fr] - s_t)
+                ctx.broll_ranges.append((s_t, s_t + d_t))
 
         def is_in_broll(t: float) -> bool:
-            for bs, be in broll_ranges:
+            for bs, be in ctx.broll_ranges:
                 if bs <= t <= be:
                     return True
             return False
 
         def get_active_speaker(t: float) -> Optional[str]:
-            for st, et, _, _, spk in talk_times:
+            for st, et, _, _, spk in ctx.talk_times:
                 if st <= t <= et:
                     return spk
             return None
 
-        for char in unique_chars:
-            char_faces_dir = Path("assets/faces") / char
-            if not char_faces_dir.exists():
-                char_faces_dir = Path("assets/faces")
+        ctx.get_active_right_char = get_active_right_char
+        ctx.is_in_broll = is_in_broll
+        ctx.get_active_speaker = get_active_speaker
+    def _compose_character(self, ctx: _RenderContext, char: str) -> None:
+        """Per-clip compose: one character's lip-sync video clip."""
+        is_in_broll = cast(Callable[[float], bool], ctx.is_in_broll)
+        get_active_speaker = cast(Callable[[float], Optional[str]], ctx.get_active_speaker)
+        get_active_right_char = cast(Callable[[float], str], ctx.get_active_right_char)
+        char_faces_dir = Path("assets/faces") / char
+        if not char_faces_dir.exists():
+            char_faces_dir = Path("assets/faces")
 
-            emotion_clips = {}
-            for emotion in ["neutral", "happy", "angry", "sad", "surprised"]:
-                path_open = char_faces_dir / f"{emotion}_open.png"
-                path_closed = char_faces_dir / f"{emotion}_closed.png"
+        emotion_clips = {}
+        for emotion in ["neutral", "happy", "angry", "sad", "surprised"]:
+            path_open = char_faces_dir / f"{emotion}_open.png"
+            path_closed = char_faces_dir / f"{emotion}_closed.png"
+            if not path_open.exists():
+                path_open = char_faces_dir / "neutral_open.png"
+                path_closed = char_faces_dir / "neutral_closed.png"
                 if not path_open.exists():
-                    path_open = char_faces_dir / "neutral_open.png"
-                    path_closed = char_faces_dir / "neutral_closed.png"
-                    if not path_open.exists():
-                        path_open = Path("assets/faces/neutral_open.png")
-                        path_closed = Path("assets/faces/neutral_closed.png")
+                    path_open = Path("assets/faces/neutral_open.png")
+                    path_closed = Path("assets/faces/neutral_closed.png")
 
-                if path_open.exists() and path_closed.exists():
-                    c_open = ImageClip(str(path_open)).resized(height=char_height)
-                    c_closed = ImageClip(str(path_closed)).resized(height=char_height)
-                    emotion_clips[emotion] = {
-                        "open_img": np.array(c_open.get_frame(0)),
-                        "closed_img": np.array(c_closed.get_frame(0)),
-                        "open_mask": np.array(c_open.mask.get_frame(0)),
-                        "closed_mask": np.array(c_closed.mask.get_frame(0))
-                    }
+            if path_open.exists() and path_closed.exists():
+                c_open = ImageClip(str(path_open)).resized(height=ctx.char_height)
+                c_closed = ImageClip(str(path_closed)).resized(height=ctx.char_height)
+                emotion_clips[emotion] = {
+                    "open_img": np.array(c_open.get_frame(0)),
+                    "closed_img": np.array(c_closed.get_frame(0)),
+                    "open_mask": np.array(c_open.mask.get_frame(0)),
+                    "closed_mask": np.array(c_closed.mask.get_frame(0))
+                }
 
-            def make_bounce_offset(c_name: str, base_x: Union[str, int, float]) -> Callable[[float], Tuple[Union[str, int, float], float]]:
-                def get_bounce_offset(t: float) -> Tuple[Union[str, int, float], float]:
-                    bx: Union[str, int, float] = base_x
-                    by: float = float(y_pos)
-                    if is_in_broll(t):
-                        spk = get_active_speaker(t)
-                        if not is_vertical:
-                            if spk == c_name:
-                                bx = 1350
-                                by = 240.0
-                            else:
-                                return (-9999, -9999.0)
-                    elif has_alternating_right and c_name in right_side_chars:
-                        if get_active_right_char(t) != c_name:
+        def make_bounce_offset(c_name: str, base_x: Union[str, int, float]) -> Callable[[float], Tuple[Union[str, int, float], float]]:
+            def get_bounce_offset(t: float) -> Tuple[Union[str, int, float], float]:
+                bx: Union[str, int, float] = base_x
+                by: float = float(ctx.y_pos)
+                if is_in_broll(t):
+                    spk = get_active_speaker(t)
+                    if not ctx.is_vertical:
+                        if spk == c_name:
+                            bx = 1350
+                            by = 240.0
+                        else:
                             return (-9999, -9999.0)
+                elif ctx.has_alternating_right and c_name in ctx.right_side_chars:
+                    if get_active_right_char(t) != c_name:
+                        return (-9999, -9999.0)
 
-                    for st, et, emo, motion, char_speaker in talk_times:
-                        if st <= t <= et and char_speaker == c_name:
-                            if motion == "jump":
-                                by += max(-20.0, -40.0 * abs(math.sin(math.pi * (t - st) / 0.5)))
-                            return (bx, by)
-                    return (bx, by)
-                return get_bounce_offset
-
-            def get_mouth_state(t: float, c_name: str) -> bool:
-                # Check exact mora-synchronized vowel intervals (the rival standard)
-                intervals = char_open_intervals.get(c_name, [])
-                for op_s, op_e in intervals:
-                    if op_s <= t < op_e:
-                        return True
-                return False
-
-            def get_current_emotion(t: float, c_name: str) -> str:
-                for st, et, emo, motion, char_speaker in talk_times:
+                for st, et, emo, motion, char_speaker in ctx.talk_times:
                     if st <= t <= et and char_speaker == c_name:
-                        return str(emo)
-                return "neutral"
+                        if motion == "jump":
+                            by += max(-20.0, -40.0 * abs(math.sin(math.pi * (t - st) / 0.5)))
+                        return (bx, by)
+                return (bx, by)
+            return get_bounce_offset
 
-            def make_mouth_image(c_name: str, e_clips: Dict[str, Dict[str, Any]]) -> Callable[[float], np.ndarray]:
-                def get_mouth_image(t: float) -> np.ndarray:
-                    emo = get_current_emotion(t, c_name)
-                    if emo not in e_clips:
-                        emo = "neutral"
-                    if emo not in e_clips:
-                        return np.zeros((700, 700, 3), dtype=np.uint8)
-                    is_open = get_mouth_state(t, c_name)
-                    val = e_clips[emo]["open_img"] if is_open else e_clips[emo]["closed_img"]
-                    return cast(np.ndarray, val)
-                return get_mouth_image
+        def get_mouth_state(t: float, c_name: str) -> bool:
+            # Check exact mora-synchronized vowel intervals (the rival standard)
+            intervals = ctx.char_open_intervals.get(c_name, [])
+            for op_s, op_e in intervals:
+                if op_s <= t < op_e:
+                    return True
+            return False
 
-            def make_mouth_mask(c_name: str, e_clips: Dict[str, Dict[str, Any]]) -> Callable[[float], np.ndarray]:
-                def get_mouth_mask(t: float) -> np.ndarray:
-                    if is_in_broll(t) and not is_vertical:
-                        spk = get_active_speaker(t)
-                        if spk != c_name:
-                            h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
-                            return np.zeros((h, w), dtype=np.uint8)
-                    elif has_alternating_right and c_name in right_side_chars:
-                        if get_active_right_char(t) != c_name:
-                            h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
-                            return np.zeros((h, w), dtype=np.uint8)
-                    emo = get_current_emotion(t, c_name)
-                    if emo not in e_clips:
-                        emo = "neutral"
-                    if emo not in e_clips:
-                        return np.zeros((700, 700), dtype=np.uint8)
-                    is_open = get_mouth_state(t, c_name)
-                    val = e_clips[emo]["open_mask"] if is_open else e_clips[emo]["closed_mask"]
-                    return cast(np.ndarray, val)
-                return get_mouth_mask
+        def get_current_emotion(t: float, c_name: str) -> str:
+            for st, et, emo, motion, char_speaker in ctx.talk_times:
+                if st <= t <= et and char_speaker == c_name:
+                    return str(emo)
+            return "neutral"
 
-            c_clip = VideoClip(frame_function=make_mouth_image(char, emotion_clips)).with_duration(total_duration)
-            c_mask = VideoClip(frame_function=make_mouth_mask(char, emotion_clips), is_mask=True).with_duration(total_duration)
-            c_clip = c_clip.with_mask(c_mask).with_position(make_bounce_offset(char, x_offsets[char]))
-            video_clips.append(c_clip)
+        def make_mouth_image(c_name: str, e_clips: Dict[str, Dict[str, Any]]) -> Callable[[float], np.ndarray]:
+            def get_mouth_image(t: float) -> np.ndarray:
+                emo = get_current_emotion(t, c_name)
+                if emo not in e_clips:
+                    emo = "neutral"
+                if emo not in e_clips:
+                    return np.zeros((700, 700, 3), dtype=np.uint8)
+                is_open = get_mouth_state(t, c_name)
+                val = e_clips[emo]["open_img"] if is_open else e_clips[emo]["closed_img"]
+                return cast(np.ndarray, val)
+            return get_mouth_image
 
-        logger.info("Compositing scene elements...")
-        scene_video = CompositeVideoClip(video_clips, size=(target_w, target_h)).with_duration(total_duration)
+        def make_mouth_mask(c_name: str, e_clips: Dict[str, Dict[str, Any]]) -> Callable[[float], np.ndarray]:
+            def get_mouth_mask(t: float) -> np.ndarray:
+                if is_in_broll(t) and not ctx.is_vertical:
+                    spk = get_active_speaker(t)
+                    if spk != c_name:
+                        h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
+                        return np.zeros((h, w), dtype=np.uint8)
+                elif ctx.has_alternating_right and c_name in ctx.right_side_chars:
+                    if get_active_right_char(t) != c_name:
+                        h, w = e_clips["neutral"]["open_mask"].shape[:2] if "neutral" in e_clips else (700, 700)
+                        return np.zeros((h, w), dtype=np.uint8)
+                emo = get_current_emotion(t, c_name)
+                if emo not in e_clips:
+                    emo = "neutral"
+                if emo not in e_clips:
+                    return np.zeros((700, 700), dtype=np.uint8)
+                is_open = get_mouth_state(t, c_name)
+                val = e_clips[emo]["open_mask"] if is_open else e_clips[emo]["closed_mask"]
+                return cast(np.ndarray, val)
+            return get_mouth_mask
 
+        c_clip = VideoClip(frame_function=make_mouth_image(char, emotion_clips)).with_duration(ctx.total_duration)
+        c_mask = VideoClip(frame_function=make_mouth_mask(char, emotion_clips), is_mask=True).with_duration(ctx.total_duration)
+        c_clip = c_clip.with_mask(c_mask).with_position(make_bounce_offset(char, ctx.x_offsets[char]))
+        ctx.video_clips.append(c_clip)
+
+    def _compose_characters(self, ctx: _RenderContext) -> None:
+        """Compose every character clip onto the scene."""
+        for char in ctx.unique_chars:
+            self._compose_character(ctx, char)
+
+    def _apply_camera(self, ctx: _RenderContext, scene_video: Any) -> Any:
+        """Virtual camera stage: pan, zoom, punch-in and shake."""
         # Apply Dynamic Virtual Camera Shot IR (Pan, Zoom, Punch-in, Shake)
-        camera_shots = getattr(self.ir, "camera_shots", [])
+        camera_shots = getattr(ctx.ir, "camera_shots", [])
         has_dynamic_shots = any(
             (shot.zoom > 1.01 or shot.pan_x != 0.0 or shot.pan_y != 0.0 or getattr(shot, "shake_frames", 0) > 0)
             for shot in camera_shots
@@ -484,7 +590,7 @@ class MoviePyRenderer:
             from PIL import Image
 
             def get_active_camera_shot(t: float) -> Optional[Any]:
-                fr = int(t * fps)
+                fr = int(t * ctx.fps)
                 for shot in camera_shots:
                     if shot.start_frame <= fr < shot.start_frame + shot.length:
                         return shot
@@ -503,7 +609,7 @@ class MoviePyRenderer:
                 pan_y = float(shot.pan_y)
 
                 if getattr(shot, "shake_frames", 0) > 0:
-                    fr = int(t * fps)
+                    fr = int(t * ctx.fps)
                     elapsed_fr = fr - shot.start_frame
                     if elapsed_fr < shot.shake_frames:
                         shake_sign = 1 if (elapsed_fr % 2 == 0) else -1
@@ -527,51 +633,63 @@ class MoviePyRenderer:
                 resized = img.resize((w, h), Image.Resampling.BILINEAR)
                 return cast(np.ndarray, np.array(resized))
 
-            scene_video = VideoClip(frame_function=camera_frame_fn).with_duration(total_duration)
+            scene_video = VideoClip(frame_function=camera_frame_fn).with_duration(ctx.total_duration)
+
+        return scene_video
+
+    def _compose_scene(self, ctx: _RenderContext) -> Any:
+        """Composite the scene, apply the virtual camera, overlay bubbles."""
+        logger.info("Compositing scene elements...")
+        scene_video = CompositeVideoClip(ctx.video_clips, size=(ctx.target_w, ctx.target_h)).with_duration(ctx.total_duration)
+        scene_video = self._apply_camera(ctx, scene_video)
 
         # Overlay HUD speech bubbles above virtual camera rig
-        if bubbles_list:
+        if ctx.bubbles_list:
             logger.info("Overlaying speech bubbles above virtual camera rig...")
-            final_video = CompositeVideoClip([scene_video, *bubbles_list], size=(target_w, target_h)).with_duration(total_duration)
-        else:
-            final_video = scene_video
+            return CompositeVideoClip([scene_video, *ctx.bubbles_list], size=(ctx.target_w, ctx.target_h)).with_duration(ctx.total_duration)
+        return scene_video
 
+    def _mix_audio(self, ctx: _RenderContext, final_video: Any) -> Any:
+        """Audio mix stage: dynamic BGM/SFX, composite audio, fade-out."""
         # 6. Global Audio (BGM/SFX)
         from moviepy.audio.fx import AudioFadeOut
 
-        for clip in self.ir.dynamic_audio_clips:
+        for clip in ctx.ir.dynamic_audio_clips:
             if not clip.audio_path:
                 continue
 
             try:
                 ac = AudioFileClip(str(clip.audio_path))
                 if clip.length == -1: # Looped BGM
-                    dur = total_duration - (clip.start_frame/fps)
-                    duck_factor = (DEFAULT_BGM_DUCKING_VOLUME / 100.0) if talk_times else 1.0
+                    dur = ctx.total_duration - (clip.start_frame/ctx.fps)
+                    duck_factor = (DEFAULT_BGM_DUCKING_VOLUME / 100.0) if ctx.talk_times else 1.0
                     vol = clip.volume * duck_factor if clip.volume > 0.5 else clip.volume
                     ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(vol)
                     ac = ac.with_effects([AudioFadeOut(2.0)])
                 else:
-                    dur = clip.length / fps
+                    dur = clip.length / ctx.fps
                     ac = ac.subclipped(0, min(dur, ac.duration)).with_volume_scaled(clip.volume)
-                audio_clips.append(ac.with_start(clip.start_frame/fps))
+                ctx.audio_clips.append(ac.with_start(clip.start_frame/ctx.fps))
             except Exception as e:
                 logger.error(f"Failed to load audio {clip.audio_path}: {e}")
 
-        if audio_clips:
-            final_audio = CompositeAudioClip(audio_clips).with_duration(total_duration)
+        if ctx.audio_clips:
+            final_audio = CompositeAudioClip(ctx.audio_clips).with_duration(ctx.total_duration)
             final_video = final_video.with_audio(final_audio)
 
         from moviepy.video.fx import FadeOut
         final_video = final_video.with_effects([FadeOut(2.0)])
+        return final_video
 
+    def _write_output(self, ctx: _RenderContext, final_video: Any, output_path: Optional[str], preset: str, crf: Optional[int]) -> None:
+        """Write stage: fast-QA trim and write_videofile."""
         self.final_video = final_video
         if output_path is None:
             return
         logger.info(f"Writing to {output_path}...")
         # Fast QA override if requested
         if self.fast_qa_duration is not None:
-            final_video = final_video.subclipped(0, min(self.fast_qa_duration, total_duration))
+            final_video = final_video.subclipped(0, min(self.fast_qa_duration, ctx.total_duration))
 
         ffmpeg_params = []
         if crf is not None:
@@ -597,6 +715,7 @@ class MoviePyRenderer:
             str(output_path),
             **write_kwargs,
         )
+
 
     def save_frame_at(self, t: float, output_path: str) -> None:
         if getattr(self, "final_video", None) is None:

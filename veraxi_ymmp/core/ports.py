@@ -5,7 +5,7 @@ Defines the formal boundaries and interfaces (Ports) according to Clean Architec
 - TimelineExporter: Exporter protocol for converting TimelineIR into target formats.
 - ExportResult: Data transfer object describing exported artifacts.
 - TTSBackend: Unified port for text-to-speech synthesis backends.
-- DirectorProvider: Unified port for script directing engines.
+- ScriptProvider: Unified port for script generation engines (topic + evidence dossier -> validated script).
 - VideoPublisher: Unified port for video uploading and thumbnail binding adapters.
 - VideoAnalyticsProvider: Unified port for video performance and audience retention telemetry.
 """
@@ -26,7 +26,7 @@ from typing import (
 )
 
 from enum import Enum
-from veraxi_ymmp.core.script import DirectorScriptEntry, WriterScriptEntry
+from veraxi_ymmp.core.script import DirectorScriptEntry
 from veraxi_ymmp.core.ir import (
     CutRetentionMetric,
     RetentionDropoffPoint,
@@ -218,11 +218,21 @@ PipelineProgressCallback = Callable[[str, float, str], None]
 
 
 @runtime_checkable
-class DirectorProvider(Protocol):
-    """Protocol for providers that can convert a writer script into a director script."""
+class ScriptProvider(Protocol):
+    """Protocol for providers that generate a validated script from a topic.
 
-    def generate_director_script(
-        self, writer_script: List[WriterScriptEntry]
+    A provider takes a topic plus the evidence dossier (the NotebookLM
+    dossier markdown produced by ``ideate``) and returns a validated
+    director script. Implementations raise ``ValueError`` with a
+    re-prompt-ready message when no valid script can be produced.
+
+    This replaces the former ``DirectorProvider`` port, whose only
+    conceivable implementation was the same manual web-chat handoff that
+    ``ManualHandoffProvider`` (app layer) now implements for real.
+    """
+
+    def generate_script(
+        self, topic: str, dossier: str
     ) -> List[DirectorScriptEntry]:
         ...
 
@@ -322,7 +332,7 @@ __all__ = [
     "TimelineExporter",
     "TTSBackend",
     "NullTTSBackend",
-    "DirectorProvider",
+    "ScriptProvider",
     "RetentionPoint",
     "RetentionDropoffPoint",
     "CutRetentionMetric",

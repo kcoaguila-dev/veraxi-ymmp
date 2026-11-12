@@ -248,3 +248,5 @@ For analytical, tech commentary, scientific, legal, or financial explainer video
   ]
 }
 ```
+
+> Optional assets: `assets/bg/classroom.jpg` and `assets/bgm/2_23_AM.mp3` are user-supplied and not tracked in git (see `assets/ASSETS.md`). If the BGM file is absent, use `"bgm": null`; if the classroom background is absent, the renderer falls back to `assets/bg/default_dark.png`. Never treat a missing optional asset as an error.

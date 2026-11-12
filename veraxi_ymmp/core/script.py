@@ -6,6 +6,8 @@ import logging
 import re
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
+from typing_extensions import NotRequired  # py310 target: typing.NotRequired is 3.11+
+
 logger = logging.getLogger(__name__)
 
 Emotion = Literal[
@@ -69,6 +71,7 @@ class DirectorScriptEntry(TypedDict):
     character_position: CharacterPosition
     subtitle_position: SubtitlePosition
     subtitle_style: SubtitleStyle
+    clip_id: NotRequired[Optional[str]]
 
 
 def validate_writer_script(data: Any) -> List[WriterScriptEntry]:
@@ -110,7 +113,7 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
     valid_emotions = VALID_EMOTIONS
     valid_motions = VALID_MOTIONS
     required_keys = {"character", "text", "emotion", "motion", "bgm", "sfx", "image"}
-    optional_keys = {"character_position", "subtitle_position", "subtitle_style", "bg"}
+    optional_keys = {"character_position", "subtitle_position", "subtitle_style", "bg", "clip_id"}
     expected_keys = required_keys | optional_keys
     valid_character_positions = VALID_CHARACTER_POSITIONS
     valid_subtitle_positions = VALID_SUBTITLE_POSITIONS
@@ -179,20 +182,25 @@ def validate_director_script(data: Any) -> List[DirectorScriptEntry]:
         if not isinstance(subtitle_style, str) or subtitle_style not in valid_subtitle_styles:
             raise ValueError(f"Entry {idx} 'subtitle_style' must be one of {valid_subtitle_styles}")
 
-        validated.append(
-            {
-                "character": char,
-                "text": text,
-                "emotion": emotion,  # type: ignore
-                "motion": motion,  # type: ignore
-                "bgm": bgm,
-                "sfx": sfx,
-                "image": image,
-                "character_position": character_position,  # type: ignore
-                "subtitle_position": subtitle_position,  # type: ignore
-                "subtitle_style": subtitle_style,  # type: ignore
-            }
-        )
+        clip_id = entry.get("clip_id")
+        if clip_id is not None and (not isinstance(clip_id, str) or not clip_id.strip()):
+            raise ValueError(f"Entry {idx} 'clip_id' must be null or a non-empty string")
+
+        validated_entry: DirectorScriptEntry = {
+            "character": char,
+            "text": text,
+            "emotion": emotion,  # type: ignore
+            "motion": motion,  # type: ignore
+            "bgm": bgm,
+            "sfx": sfx,
+            "image": image,
+            "character_position": character_position,  # type: ignore
+            "subtitle_position": subtitle_position,  # type: ignore
+            "subtitle_style": subtitle_style,  # type: ignore
+        }
+        if clip_id is not None:
+            validated_entry["clip_id"] = clip_id
+        validated.append(validated_entry)
 
     return validated
 
@@ -257,6 +265,9 @@ def validate_production_script(data: Any) -> List[Dict[str, Any]]:
             raise ValueError(f"Entry {idx} 'image' must be null or a non-empty string")
         if bg is not None and (not isinstance(bg, str) or not bg.strip()):
             raise ValueError(f"Entry {idx} 'bg' must be null or a non-empty string")
+        clip_id = entry.get("clip_id", None)
+        if clip_id is not None and (not isinstance(clip_id, str) or not clip_id.strip()):
+            raise ValueError(f"Entry {idx} 'clip_id' must be null or a non-empty string")
         if (
             not isinstance(character_position, str)
             or character_position not in VALID_CHARACTER_POSITIONS

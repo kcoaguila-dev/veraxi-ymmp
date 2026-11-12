@@ -42,6 +42,11 @@ def get_director_script_schema() -> Dict[str, Any]:
                     "type": ["string", "null"],
                     "default": None
                 },
+                "clip_id": {
+                    "type": ["string", "null"],
+                    "default": None,
+                    "description": "Optional ID of an ingested video clip (see clips/manifest.json) to play during this cut."
+                },
                 "character_position": {
                     "type": "string",
                     "enum": ["left", "center", "right"],

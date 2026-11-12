@@ -13,7 +13,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 ### 1. Script Generation & B-Roll Assets
 - Write the JSON script (e.g. `artifacts/script.json`).
 - Ensure it uses the new features: `"image"` (for dynamic B-roll) and `"motion"` (`"none"` or `"nod"`) when appropriate.
-- Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music.
+- Refer to `assets/bg/` and `assets/bgm/` for backgrounds and music. Both are **optional, not tracked in git** (see `assets/ASSETS.md`): if `assets/bg/classroom.jpg` is absent the background falls back to `assets/bg/default_dark.png`, and if `assets/bgm/2_23_AM.mp3` is absent the video is rendered with no BGM track.
 - **Epistemic Grounding & Audience Retention Standard (`veraxi_ymmp.epistemic.fact_audit` & `veraxi_ymmp.editorial.pacing`)**:
   - Run preflight epistemic + pacing validation: `veraxi-ymmp validate <script.json> --audit-facts --audit-pacing` (Epistemic Audit must pass with 0 unsupported claims; Retention Score must be $\ge 80/100$).
   - **Fail-Closed Epistemic Parity**: Every salient figure across Cold Open cuts (`0..10`), B-roll slides (`broll_manifest.json`), thumbnail (`thumbnail_config.json`), and YouTube metadata must match a `Verdict.SUPPORTED` claim in `claims.json` backed by verbatim primary source quotes (`sources/*.pdf`, `.html`, `.md`).

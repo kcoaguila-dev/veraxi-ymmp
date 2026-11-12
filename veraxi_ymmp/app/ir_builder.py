@@ -33,6 +33,7 @@ from veraxi_ymmp.core.ir import (
     CharacterClip,
     DynamicAudioClip,
     DynamicImageClip,
+    DynamicVideoClip,
     GlobalClip,
     TimelineIR,
     VoiceClip,
@@ -294,7 +295,9 @@ class TimelineIRBuilder:
         camera_shots: List[CameraShotIR] = []
         character_positions: Dict[str, str] = {}
         dynamic_image_clips: List[DynamicImageClip] = []
+        dynamic_video_clips: List[DynamicVideoClip] = []
         dynamic_audio_clips: List[DynamicAudioClip] = []
+        clips_index: Optional[Dict[str, Dict[str, Any]]] = None
         active_bg: Optional[DynamicImageClip] = None
         prev_entry: Optional[Dict[str, Any]] = None
 
@@ -566,9 +569,35 @@ class TimelineIRBuilder:
                     logger.warning(msg)
                     self.warnings.append(msg)
 
+            def add_video_clip(clip_id: str) -> None:
+                nonlocal clips_index
+                if clips_index is None:
+                    clips_index = {}
+                    from veraxi_ymmp.app.clip_ingest import (
+                        find_clips_manifest,
+                        load_clips_index,
+                    )
+                    manifest_path = find_clips_manifest([audio_dir, Path.cwd()])
+                    if manifest_path is not None:
+                        clips_index = load_clips_index(manifest_path)
+                entry = clips_index.get(clip_id)
+                if entry is None:
+                    msg = f"Video clip not found in clips manifest: {clip_id}"
+                    logger.warning(msg)
+                    self.warnings.append(msg)
+                    return
+                from veraxi_ymmp.app.clip_ingest import place_video_clip
+                dynamic_video_clips.append(
+                    place_video_clip(entry, current_frame, length, fps)
+                )
+
             image_name = entry_dict.get("image")
             if image_name:
                 add_image_clip(str(image_name))
+
+            clip_ref = entry_dict.get("clip_id")
+            if clip_ref:
+                add_video_clip(str(clip_ref))
 
             bg_name = entry_dict.get("bg")
             if bg_name:
@@ -607,7 +636,9 @@ class TimelineIRBuilder:
         if active_bg and active_bg.length <= 0:
             active_bg.length = total_frames - active_bg.start_frame
 
-        used_characters = set(c.character for c in voice_clips)
+        # First-appearance order (deterministic across runs — a set would
+        # make character_clips, and therefore the IR dump, nondeterministic).
+        used_characters = list(dict.fromkeys(c.character for c in voice_clips))
         character_clips = []
         for char_name in used_characters:
             character_clips.append(
@@ -645,6 +676,7 @@ class TimelineIRBuilder:
                 character_clips=character_clips,
                 global_clips=global_clips,
                 dynamic_image_clips=dynamic_image_clips,
+                dynamic_video_clips=dynamic_video_clips,
                 dynamic_audio_clips=dynamic_audio_clips,
                 camera_shots=camera_shots,
                 template_data=self.template_data,
