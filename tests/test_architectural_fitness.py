@@ -595,7 +595,7 @@ def _function_lengths() -> dict:
     lib_dir = REPO_ROOT / "veraxi_ymmp"
     lengths: dict = {}
     for py_file in sorted(lib_dir.rglob("*.py")):
-        rel = str(py_file.relative_to(REPO_ROOT))
+        rel = py_file.relative_to(REPO_ROOT).as_posix()
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
