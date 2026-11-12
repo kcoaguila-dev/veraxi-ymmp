@@ -53,6 +53,25 @@ class TemporalViolation:
 
 # Regex patterns for year detection and present/historical markers
 _YEAR_PATTERN = re.compile(r"\b(20[12]\d)\b|(?:FY|fy)[\s_-]?([12]\d(?:\d{2})?)")
+# Identifier schemes whose embedded 4-digit segment is an identifier component,
+# not a calendar year (e.g. CVE-2024-3094, CWE-2023-1234, GHSA-2024-...).
+# Both hyphenated (CVE-2024-3094, as in URLs / claim text) and underscored
+# (cve_2024_3094, as in source IDs / file names) forms are stripped before
+# year extraction so the stale-source gate never flags an identifier as a
+# stale temporal anchor.
+_IDENTIFIER_PATTERN = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?:cve|cwe|ghsa|osv|pysec|rustsec|go)[_-]\d{4}[_-]\d{3,7}(?![0-9])"
+)
+
+
+def _strip_identifiers(text: str) -> str:
+    """Remove structured identifiers (CVE/CWE/GHSA/...) from *text*.
+
+    The year-like segment of an identifier such as ``CVE-2024-3094`` is part
+    of the identifier, not a temporal claim, so it must not be treated as a
+    referenced calendar year by the stale-source gate.
+    """
+    return _IDENTIFIER_PATTERN.sub(" ", text)
 _JP_YEAR_PATTERN = re.compile(r"(20[12]\d)年(?:度)?")
 _PRESENT_INDICATORS_JP = ("現在", "今年", "直近", "最新", "今や", "足元では", "足もとでは", "現時点で")
 _PRESENT_INDICATORS_EN = ("currently", "this year", "latest", "as of now", "recent", "presently", "today")
@@ -66,7 +85,12 @@ def get_default_operational_year() -> int:
 
 
 def extract_referenced_years(text: str) -> List[int]:
-    """Extract all calendar or fiscal years from text."""
+    """Extract all calendar or fiscal years from text.
+
+    Structured identifiers (e.g. ``CVE-2024-3094``) are ignored: their
+    year-like segment names the identifier, not a point in time.
+    """
+    text = _strip_identifiers(text)
     years: List[int] = []
 
     # Check western years and FY notation

@@ -125,7 +125,7 @@ What is the specific technical, physical, legal, or economic mechanism driving t
 Explain the causal chain (how Action A triggered Failure/Bottleneck B) with verbatim citations from the sources.
 ```
 
-### Turn 4: Forensic Evidence Matrix Assembly (Structured 5-Column Table)
+### Turn 4: Forensic Evidence Extraction Matrix Assembly (Structured 5-Column Table)
 ```text
 Synthesize all findings from Turns 1, 2, and 3 into this exact Markdown table:
 
@@ -137,6 +137,7 @@ Strict constraints:
 2. Every row must include an exact verbatim quote and page/section number.
 3. Highlight contradictions between public claims and documented reality.
 4. Include the baseline denominator for every quantitative figure.
+5. No filler words, no greetings, and no conversational padding.
 ```
 
 ---
@@ -202,6 +203,29 @@ def _detect_tickers_in_topic(text: str) -> List[str]:
     return found
 
 
+def _write_script_seed(proj_dir: Path, topic: str, archetype_key: str) -> Path:
+    """Write script_seed.json for the project and return its path."""
+    arch = ARCHETYPES[archetype_key]
+    seed_data: Dict[str, Any] = {
+        "topic": topic,
+        "archetype": arch["title"],
+        "characters": {
+            "ずんだもん": {"role": "The Naive Proxy", "stance": arch["zundamon"]},
+            "四国めたん": {"role": "The Cold Realist", "stance": arch["metan"]},
+            "春日部つむぎ": {"role": "The Trench Whistleblower", "stance": arch["tsumugi"]}
+        },
+        "retention_rules": {
+            "cold_open": "0.0s In Media Res, zero greeting, cuts 0-2 image: null",
+            "ratio": "Metan 50%, Zundamon 30%, Tsumugi 20%",
+            "max_lines_per_bubble": 2,
+            "max_chars_per_cut": 38
+        }
+    }
+    seed_path = proj_dir / "script_seed.json"
+    seed_path.write_text(json.dumps(seed_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return seed_path
+
+
 def cmd_ideate(argv: List[str]) -> None:
     """Handle 'veraxi-ymmp ideate' subcommand."""
     parser = argparse.ArgumentParser(
@@ -227,6 +251,15 @@ def cmd_ideate(argv: List[str]) -> None:
         nargs="*",
         default=None,
         help="Optional stock tickers to resolve SEC EDGAR direct filings for (e.g. MSFT AMZN)"
+    )
+    parser.add_argument(
+        "--provider",
+        nargs="?",
+        const="manual",
+        default=None,
+        choices=["manual", "api"],
+        help="Also generate a validated script.json via this ScriptProvider "
+        "(flag alone = manual web-chat handoff; 'api' reserved, needs a key)"
     )
 
     args = parser.parse_args(argv)
@@ -290,27 +323,13 @@ def cmd_ideate(argv: List[str]) -> None:
             }
         }
     manifest_path = sources_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest_sources, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Top-level provenance metadata sits alongside the source map, like the
+    # primary_domains / entity_aliases keys fact_audit reads from this file.
+    manifest_data: Dict[str, Any] = {"topic": topic, "archetype": archetype_key, **manifest_sources}
+    manifest_path.write_text(json.dumps(manifest_data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # 3. Generate script_seed.json
-    arch = ARCHETYPES[archetype_key]
-    seed_data: Dict[str, Any] = {
-        "topic": topic,
-        "archetype": arch["title"],
-        "characters": {
-            "ずんだもん": {"role": "The Naive Proxy", "stance": arch["zundamon"]},
-            "四国めたん": {"role": "The Cold Realist", "stance": arch["metan"]},
-            "春日部つむぎ": {"role": "The Trench Whistleblower", "stance": arch["tsumugi"]}
-        },
-        "retention_rules": {
-            "cold_open": "0.0s In Media Res, zero greeting, cuts 0-2 image: null",
-            "ratio": "Metan 50%, Zundamon 30%, Tsumugi 20%",
-            "max_lines_per_bubble": 2,
-            "max_chars_per_cut": 38
-        }
-    }
-    seed_path = proj_dir / "script_seed.json"
-    seed_path.write_text(json.dumps(seed_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    seed_path = _write_script_seed(proj_dir, topic, archetype_key)
 
     sys.stdout.write(f"Created editorial dossier for '{topic}' in {proj_dir}\n")
     if resolved_filings:
@@ -318,3 +337,8 @@ def cmd_ideate(argv: List[str]) -> None:
     sys.stdout.write(f"  - NotebookLM Prompt Pack: {dossier_path}\n")
     sys.stdout.write(f"  - Sources Manifest:       {manifest_path}\n")
     sys.stdout.write(f"  - Script Seed:            {seed_path}\n")
+    if args.provider:
+        from veraxi_ymmp.app.script_provider import generate_script_file
+        generate_script_file(args.provider, topic, dossier_content,
+                             proj_dir / "script.json", proj_dir / "script_prompt.md")
+        sys.stdout.write(f"  - Validated Script:       {proj_dir / 'script.json'}\n")

@@ -443,6 +443,15 @@ def _cmd_ingest_script(argv: list[str]) -> None:
     parser.add_argument("-o", "--output", help="Path to write output script.json (default: beside input file)")
     parser.add_argument("--claims-out", help="Path to write output claims.json (default: beside script.json if table present)")
     parser.add_argument("--manifest", help="Path to sources/manifest.json (default: looked up in sources/ beside input)")
+    parser.add_argument(
+        "--provider",
+        nargs="?",
+        const="manual",
+        default=None,
+        choices=["manual", "api"],
+        help="Direct the ingested dialogue into a validated script.json via this "
+        "ScriptProvider (flag alone = manual web-chat handoff; 'api' reserved)",
+    )
     args = parser.parse_args(argv)
 
     md_path = Path(args.input_markdown)
@@ -457,6 +466,13 @@ def _cmd_ingest_script(argv: list[str]) -> None:
 
     content = md_path.read_text(encoding="utf-8")
     script_entries = parse_markdown_dialogue(content)
+
+    if args.provider:
+        from veraxi_ymmp.app.script_provider import generate_script_file
+        script_entries = generate_script_file(
+            args.provider, md_path.stem, content, out_path,
+            out_path.parent / "script_prompt.md",
+        )
 
     out_path.write_text(json.dumps(script_entries, indent=2, ensure_ascii=False), encoding="utf-8")
     sys.stdout.write(f"Successfully ingested {len(script_entries)} cuts from {md_path} -> {out_path}\n")
@@ -477,42 +493,44 @@ def _cmd_ingest_script(argv: list[str]) -> None:
         sys.stdout.write(f"Successfully generated {len(claims)} claims -> {claims_path}\n")
 
 
+def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
+    """Dispatch an argv[1] subcommand; return True when it was handled."""
+    from veraxi_ymmp.app.cli_ideate import cmd_ideate
+    from veraxi_ymmp.app.clip_ingest import cmd_ingest_clips
+    from veraxi_ymmp.app.pack_apply import cmd_apply, cmd_pack
+
+    handlers = {
+        "run": _cmd_run,
+        "render": _cmd_render,
+        "normalize": _cmd_normalize,
+        "broll": _cmd_broll,
+        "thumbnail": _cmd_thumbnail,
+        "youtube": _cmd_youtube,
+        "export-spec": _cmd_export_spec,
+        "validate": _cmd_validate,
+        "serve": _cmd_serve,
+        "capture": _cmd_capture,
+        "capture-sec": _cmd_capture_sec,
+        "ideate": cmd_ideate,
+        "ingest-script": _cmd_ingest_script,
+        "pack": cmd_pack,
+        "apply": cmd_apply,
+        "ingest-clips": cmd_ingest_clips,
+    }
+    handler = handlers.get(subcmd)
+    if handler is None:
+        return False
+    handler(sub_argv)
+    return True
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if len(sys.argv) > 1 and sys.argv[1] in {"run", "render", "normalize", "broll", "thumbnail", "youtube", "export-spec", "validate", "serve", "capture-sec", "capture", "ideate", "ingest-script"}:
-        subcmd = sys.argv[1]
-        sub_argv = sys.argv[2:]
-        if subcmd == "run":
-            _cmd_run(sub_argv)
-        elif subcmd == "render":
-            _cmd_render(sub_argv)
-        elif subcmd == "normalize":
-            _cmd_normalize(sub_argv)
-        elif subcmd == "broll":
-            _cmd_broll(sub_argv)
-        elif subcmd == "thumbnail":
-            _cmd_thumbnail(sub_argv)
-        elif subcmd == "youtube":
-            _cmd_youtube(sub_argv)
-        elif subcmd == "export-spec":
-            _cmd_export_spec(sub_argv)
-        elif subcmd == "validate":
-            _cmd_validate(sub_argv)
-        elif subcmd == "serve":
-            _cmd_serve(sub_argv)
-        elif subcmd == "capture":
-            _cmd_capture(sub_argv)
-        elif subcmd == "capture-sec":
-            _cmd_capture_sec(sub_argv)
-        elif subcmd == "ideate":
-            from veraxi_ymmp.app.cli_ideate import cmd_ideate
-            cmd_ideate(sub_argv)
-        elif subcmd == "ingest-script":
-            _cmd_ingest_script(sub_argv)
+    if len(sys.argv) > 1 and _dispatch_subcommand(sys.argv[1], sys.argv[2:]):
         return
 
     parser = argparse.ArgumentParser(

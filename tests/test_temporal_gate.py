@@ -25,6 +25,35 @@ def test_extract_referenced_years() -> None:
     assert 2026 in years_jp
 
 
+def test_extract_referenced_years_ignores_cve_identifiers() -> None:
+    # The 2024 in CVE-2024-3094 is an identifier segment, not a calendar year.
+    assert extract_referenced_years("CVE-2024-3094") == []
+    assert extract_referenced_years("脆弱性CVE-2024-3094の危険度は10.0") == []
+    assert extract_referenced_years("https://nvd.nist.gov/vuln/detail/CVE-2024-3094") == []
+    assert extract_referenced_years("nvd_cve_2024_3094") == []
+    # A standalone year next to an identifier is still a real year.
+    years = extract_referenced_years("Disclosed in 2024 as CVE-2024-3094, patched by 2026.")
+    assert years == [2024, 2026]
+
+
+def test_audit_ignores_cve_identifier_years() -> None:
+    cve_claim = Claim(
+        id="cve01",
+        cut_index=1,
+        text="脆弱性CVE-2024-3094の危険度は10.0です。",
+        evidence=[
+            Evidence(
+                url="https://nvd.nist.gov/vuln/detail/CVE-2024-3094",
+                quote="CVE-2024-3094 has a CVSS severity score of 10.0 critical.",
+                source_id="nvd_cve_2024_3094",
+                stance=Stance.CONFIRMS,
+            )
+        ],
+    )
+    violations = audit_temporal_recency([cve_claim], operational_year=2026)
+    assert violations == []
+
+
 def test_audit_flags_stale_present_tense_claims() -> None:
     stale_claim = Claim(
         id="c01",

@@ -14,6 +14,17 @@ Under standard Japanese licensing for voice synthesis characters and standing ar
 
 The repository commits only **synthetic, programmatic test fixtures** and project-owned configuration dictionaries (`tts_dictionary.json`).
 
+### 1.1 Optional assets and the `default_dark.png` fallback (fresh-clone behaviour)
+
+The following referenced assets are **optional and intentionally not in git**:
+
+| Referenced path | Status when absent |
+|---|---|
+| `assets/bgm/2_23_AM.mp3` / `assets/bgm/2_23_AM.m4a` | BGM is **omitted** — no BGM item is written to the `.ymmp`, and MoviePy renders without a BGM track. Never an error, never a dangling file reference. |
+| `assets/bg/classroom.jpg` | Background falls back to the committed **`assets/bg/default_dark.png`** (Pro Dark Slate). Resolution order is `classroom.jpg` first (preferred when a user supplies it locally), then `default_dark.png`, via `resolve_background_image()` / `resolve_optional_asset()` in `veraxi_ymmp/core/constants.py`. |
+
+A fresh clone therefore renders end-to-end with zero missing-file failures: place your own licensed copies at the paths above if you want the classroom background or the Sharou BGM, and the renderers will pick them up automatically.
+
 ---
 
 ## 2. Character Standing Art (立ち絵素材)

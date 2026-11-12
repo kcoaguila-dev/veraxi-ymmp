@@ -188,6 +188,7 @@ class PremiereExporter:
         y_offset: float = 0.0,
         scale: float = 100.0,
         fit_to_screen: bool = False,
+        source_in_frame: int = 0,
     ) -> None:
         """Create a clipitem element on a video track."""
         import time
@@ -217,8 +218,8 @@ class PremiereExporter:
         SubElement(clip, 'duration').text = str(duration)
         SubElement(clip, 'start').text = str(start_frame)
         SubElement(clip, 'end').text = str(start_frame + duration)
-        SubElement(clip, 'in').text = "0"
-        SubElement(clip, 'out').text = str(duration)
+        SubElement(clip, 'in').text = str(source_in_frame)
+        SubElement(clip, 'out').text = str(source_in_frame + duration)
 
         file = SubElement(clip, 'file', id=f"file_{unique_id}")
         SubElement(file, 'name').text = Path(file_path).name
@@ -272,6 +273,17 @@ class PremiereExporter:
             else:
                 # B-Roll (V2) Full-Screen 1920x1080 Presentation Slide
                 self._create_clipitem(v2_track, bg.image_path, bg.start_frame, bg.length, f"broll_{i}", "B-Roll", fit_to_screen=True)
+
+        # Ingested video clips (DynamicVideoClip) ride the V2 B-roll track,
+        # honoring their source in-point.
+        for i, vc in enumerate(self.ir.dynamic_video_clips):
+            if vc.length <= 0:
+                continue
+            self._create_clipitem(
+                v2_track, vc.video_path, vc.start_frame, vc.length,
+                f"video_{i}", vc.clip_id or "Video Clip", fit_to_screen=True,
+                source_in_frame=int(round(vc.in_point * self.fps)),
+            )
 
     def _populate_character_lipsync(
         self,

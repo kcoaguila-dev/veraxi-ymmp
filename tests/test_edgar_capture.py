@@ -4,7 +4,10 @@ Unit tests for SEC EDGAR and Official Document Capture Engine.
 
 from __future__ import annotations
 
+import urllib.request
 from pathlib import Path
+
+import pytest
 from PIL import Image
 
 from veraxi_ymmp.epistemic.facts import DocumentCaptureResult, DocumentCaptureSpec, DocumentSourceType
@@ -14,6 +17,29 @@ from veraxi_ymmp.epistemic.edgar_capture import (
     get_sec_user_agent,
     resolve_company_meta,
     DEFAULT_SEC_USER_AGENT,
+)
+
+
+def _sec_gov_reachable() -> bool:
+    """Return True when the SEC EDGAR host answers any HTTP response.
+
+    Any HTTP status (including 403/404) proves reachability; only a
+    transport-level failure (DNS, connection, timeout) counts as offline.
+    """
+    try:
+        req = urllib.request.Request(
+            "https://www.sec.gov/", headers={"User-Agent": "VeraxiTest test@example.com"}
+        )
+        with urllib.request.urlopen(req, timeout=5):
+            return True
+    except Exception as exc:
+        # HTTPError still means the host answered.
+        return exc.__class__.__name__ == "HTTPError"
+
+
+requires_network = pytest.mark.skipif(
+    not _sec_gov_reachable(),
+    reason="network test: SEC EDGAR host (www.sec.gov) is unreachable in this sandbox",
 )
 
 
@@ -141,6 +167,8 @@ def test_cli_capture_generic_fred_mock(tmp_path: Path) -> None:
 
 
 
+@pytest.mark.network
+@requires_network
 def test_live_failure_must_not_silently_fallback_to_synthetic(tmp_path: Path, monkeypatch) -> None:
     """Verify that a live capture failure fails fast and does NOT return fake synthetic proof."""
     monkeypatch.setenv("SEC_USER_AGENT", "VeraxiTest test@example.com")
@@ -210,6 +238,8 @@ def test_live_sec_request_requires_valid_user_agent(tmp_path: Path, monkeypatch)
 
 
 
+@pytest.mark.network
+@requires_network
 def test_edgar_facts_adapter_canonical_period_integration() -> None:
     """Verify EdgarFactsAdapter resolves GAAP facts with CanonicalPeriod."""
     import datetime

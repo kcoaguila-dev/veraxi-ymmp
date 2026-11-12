@@ -107,6 +107,41 @@ def build_image_item(
 _build_image_item = build_image_item
 
 
+def build_video_item(
+    file_path: Union[str, Path],
+    frame: int,
+    length: int,
+    layer: int,
+    x: float = 0.0,
+    y: float = 0.0,
+) -> Dict[str, Any]:
+    """Construct a YMM4 VideoItem dictionary.
+
+    NOTE (Phase 4 risk): the field set mirrors ImageItem exactly, which
+    is how YMM4's VideoItem is structured in the project JSON, but this
+    has not yet been diffed against a project saved by a real YMM4
+    install containing a video item. Verify against such a file before
+    relying on round-trip fidelity in YMM4 itself.
+    """
+    return {
+        "$type": "YukkuriMovieMaker.Project.Items.VideoItem, YukkuriMovieMaker",
+        "FilePath": str(file_path),
+        "X": anim_val(x),
+        "Y": anim_val(y),
+        "Opacity": {"Values": [{"Value": 100.0}]},
+        "Zoom": anim_val(100.0),
+        "Rotation": anim_val(0.0),
+        "Blend": "Normal",
+        "Layer": layer,
+        "Frame": frame,
+        "Length": length,
+        "VideoEffects": [],
+    }
+
+
+_build_video_item = build_video_item
+
+
 YMM4_ENUM_REGISTRY = {
     "Style": {"Normal", "Border", "Shadow"},
     "WordWrap": {"NoWrap", "Wrap"},

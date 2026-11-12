@@ -74,7 +74,7 @@ def test_no_wildcard_imports_in_library() -> None:
             if isinstance(node, ast.ImportFrom):
                 for alias in node.names:
                     if alias.name == "*":
-                        wildcards.append((str(py_file.relative_to(REPO_ROOT)), node.lineno))
+                        wildcards.append((py_file.relative_to(REPO_ROOT).as_posix(), node.lineno))
 
     assert not wildcards, f"Wildcard imports ('from module import *') found in library: {wildcards}"
 
@@ -88,7 +88,7 @@ def test_module_size_ceiling() -> None:
     for py_file in lib_dir.rglob("*.py"):
         lines = len(py_file.read_text(encoding="utf-8", errors="replace").splitlines())
         if lines > max_allowed_lines:
-            oversized_modules.append((str(py_file.relative_to(REPO_ROOT)), lines))
+            oversized_modules.append((py_file.relative_to(REPO_ROOT).as_posix(), lines))
 
     assert not oversized_modules, (
         f"The following modules exceed the {max_allowed_lines} line ceiling: {oversized_modules}"
@@ -441,7 +441,7 @@ def test_strict_three_tier_compiler_dag() -> None:
             continue
         sub = py_file.parent.name if py_file.parent != lib_dir else "root"
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-        rel_path = str(py_file.relative_to(REPO_ROOT))
+        rel_path = py_file.relative_to(REPO_ROOT).as_posix()
 
         for node in ast.walk(tree):
             mods: List[str] = []
@@ -540,3 +540,95 @@ def test_temporal_recency_gate_registered() -> None:
     from veraxi_ymmp.epistemic import audit_temporal_recency, enforce_temporal_recency
     assert callable(audit_temporal_recency)
     assert callable(enforce_temporal_recency)
+
+
+# ---------------------------------------------------------------------------
+# Function-length fitness (Phase 1)
+#
+# No function may exceed MAX_FUNCTION_LINES lines. The 31 pre-existing
+# offenders are grandfathered in FUNCTION_LENGTH_ALLOWLIST below; the list
+# is a burn-down chart, not a permanent exemption: every time one of those
+# functions is split, its entry must be removed, and no new entry may be
+# added. ProjectPipeline.run and MoviePyRenderer.render were the first two
+# removed (split into stage functions in Phase 1).
+# ---------------------------------------------------------------------------
+
+MAX_FUNCTION_LINES = 120
+
+FUNCTION_LENGTH_ALLOWLIST = {
+    "veraxi_ymmp/app/api_server.py:do_POST",
+    "veraxi_ymmp/app/cli.py:_cmd_validate",
+    "veraxi_ymmp/app/cli.py:_compile",
+    "veraxi_ymmp/app/cli_youtube.py:run",
+    "veraxi_ymmp/app/ir_builder.py:synthesize_audio",
+    "veraxi_ymmp/app/ir_builder.py:build_ir",
+    "veraxi_ymmp/editorial/pacing.py:audit_script_pacing",
+    "veraxi_ymmp/editorial/retention_qa.py:correlate",
+    "veraxi_ymmp/epistemic/edgar_capture.py:_render_synthetic_sec_document",
+    "veraxi_ymmp/epistemic/fact_audit.py:audit_project_facts",
+    "veraxi_ymmp/epistemic/facts.py:check_claim_numbers",
+    "veraxi_ymmp/epistemic/fred_capture.py:_capture_live_fred",
+    "veraxi_ymmp/epistemic/temporal_gate.py:normalize_to_canonical_period",
+    "veraxi_ymmp/epistemic/web_capture.py:capture_highlight",
+    "veraxi_ymmp/epistemic/web_capture.py:capture_document",
+    "veraxi_ymmp/exporters/ae_renderer.py:render",
+    "veraxi_ymmp/exporters/premiere_exporter.py:_populate_character_lipsync",
+    "veraxi_ymmp/exporters/ymmp_renderer.py:render_psd",
+    "veraxi_ymmp/exporters/ymmp_renderer.py:render_template",
+    "veraxi_ymmp/exporters/ymmp_utils.py:validate_ymmp_timeline",
+    "veraxi_ymmp/exporters/youtube_metadata.py:generate_project_youtube_metadata",
+    "veraxi_ymmp/graphics/broll.py:render_metric_slide",
+    "veraxi_ymmp/graphics/broll.py:render_from_manifest",
+    "veraxi_ymmp/graphics/infographic.py:render_matrix_slide",
+    "veraxi_ymmp/graphics/infographic.py:render_architecture_flow_slide",
+    "veraxi_ymmp/graphics/official_assets.py:render_official_image_slide",
+    "veraxi_ymmp/graphics/psd_registry.py:get_face_layers_and_paths",
+    "veraxi_ymmp/graphics/thumbnail.py:generate_thumbnail",
+    "veraxi_ymmp/graphics/thumbnail.py:auto_extract_thumbnail_config",
+    "veraxi_ymmp/graphics/thumbnail_ab.py:evaluate_performance",
+    "veraxi_ymmp/graphics/thumbnail_composer.py:render_vs_duel_layout",
+}
+
+
+def _function_lengths() -> dict:
+    """Map 'relative/path.py:function' -> line count for every function."""
+    lib_dir = REPO_ROOT / "veraxi_ymmp"
+    lengths: dict = {}
+    for py_file in sorted(lib_dir.rglob("*.py")):
+        rel = py_file.relative_to(REPO_ROOT).as_posix()
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                end = node.end_lineno or node.lineno
+                key = f"{rel}:{node.name}"
+                # Same-named functions (module fn + method) share a key;
+                # the longest one decides offender status.
+                lengths[key] = max(lengths.get(key, 0), end - node.lineno + 1)
+    return lengths
+
+
+def test_no_function_exceeds_max_lines() -> None:
+    """Fail on any function over 120 lines that is not on the burn-down allowlist."""
+    lengths = _function_lengths()
+    offenders = {
+        key: n
+        for key, n in lengths.items()
+        if n > MAX_FUNCTION_LINES and key not in FUNCTION_LENGTH_ALLOWLIST
+    }
+    assert not offenders, (
+        f"Functions over {MAX_FUNCTION_LINES} lines (split them; do not extend the allowlist): {offenders}"
+    )
+
+
+def test_function_length_allowlist_is_current() -> None:
+    """Allowlist entries must still be offenders — a split removes its entry."""
+    lengths = _function_lengths()
+    stale = {
+        key
+        for key in FUNCTION_LENGTH_ALLOWLIST
+        if lengths.get(key, 0) <= MAX_FUNCTION_LINES
+    }
+    assert not stale, (
+        f"These functions are now under {MAX_FUNCTION_LINES} lines; remove them "
+        f"from FUNCTION_LENGTH_ALLOWLIST: {sorted(stale)}"
+    )

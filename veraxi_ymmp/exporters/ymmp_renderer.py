@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union, cast
 
 import brotli
 
-from veraxi_ymmp.core.constants import (DEFAULT_BG_CANDIDATES, DEFAULT_BG_IMAGE_PATH, DEFAULT_BGM_CANDIDATES, DEFAULT_BGM_DUCKING_VOLUME, DEFAULT_SUBTITLE_CENTER_Y)
+from veraxi_ymmp.core.constants import (DEFAULT_BGM_CANDIDATES, DEFAULT_BGM_DUCKING_VOLUME, DEFAULT_SUBTITLE_CENTER_Y)
 from veraxi_ymmp.core.ir import TimelineIR
 from veraxi_ymmp.audio.phonetics import build_ymm4_lipsync_frames, extract_phonetic_blocks
 from veraxi_ymmp.core.ports import ExportResult
@@ -37,6 +37,7 @@ from veraxi_ymmp.core.utils import normalize_japanese_typography
 from veraxi_ymmp.exporters.ymmp_utils import (
     _anim_val,
     _build_image_item,
+    _build_video_item,
     _format_voice_duration,
     _get_vertical_broll_zoom,
     _is_background_clip,
@@ -399,13 +400,11 @@ class YMMPRenderer:
                     )
                 )
         else:
-            bg_candidate = Path(DEFAULT_BG_IMAGE_PATH).resolve()
-            if not bg_candidate.exists():
-                for cand in DEFAULT_BG_CANDIDATES:
-                    cand_p = Path(cand).resolve()
-                    if cand_p.exists():
-                        bg_candidate = cand_p
-                        break
+            # Optional local classroom.jpg is preferred when present; the
+            # committed default_dark.png is the fallback (see ASSETS.md).
+            from veraxi_ymmp.core.constants import resolve_background_image
+
+            bg_candidate = resolve_background_image().resolve()
             for gc in timeline_ir.global_clips:
                 file_p = gc.file_path or (gc.template_item or {}).get("FilePath")
                 if file_p and any(k in file_p.lower() for k in ("bg", "room", "classroom")):
@@ -425,8 +424,20 @@ class YMMPRenderer:
                 )
             )
 
-        # 5. Layer 3: BGM AudioItem
-        bgm_path = Path(DEFAULT_BGM_CANDIDATES[0]).resolve()
+        # 4b. Layer 2: Dynamic VideoItems (ingested clips placed by clip_id)
+        for d_vid_clip in timeline_ir.dynamic_video_clips:
+            if d_vid_clip.length <= 0:
+                continue
+            items.append(
+                _build_video_item(
+                    d_vid_clip.video_path.resolve(), d_vid_clip.start_frame,
+                    d_vid_clip.length, layer=2,
+                )
+            )
+
+        # 5. Layer 3: BGM AudioItem (optional asset: omitted when no BGM
+        # file exists on disk — BGM is not tracked in git, see ASSETS.md)
+        bgm_path: Optional[Path] = None
         for cand in DEFAULT_BGM_CANDIDATES:
             cand_p = Path(cand).resolve()
             if cand_p.exists():
@@ -435,26 +446,28 @@ class YMMPRenderer:
         bgm_volume = DEFAULT_BGM_DUCKING_VOLUME
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
             if d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower():
-                bgm_path = d_audio_clip.audio_path.resolve()
+                if d_audio_clip.audio_path.exists():
+                    bgm_path = d_audio_clip.audio_path.resolve()
                 if d_audio_clip.volume is not None:
                     bgm_volume = (
                         d_audio_clip.volume * 100.0
                         if d_audio_clip.volume <= 1.0
                         else d_audio_clip.volume
                     )
-        items.append(
-            {
-                "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
-                "FilePath": str(bgm_path),
-                "Volume": _anim_val(bgm_volume),
-                "Pan": {"Values": [{"Value": 0.0}]},
-                "PlaybackRate": 100.0,
-                "Layer": 3,
-                "Frame": 0,
-                "Length": timeline_ir.total_frames,
-                "IsLooped": True,
-            }
-        )
+        if bgm_path is not None and bgm_path.exists():
+            items.append(
+                {
+                    "$type": "YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker",
+                    "FilePath": str(bgm_path),
+                    "Volume": _anim_val(bgm_volume),
+                    "Pan": {"Values": [{"Value": 0.0}]},
+                    "PlaybackRate": 100.0,
+                    "Layer": 3,
+                    "Frame": 0,
+                    "Length": timeline_ir.total_frames,
+                    "IsLooped": True,
+                }
+            )
 
         tl = get_timeline(output_data)
         tl["Items"], tl["Length"], tl["MaxLayer"] = items, timeline_ir.total_frames, 12
@@ -612,9 +625,21 @@ class YMMPRenderer:
             )
 
 
-        # 5. Layer 3: BGM AudioItem (if present in dynamic audio clips)
+        # 4b. Layer 2: Dynamic VideoItems (ingested clips placed by clip_id)
+        for d_vid_clip in timeline_ir.dynamic_video_clips:
+            if d_vid_clip.length <= 0:
+                continue
+            items.append(
+                _build_video_item(
+                    d_vid_clip.video_path.resolve(), d_vid_clip.start_frame,
+                    d_vid_clip.length, layer=2,
+                )
+            )
+
+        # 5. Layer 3: BGM AudioItem (if present in dynamic audio clips and
+        # the optional BGM file actually exists on disk — see ASSETS.md)
         for d_audio_clip in timeline_ir.dynamic_audio_clips:
-            if d_audio_clip.audio_path and (d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower()):
+            if d_audio_clip.audio_path and d_audio_clip.audio_path.exists() and (d_audio_clip.length == -1 or "bgm" in str(d_audio_clip.audio_path).lower()):
                 clip_vol = (
                     d_audio_clip.volume * 100.0
                     if d_audio_clip.volume <= 1.0
@@ -825,7 +850,9 @@ class YMMPRenderer:
 
         validate_ymmp_schema(output_data)
         encoding = "utf-8-sig" if use_bom else "utf-8"
-        with open(output_path, "w", encoding=encoding) as f:
+        # Golden .ymmp files are LF byte-for-byte. Windows text mode would
+        # translate those newlines to CRLF and fail the regression check.
+        with open(output_path, "w", encoding=encoding, newline="\n") as f:
             json.dump(output_data, f, ensure_ascii=False, indent=4)
 
     def export(
