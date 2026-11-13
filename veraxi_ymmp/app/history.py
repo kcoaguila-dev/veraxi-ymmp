@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +18,7 @@ from veraxi_ymmp.core.logging import logger
 HISTORY_DIR_NAME = ".history"
 DEFAULT_MAX_HISTORY = 25
 SAFE_ID_PATTERN = re.compile(r"^\d{8}_\d{6}(?:_\d{3,6})?$")
+_MAX_ID_ATTEMPTS = 10_000
 
 
 def get_history_dir(project_path: Path) -> Path:
@@ -50,6 +51,32 @@ def extract_script_summary(script_data: Any) -> Dict[str, Any]:
     }
 
 
+def _claim_snapshot_id(h_dir: Path, now: datetime, raw_content: str) -> str:
+    """Reserves a unique snapshot ID by exclusively creating its script file.
+
+    The first candidate is second-resolution (``YYYYMMDD_HHMMSS``). If that is taken,
+    candidates advance in 1-microsecond steps (``YYYYMMDD_HHMMSS_ffffff``), so rapid or
+    back-to-back backups never share an ID even when the system clock does not advance
+    between calls (coarse timers on Windows / Python 3.10). Exclusive creation (``"x"``)
+    makes the claim atomic, so a pre-existing snapshot is never overwritten.
+    """
+    for attempt in range(_MAX_ID_ATTEMPTS):
+        if attempt == 0:
+            candidate = now.strftime("%Y%m%d_%H%M%S")
+        else:
+            candidate = (now + timedelta(microseconds=attempt - 1)).strftime("%Y%m%d_%H%M%S_%f")
+        target = h_dir / f"script_{candidate}.json"
+        try:
+            with open(target, "x", encoding="utf-8") as fh:
+                fh.write(raw_content)
+        except FileExistsError:
+            continue
+        return candidate
+    raise RuntimeError(
+        f"Could not allocate a unique snapshot ID after {_MAX_ID_ATTEMPTS} attempts in {h_dir}"
+    )
+
+
 def backup_project_script(
     project_path: Path,
     reason: str = "gui_override",
@@ -74,15 +101,9 @@ def backup_project_script(
 
     h_dir = get_history_dir(project_path)
     now = datetime.now()
-    snapshot_id = now.strftime("%Y%m%d_%H%M%S")
 
-    # If ID already exists (e.g. rapid saves), append microseconds
-    if (h_dir / f"script_{snapshot_id}.json").exists():
-        snapshot_id = now.strftime("%Y%m%d_%H%M%S_%f")
-
-    # 1. Save script copy
-    target_script = h_dir / f"script_{snapshot_id}.json"
-    target_script.write_text(raw_content, encoding="utf-8")
+    # 1. Claim a unique snapshot ID and save the script copy in one atomic step
+    snapshot_id = _claim_snapshot_id(h_dir, now, raw_content)
 
     # 2. Save broll copy if it exists
     broll_file = project_path / "broll_manifest.json"
