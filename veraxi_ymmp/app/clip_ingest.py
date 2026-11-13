@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -212,8 +213,16 @@ def load_clip_manifest(path: Path) -> List[tuple]:
     for i, item in enumerate(data):
         if not isinstance(item, dict):
             raise ValueError(f"clip manifest entry {i} is not an object")
-        clip_id = str(item.get("clip_id", "")).strip()
-        filename = str(item.get("filename", "")).strip()
+        raw_id = item.get("clip_id")
+        raw_name = item.get("filename")
+        if (raw_id is not None and not isinstance(raw_id, str)) or (
+            raw_name is not None and not isinstance(raw_name, str)
+        ):
+            raise ValueError(
+                f"clip manifest entry {i}: clip_id and filename must be strings"
+            )
+        clip_id = (raw_id or "").strip()
+        filename = (raw_name or "").strip()
         if not clip_id or not filename:
             raise ValueError(
                 f"clip manifest entry {i} needs a non-empty clip_id and filename"
@@ -229,11 +238,15 @@ def load_clip_manifest(path: Path) -> List[tuple]:
                 f"clip manifest entry {i}: filename {filename!r} must be a "
                 "bare file name inside the inbox"
             )
-        if clip_id in seen_ids:
-            raise ValueError(f"duplicate clip_id in clip manifest: {clip_id}")
+        if clip_id.casefold() in seen_ids:
+            raise ValueError(
+                f"duplicate clip_id in clip manifest: {clip_id} (ids must "
+                "differ by more than letter case; their output files "
+                "would collide on a case-insensitive filesystem)"
+            )
         if filename in seen_files:
             raise ValueError(f"duplicate filename in clip manifest: {filename}")
-        seen_ids.add(clip_id)
+        seen_ids.add(clip_id.casefold())
         seen_files.add(filename)
         entries.append((clip_id, filename))
     return entries
@@ -265,14 +278,27 @@ def ingest_clips_from_manifest(
         "clips": [],
         "rejected": [],
         "from_manifest": Path(clip_manifest_path).name,
+        "matching_aborted": False,
     }
     declared = {filename for _cid, filename in entries}
+    declared_paths = {
+        os.path.normcase(str((inbox / fn).resolve())) for _c, fn in entries
+    }
     problems: List[Dict[str, str]] = []
     for clip_id, filename in entries:
         if not (inbox / filename).is_file():
             problems.append({
                 "source": filename,
                 "reason": f"declared for clip_id '{clip_id}' but not found in inbox",
+            })
+        dest = os.path.normcase(str((out_dir / f"{clip_id}.mp4").resolve()))
+        if dest in declared_paths:
+            problems.append({
+                "source": filename,
+                "reason": (
+                    f"output for clip_id '{clip_id}' would overwrite a "
+                    "declared source file; choose another --output-dir"
+                ),
             })
     for src in sorted(
         p for p in inbox.iterdir()
@@ -285,6 +311,7 @@ def ingest_clips_from_manifest(
             })
     if problems:
         manifest["rejected"] = problems
+        manifest["matching_aborted"] = True
         return manifest
     out_dir.mkdir(parents=True, exist_ok=True)
     clips: List[Dict[str, Any]] = []
@@ -397,7 +424,7 @@ def cmd_ingest_clips(argv: Sequence[str]) -> None:
         print(f"  - {clip['id']}: {clip['file']} ({clip['duration_sec']}s, sha256 {clip['sha256'][:12]}…)")
     for rej in manifest["rejected"]:
         sys.stderr.write(f"Rejected {rej['source']}: {rej['reason']}\n")
-    if args.from_manifest and not manifest["clips"] and manifest["rejected"]:
+    if args.from_manifest and manifest.get("matching_aborted"):
         print("Ingest aborted: manifest matching failed; nothing was written.")
     else:
         print(f"Ingested {len(manifest['clips'])} clip(s); manifest: {out_dir / MANIFEST_NAME}")

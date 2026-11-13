@@ -128,3 +128,60 @@ def test_manifest_ingest_uses_declared_ids_and_order(tmp_path):
     ]
     index = ci.load_clips_index(tmp_path / "clips" / "manifest.json")
     assert set(index) == {"second-scene", "first-scene"}
+
+
+@pytest.mark.parametrize("entries,fragment", [
+    # Non-string values must be rejected, not str()-coerced: JSON null
+    # became the clip_id "None" (a valid-looking id producing None.mp4)
+    # and 42 became the filename "42".
+    ([{"clip_id": None, "filename": "a.mp4"}], "needs a non-empty"),
+    ([{"clip_id": "a", "filename": None}], "needs a non-empty"),
+    ([{"clip_id": 42, "filename": "a.mp4"}], "must be strings"),
+    ([{"clip_id": "a", "filename": 42}], "must be strings"),
+    ([{"clip_id": True, "filename": "a.mp4"}], "must be strings"),
+    # Ids differing only by case collide on case-insensitive
+    # filesystems: Opening.mp4 would overwrite opening.mp4 while the
+    # manifest kept both entries.
+    ([{"clip_id": "opening", "filename": "a.mp4"},
+      {"clip_id": "Opening", "filename": "b.mp4"}], "duplicate clip_id"),
+])
+def test_load_clip_manifest_rejects_bad_types_and_case_dups(
+    tmp_path, entries, fragment
+):
+    path = _write_manifest(tmp_path, entries)
+    with pytest.raises(ValueError, match=fragment):
+        ci.load_clip_manifest(path)
+
+
+def test_output_dir_overlapping_a_source_aborts(tmp_path):
+    # entry "scene-a" writes <out>/scene-a.mp4; with --output-dir set
+    # to the inbox that IS entry "scene-b"'s declared source, which an
+    # earlier write would silently replace before it is read.
+    inbox = _inbox(tmp_path, "a.mp4", "scene-a.mp4")
+    before = {p.name: p.read_bytes() for p in inbox.iterdir()}
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "scene-a", "filename": "a.mp4"},
+        {"clip_id": "scene-b", "filename": "scene-a.mp4"},
+    ])
+    result = ci.ingest_clips_from_manifest(
+        inbox, manifest_path, output_dir=inbox
+    )
+    assert result["clips"] == []
+    assert result["matching_aborted"] is True
+    assert any("overwrite" in r["reason"] for r in result["rejected"])
+    assert {p.name: p.read_bytes() for p in inbox.iterdir()} == before
+
+
+def test_probe_failure_is_not_a_matching_abort(tmp_path):
+    # Matching succeeded; the file is just unreadable. The manifest IS
+    # written (with the rejection), so the run must not claim a
+    # matching abort / "nothing was written".
+    inbox = _inbox(tmp_path, "bad.mp4")
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "bad", "filename": "bad.mp4"},
+    ])
+    result = ci.ingest_clips_from_manifest(inbox, manifest_path)
+    assert result["clips"] == []
+    assert result["rejected"] != []
+    assert result["matching_aborted"] is False
+    assert (tmp_path / "clips" / "manifest.json").exists()
