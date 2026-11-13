@@ -499,6 +499,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
     from veraxi_ymmp.app.clip_ingest import cmd_ingest_clips
     from veraxi_ymmp.app.pack_apply import cmd_apply, cmd_pack
     from veraxi_ymmp.app.pack_edit import cmd_apply_edit
+    from veraxi_ymmp.app.session_start import cmd_session_start
 
     handlers = {
         "run": _cmd_run,
@@ -517,6 +518,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
         "pack": cmd_pack,
         "apply": cmd_apply,
         "apply-edit": cmd_apply_edit,
+        "session-start": cmd_session_start,
         "ingest-clips": cmd_ingest_clips,
     }
     handler = handlers.get(subcmd)
