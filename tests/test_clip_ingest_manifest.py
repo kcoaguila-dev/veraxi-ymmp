@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -213,9 +214,14 @@ def test_manifest_reserved_windows_ids_rejected(tmp_path, clip_id):
 
 def _stub_probe_and_normalize(monkeypatch, good_names):
     """Make probing succeed for the named files and normalization a
-    byte write, so matching behavior can be tested without ffmpeg."""
+    byte write, so matching behavior can be tested without ffmpeg.
+    Names compare by _name_key: a platform may hand back a file name
+    in a different case/normalization than the one it was created
+    with."""
+    good_keys = {ci._name_key(n) for n in good_names}
+
     def fake_probe(path):
-        if Path(path).name in good_names:
+        if ci._name_key(Path(path).name) in good_keys:
             return {"duration_sec": 1.0, "has_audio": False}
         return None
 
@@ -246,15 +252,21 @@ def test_declared_name_matches_despite_unicode_normalization(
     nfd = unicodedata.normalize("NFD", nfc)
     assert nfc != nfd
     inbox = _inbox(tmp_path, nfd)
+    on_disk_name = next(inbox.iterdir()).name
     _stub_probe_and_normalize(monkeypatch, {nfd})
     manifest_path = _write_manifest(tmp_path, [
         {"clip_id": "g", "filename": nfc},
     ])
     result = ci.ingest_clips_from_manifest(inbox, manifest_path)
     assert result["matching_aborted"] is False
-    assert result["clips"][0]["source"] == nfd
+    # The manifest records the name exactly as it exists on disk.
+    assert result["clips"][0]["source"] == on_disk_name
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="files differing only by case cannot coexist on Windows",
+)
 def test_ambiguous_case_match_aborts(tmp_path):
     inbox = _inbox(tmp_path, "A.mp4", "a.mp4")
     manifest_path = _write_manifest(tmp_path, [
