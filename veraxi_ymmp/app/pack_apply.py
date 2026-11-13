@@ -44,13 +44,14 @@ _BACKTICK_RUN = re.compile(r"`+")
 def _fence_for_content(content: str) -> str:
     """Return a fence longer than the longest backtick run in *content*.
 
-    Minimum 3 backticks. Wrapping a file this way means an inner fence
-    in the file can never be mistaken for the block's closing fence.
+    Minimum 4 backticks, matching the Reply Format instructions.
+    Wrapping a file this way means an inner fence in the file can
+    never be mistaken for the block's closing fence.
     """
     longest = 0
     for match in _BACKTICK_RUN.finditer(content):
         longest = max(longest, len(match.group(0)))
-    return "`" * max(3, longest + 1)
+    return "`" * max(4, longest + 1)
 
 OutputFn = Callable[[str], None]
 CheckRunner = Callable[
@@ -87,8 +88,14 @@ def _read_block(
             continue
         run = len(fence.group(1))
         if fence.group(2):
-            # A tagged fence inside the block opens a nested level.
-            stack.append(run)
+            # A tagged fence opens a nested level only when it could
+            # interact with the block's own fence. A shorter tagged
+            # fence (e.g. a lone ```python line inside a 4-backtick
+            # block) can never close the block, so it is plain content;
+            # pushing it would let the real closer pop the wrong level
+            # and falsely report the block as unclosed.
+            if run >= stack[0]:
+                stack.append(run)
             content_lines.append(lines[k])
             k += 1
             continue
@@ -105,6 +112,39 @@ def _read_block(
         content_lines.append(lines[k])
         k += 1
     return content_lines, -1
+
+
+def _strip_outer_wrapper(lines: List[str]) -> List[str]:
+    """Remove a whole-reply wrapper fence, strictly at the envelope.
+
+    Web chats often wrap an entire reply in one outer fence. Unwrap
+    only when the first non-empty line is a fence and the last
+    non-empty line is a bare fence whose run is at least as long:
+    then the pair is unambiguously an envelope, and removing it
+    before parsing cannot be confused with any fence inside a file
+    block. Anything else is returned unchanged and fails closed in
+    parse_reply (a wrapper whose closing fence is missing leaves a
+    stray fence behind, which rejects the reply).
+    """
+    start = 0
+    end = len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    if end - start < 2:
+        return lines
+    open_match = _FENCE_LINE.match(lines[start].strip())
+    if open_match is None:
+        return lines
+    close_match = _FENCE_LINE.match(lines[end - 1].strip())
+    if (
+        close_match is None
+        or close_match.group(2)
+        or len(close_match.group(1)) < len(open_match.group(1))
+    ):
+        return lines
+    return lines[start + 1:end - 1]
 
 
 def parse_reply(text: str) -> ParsedReply:
@@ -126,20 +166,16 @@ def parse_reply(text: str) -> ParsedReply:
     - Safety net: a fence line outside any block after a block has
       closed is treated as evidence that an inner bare fence closed a
       block prematurely, and the whole reply is rejected.
-    - One exception: web chats often wrap the whole reply in a single
-      outer fence. A fence seen before the first file header is
-      remembered as a wrapper, and one matching bare fence (run >= the
-      wrapper's) after the END_MARKER closes it instead of counting
-      as a stray fence. Any other stray fence still rejects.
+    - A whole-reply wrapper fence is removed beforehand by
+      _strip_outer_wrapper, strictly at the envelope, so no fence
+      inside the reply can ever be mistaken for its closing fence.
     """
-    lines = text.splitlines()
+    lines = _strip_outer_wrapper(text.splitlines())
     blocks: List[Tuple[str, str]] = []
     problem = ""
     saw_end = False
     saw_continuation = False
     last_closed_path = ""
-    wrapper_run = 0
-    wrapper_closed = False
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
@@ -149,26 +185,12 @@ def parse_reply(text: str) -> ParsedReply:
             saw_continuation = True
         header = _FILE_HEADER.match(lines[i])
         if not header:
-            fence = _FENCE_LINE.match(stripped)
-            if fence is not None and not blocks and not wrapper_run:
-                # Possible whole-reply wrapper opening fence.
-                wrapper_run = len(fence.group(1))
-            elif fence is not None and blocks:
-                run = len(fence.group(1))
-                if (
-                    wrapper_run
-                    and not wrapper_closed
-                    and saw_end
-                    and not fence.group(2)
-                    and run >= wrapper_run
-                ):
-                    wrapper_closed = True
-                else:
-                    problem = (
-                        f"stray code fence after block for {last_closed_path}; "
-                        "nested fences likely broke the block"
-                    )
-                    break
+            if blocks and _FENCE_LINE.match(stripped):
+                problem = (
+                    f"stray code fence after block for {last_closed_path}; "
+                    "nested fences likely broke the block"
+                )
+                break
             i += 1
             continue
         rel_path = header.group(1)
@@ -363,7 +385,11 @@ def build_pack_bundle(
     for rel_path, content in file_contents:
         lang = "python" if rel_path.endswith(".py") else "text"
         fence = _fence_for_content(content)
-        parts += [f"### File: `{rel_path}`", f"{fence}{lang}", content.rstrip("\n"),
+        # Drop exactly one trailing newline: the join adds it back, so
+        # a file ending in "\n\n" keeps both newlines in a round-trip
+        # (rstrip("\n") would silently collapse them to one).
+        body = content[:-1] if content.endswith("\n") else content
+        parts += [f"### File: `{rel_path}`", f"{fence}{lang}", body,
                   fence, ""]
     if test_path:
         test_fence = _fence_for_content(test_output)
