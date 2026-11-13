@@ -26,10 +26,11 @@ whose guards are reused rather than duplicated):
   before any file is written or any branch is created, so a late
   failure leaves all files untouched.
 * Encoding and line-ending fidelity — targets are decoded as UTF-8
-  (Japanese text round-trips byte-exact) and each file's existing
-  line endings (LF or CRLF) are preserved; matching is done on
+  (Japanese text round-trips byte-exact); matching is done on
   LF-normalized text so a block copied from an LF bundle still
-  anchors in a CRLF file, without normalizing the file itself.
+  anchors in a CRLF file, but the edit is spliced into the raw
+  text, so line endings outside the edited span are preserved
+  byte-for-byte — including in mixed-EOL files.
 * The WP2 elision detector scans every REPLACE text, and the
   shared path-containment / tests-directory guards apply unchanged.
 """
@@ -76,6 +77,20 @@ class ParsedEditReply:
     problem: Optional[str] = None
 
 
+def _split_lines(text: str) -> List[str]:
+    """Split on LF only, tolerating CRLF line endings.
+
+    ``str.splitlines()`` also splits on U+2028/U+2029 and other
+    Unicode line boundaries, which would corrupt content containing
+    those characters inside string literals when the lines are
+    rejoined with "\\n".
+    """
+    return [
+        line[:-1] if line.endswith("\r") else line
+        for line in text.split("\n")
+    ]
+
+
 def parse_edit_reply(text: str) -> ParsedEditReply:
     """Parse an edit reply into blocks, failing closed on any defect.
 
@@ -83,7 +98,7 @@ def parse_edit_reply(text: str) -> ParsedEditReply:
     line; anything unexpected outside a block, or a block missing
     its SEARCH/separator/REPLACE lines, makes the reply incomplete.
     """
-    lines = text.splitlines()
+    lines = _split_lines(text)
     nonempty = [i for i, line in enumerate(lines) if line.strip()]
     if not nonempty or lines[nonempty[-1]].strip() != pa.END_MARKER:
         return ParsedEditReply(
@@ -142,54 +157,132 @@ def _normalize_lf(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
-def _detect_eol(raw: bytes) -> str:
-    return "\r\n" if b"\r\n" in raw else "\n"
+def _canonical_rel_path(rel_path: str, root: Path) -> str:
+    """Canonical repo-relative identity for a target path.
+
+    ``mod.py`` and ``./mod.py`` are the same file; staging keyed on
+    the raw string would read the original twice and silently drop
+    one block's edit when both staged copies are written back.
+    """
+    root_resolved = root.resolve()
+    resolved = (root_resolved / rel_path).resolve()
+    try:
+        return resolved.relative_to(root_resolved).as_posix()
+    except ValueError:
+        return rel_path
+
+
+def _normalize_with_map(text: str) -> Tuple[str, List[int]]:
+    """LF-normalize *text*, mapping each normalized offset to raw."""
+    normalized: List[str] = []
+    offsets: List[int] = []
+    i = 0
+    while i < len(text):
+        if text[i] == "\r" and i + 1 < len(text) and (
+            text[i + 1] == "\n"
+        ):
+            normalized.append("\n")
+            offsets.append(i)
+            i += 2
+        else:
+            normalized.append(text[i])
+            offsets.append(i)
+            i += 1
+    offsets.append(len(text))
+    return "".join(normalized), offsets
+
+
+def _count_overlapping(text: str, needle: str) -> int:
+    """Count possibly-overlapping occurrences (str.count does not)."""
+    count = 0
+    start = 0
+    while True:
+        idx = text.find(needle, start)
+        if idx == -1:
+            return count
+        count += 1
+        start = idx + 1
+
+
+def _match_span(
+    current: str, search_lf: str
+) -> Tuple[int, Optional[Tuple[int, int]]]:
+    """Count SEARCH matches; locate the raw span of a unique one.
+
+    Matching runs on LF-normalized text so a block copied from an
+    LF bundle anchors in a CRLF file; the returned span indexes the
+    raw text, so everything outside the span keeps its original
+    bytes and line endings.
+    """
+    normalized, offsets = _normalize_with_map(current)
+    count = _count_overlapping(normalized, search_lf)
+    if count != 1:
+        return count, None
+    start = normalized.find(search_lf)
+    end = start + len(search_lf)
+    return count, (offsets[start], offsets[end])
+
+
+def _region_eol(text: str, start: int, end: int) -> str:
+    """Line ending to give replacement text spliced at text[start:end]."""
+    span = text[start:end]
+    if "\r\n" in span:
+        return "\r\n"
+    if "\n" in span:
+        return "\n"
+    if text[end : end + 2] == "\r\n":
+        return "\r\n"
+    if text[end : end + 1] == "\n":
+        return "\n"
+    newline = text.find("\n")
+    if newline > 0 and text[newline - 1] == "\r":
+        return "\r\n"
+    return "\n"
 
 
 def _stage_edits(
     blocks: List[EditBlock], root: Path
-) -> Tuple[Dict[str, Tuple[str, str]], List[str]]:
+) -> Tuple[Dict[str, str], List[str]]:
     """Validate and stage every block in memory; write nothing.
 
-    Returns ``({path: (new_lf_text, eol)}, problems)``. Blocks for
-    the same file apply sequentially to the staged text, so a later
-    block anchors on the result of the earlier ones.
+    Returns ``({canonical_path: new_raw_text}, problems)``. Blocks
+    for the same file apply sequentially to the staged text, so a
+    later block anchors on the result of the earlier ones.
     """
-    staged: Dict[str, Tuple[str, str]] = {}
+    staged: Dict[str, str] = {}
     originals: Dict[str, str] = {}
     problems: List[str] = []
     for block in blocks:
-        if block.path not in staged:
-            target = root / block.path
+        canonical = _canonical_rel_path(block.path, root)
+        if canonical not in staged:
+            target = root / canonical
             if not target.is_file():
                 problems.append(
                     f"{block.path}: target file does not exist"
                 )
                 continue
-            raw = target.read_bytes()
             try:
-                original = raw.decode("utf-8")
+                original = target.read_bytes().decode("utf-8")
             except UnicodeDecodeError:
                 problems.append(
                     f"{block.path}: target file is not valid UTF-8"
                 )
                 continue
-            originals[block.path] = _normalize_lf(original)
-            staged[block.path] = (originals[block.path],
-                                  _detect_eol(raw))
-        current, eol = staged[block.path]
+            originals[canonical] = _normalize_lf(original)
+            staged[canonical] = original
+        current = staged[canonical]
         search = _normalize_lf(block.search)
         if not search:
             problems.append(f"{block.path}: empty SEARCH block")
             continue
-        count = current.count(search)
+        count, span = _match_span(current, search)
         if count == 0:
             problems.append(
                 f"{block.path}: SEARCH text not found (0 matches); "
                 "copy it exactly from the current file"
             )
             continue
-        if count > 1:
+        if count > 1 or span is None:
             problems.append(
                 f"{block.path}: SEARCH text matches {count} places; "
                 "add surrounding context lines to make it unique"
@@ -198,9 +291,12 @@ def _stage_edits(
         replace = _normalize_lf(block.replace)
         problems.extend(
             pa._elision_problems(block.path, replace,
-                                 originals[block.path])
+                                 originals[canonical])
         )
-        staged[block.path] = (current.replace(search, replace, 1), eol)
+        start, end = span
+        if _region_eol(current, start, end) == "\r\n":
+            replace = replace.replace("\n", "\r\n")
+        staged[canonical] = current[:start] + replace + current[end:]
     return staged, problems
 
 
@@ -269,11 +365,8 @@ def apply_edit_reply(
             f"{proc.stderr.strip()}"
         )
         return 1
-    for rel_path, (new_text, eol) in staged.items():
-        data = new_text if eol == "\n" else new_text.replace(
-            "\n", "\r\n"
-        )
-        (root / rel_path).write_bytes(data.encode("utf-8"))
+    for rel_path, new_text in staged.items():
+        (root / rel_path).write_bytes(new_text.encode("utf-8"))
     output_fn(
         f"Applied {len(parsed.blocks)} edit block(s) to "
         f"{len(staged)} file(s) on branch {branch}:"

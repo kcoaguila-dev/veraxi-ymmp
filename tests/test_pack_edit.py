@@ -249,3 +249,69 @@ def test_cmd_pack_hint_for_large_files(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "<<<<<<< SEARCH" in captured.out
     assert "--mode edit" not in captured.err
+
+
+# --- WP4 follow-ups: CodeRabbit data-integrity threads ----------------------
+
+
+def test_edit_overlapping_matches_rejected(tmp_path):
+    root = _make_repo(tmp_path)
+    (root / "mod.py").write_text("pass\npass\npass\n", encoding="utf-8")
+    # "pass\npass" occurs at two overlapping offsets; str.count says 1.
+    reply = _reply(_edit_block("mod.py", "pass\npass", "done"))
+    outputs: list = []
+    code = pe.apply_edit_reply(
+        reply, root, branch_name="agent-edit-overlap",
+        check_runner=_no_failures, output_fn=outputs.append,
+    )
+    assert code == 1
+    assert "matches 2 places" in "\n".join(outputs)
+    assert (root / "mod.py").read_text(encoding="utf-8") == (
+        "pass\npass\npass\n"
+    )
+    assert "agent-edit-overlap" not in _branches(root)
+
+
+def test_edit_same_file_via_different_path_spellings(tmp_path):
+    root = _make_repo(tmp_path)
+    reply = _reply(
+        _edit_block("mod.py", "    return a - b", FIXED_LINE),
+        _edit_block("./mod.py", "def add(a, b):", "def add(a, b):  # fixed"),
+    )
+    code = pe.apply_edit_reply(
+        reply, root, branch_name="agent-edit-canon",
+        check_runner=_no_failures, output_fn=lambda _m: None,
+    )
+    assert code == 0
+    # Both edits are present; neither was silently overwritten.
+    assert (root / "mod.py").read_text(encoding="utf-8") == (
+        "def add(a, b):  # fixed\n    return a + b\n"
+    )
+
+
+def test_edit_mixed_eol_untouched_lines_preserved(tmp_path):
+    root = _make_repo(tmp_path)
+    (root / "mod.py").write_bytes(b"x = 1\r\ny = 2\n")
+    reply = _reply(_edit_block("mod.py", "x = 1", "x = 9"))
+    code = pe.apply_edit_reply(
+        reply, root, branch_name="agent-edit-mixed",
+        check_runner=_no_failures, output_fn=lambda _m: None,
+    )
+    assert code == 0
+    # The edited line takes the local CRLF; the untouched LF line
+    # keeps its LF — no whole-file ending conversion.
+    assert (root / "mod.py").read_bytes() == b"x = 9\r\ny = 2\n"
+
+
+def test_edit_unicode_line_separator_preserved(tmp_path):
+    root = _make_repo(tmp_path)
+    (root / "mod.py").write_text('s = "a"\n', encoding="utf-8")
+    reply = _reply(_edit_block("mod.py", 's = "a"', 's = "a\u2028b"'))
+    code = pe.apply_edit_reply(
+        reply, root, branch_name="agent-edit-u2028",
+        check_runner=_no_failures, output_fn=lambda _m: None,
+    )
+    assert code == 0
+    assert (root / "mod.py").read_bytes() == 's = "a\u2028b"\n'.encode(
+        "utf-8"
+    )
