@@ -96,6 +96,18 @@ Open **`http://localhost:1420`** in your browser.
 
 ---
 
+## Web-Chat Fallback Development (pack / apply / apply-edit)
+
+If local AI tooling is unavailable, development can continue from a web chat by copy/paste:
+
+- `veraxi-ymmp pack --task "..." --files <paths> [-o bundle.md]` emits one markdown bundle (task, rules — `AGENTS_WEB.md` by default, the slim web distillation of `AGENTS.md` — files, failing tests) plus a manifest sidecar for the apply guards. `--mode edit` switches the reply format to anchored SEARCH/REPLACE blocks for large files.
+- `veraxi-ymmp apply reply.md --manifest bundle.md.manifest.json` applies a full-file reply on a fresh branch, guarded by the manifest allowlist, stale-base, elision, and shrink checks.
+- `veraxi-ymmp apply-edit reply.md` applies SEARCH/REPLACE edit blocks instead: every SEARCH must match exactly once, all blocks are staged before anything is written, and each file's encoding/line endings are preserved.
+
+Both apply paths fail closed — a malformed, truncated, or unsafe reply changes nothing and prints a re-prompt block to paste back to the web chat.
+
+---
+
 ## Prerequisites & Installation
 
 ### 1. System Requirements
