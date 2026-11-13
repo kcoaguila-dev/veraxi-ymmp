@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -172,14 +174,17 @@ def test_output_dir_overlapping_a_source_aborts(tmp_path):
     assert {p.name: p.read_bytes() for p in inbox.iterdir()} == before
 
 
-def test_probe_failure_is_not_a_matching_abort(tmp_path, monkeypatch):
+def test_probe_failure_aborts_ingest_and_writes_nothing(
+    tmp_path, monkeypatch
+):
     # Stub the probe: this test exercises the flag/manifest logic and
     # must not require ffprobe on the machine (probe_video would raise
     # FileNotFoundError where ffprobe is absent).
     monkeypatch.setattr(ci, "probe_video", lambda _path: None)
-    # Matching succeeded; the file is just unreadable. The manifest IS
-    # written (with the rejection), so the run must not claim a
-    # matching abort / "nothing was written".
+    # Matching succeeded; the file is just unreadable. Manifest-mode
+    # ingest is all-or-nothing in the processing phase too: the run
+    # aborts (distinctly from a matching abort) and publishes nothing
+    # — no manifest.json, no normalized outputs, no staging leftovers.
     inbox = _inbox(tmp_path, "bad.mp4")
     manifest_path = _write_manifest(tmp_path, [
         {"clip_id": "bad", "filename": "bad.mp4"},
@@ -188,4 +193,196 @@ def test_probe_failure_is_not_a_matching_abort(tmp_path, monkeypatch):
     assert result["clips"] == []
     assert result["rejected"] != []
     assert result["matching_aborted"] is False
-    assert (tmp_path / "clips" / "manifest.json").exists()
+    assert result["ingest_aborted"] is True
+    out_dir = tmp_path / "clips"
+    assert not (out_dir / "manifest.json").exists()
+    assert list(out_dir.iterdir()) == []
+
+
+def test_publish_blocked_by_directory_keeps_previous_ingest(
+    tmp_path, monkeypatch
+):
+    inbox = _inbox(tmp_path, "a.mp4", "b.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4", "b.mp4"})
+    out_dir = tmp_path / "clips"
+    out_dir.mkdir()
+    (out_dir / "a.mp4").write_bytes(b"old-a")
+    (out_dir / "manifest.json").write_bytes(b"old-manifest")
+    (out_dir / "b.mp4").mkdir()  # a directory blocks b's destination
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "a", "filename": "a.mp4"},
+        {"clip_id": "b", "filename": "b.mp4"},
+    ])
+    with pytest.raises(OSError):
+        ci.ingest_clips_from_manifest(
+            inbox, manifest_path, output_dir=out_dir
+        )
+    assert (out_dir / "a.mp4").read_bytes() == b"old-a"
+    assert (out_dir / "manifest.json").read_bytes() == b"old-manifest"
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "a.mp4", "b.mp4", "manifest.json",
+    ]
+
+
+def test_publish_failure_midway_rolls_back(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, "a.mp4", "b.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4", "b.mp4"})
+    out_dir = tmp_path / "clips"
+    out_dir.mkdir()
+    (out_dir / "a.mp4").write_bytes(b"old-a")
+    (out_dir / "b.mp4").write_bytes(b"old-b")
+    (out_dir / "manifest.json").write_bytes(b"old-manifest")
+    real_replace = ci.os.replace
+
+    def flaky_replace(src, dst):
+        parent = Path(src).parent.name
+        staged = parent.startswith(".clip-ingest-") and not parent.startswith(
+            ".clip-ingest-backup-"
+        )
+        if Path(src).name == "b.mp4" and staged:
+            raise PermissionError("simulated locked destination")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(ci.os, "replace", flaky_replace)
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "a", "filename": "a.mp4"},
+        {"clip_id": "b", "filename": "b.mp4"},
+    ])
+    with pytest.raises(PermissionError):
+        ci.ingest_clips_from_manifest(
+            inbox, manifest_path, output_dir=out_dir
+        )
+    assert (out_dir / "a.mp4").read_bytes() == b"old-a"
+    assert (out_dir / "b.mp4").read_bytes() == b"old-b"
+    assert (out_dir / "manifest.json").read_bytes() == b"old-manifest"
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "a.mp4", "b.mp4", "manifest.json",
+    ]
+
+
+# --- Review follow-ups (post-merge review of PR #23) -----------------
+
+@pytest.mark.parametrize("clip_id", [
+    "con", "NUL", "aux", "prn", "com1", "lpt9", "con.txt",
+])
+def test_manifest_reserved_windows_ids_rejected(tmp_path, clip_id):
+    path = _write_manifest(tmp_path, [
+        {"clip_id": clip_id, "filename": "a.mp4"},
+    ])
+    with pytest.raises(ValueError, match="reserved Windows device name"):
+        ci.load_clip_manifest(path)
+
+
+def _stub_probe_and_normalize(monkeypatch, good_names):
+    """Make probing succeed for the named files and normalization a
+    byte write, so matching behavior can be tested without ffmpeg.
+    Names compare by _name_key: a platform may hand back a file name
+    in a different case/normalization than the one it was created
+    with."""
+    good_keys = {ci._name_key(n) for n in good_names}
+
+    def fake_probe(path):
+        if ci._name_key(Path(path).name) in good_keys:
+            return {"duration_sec": 1.0, "has_audio": False}
+        return None
+
+    def fake_normalize(src, dst, probe, width, height, fps):
+        Path(dst).write_bytes(b"normalized")
+
+    monkeypatch.setattr(ci, "probe_video", fake_probe)
+    monkeypatch.setattr(ci, "_normalize", fake_normalize)
+
+
+def test_declared_name_matches_despite_case(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, "a.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4"})
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "x", "filename": "A.mp4"},
+    ])
+    result = ci.ingest_clips_from_manifest(inbox, manifest_path)
+    assert result["matching_aborted"] is False
+    assert [c["id"] for c in result["clips"]] == ["x"]
+    # The manifest records the actual on-disk source name.
+    assert result["clips"][0]["source"] == "a.mp4"
+
+
+def test_declared_name_matches_despite_unicode_normalization(
+    tmp_path, monkeypatch
+):
+    nfc = "がく.mp4"  # が decomposes under NFD (か + combining dakuten)
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert nfc != nfd
+    inbox = _inbox(tmp_path, nfd)
+    on_disk_name = next(inbox.iterdir()).name
+    _stub_probe_and_normalize(monkeypatch, {nfd})
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "g", "filename": nfc},
+    ])
+    result = ci.ingest_clips_from_manifest(inbox, manifest_path)
+    assert result["matching_aborted"] is False
+    # The manifest records the name exactly as it exists on disk.
+    assert result["clips"][0]["source"] == on_disk_name
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="files differing only by case cannot coexist on Windows",
+)
+def test_ambiguous_case_match_aborts(tmp_path):
+    inbox = _inbox(tmp_path, "A.mp4", "a.mp4")
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "x", "filename": "a.mp4"},
+    ])
+    result = ci.ingest_clips_from_manifest(inbox, manifest_path)
+    assert result["matching_aborted"] is True
+    assert any("several" in r["reason"] for r in result["rejected"])
+    assert not (tmp_path / "clips").exists()
+
+
+def test_same_file_claimed_by_two_entries_aborts(tmp_path):
+    inbox = _inbox(tmp_path, "a.mp4")
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "x", "filename": "A.mp4"},
+        {"clip_id": "y", "filename": "a.mp4"},
+    ])
+    result = ci.ingest_clips_from_manifest(inbox, manifest_path)
+    assert result["matching_aborted"] is True
+    assert any("also declared" in r["reason"] for r in result["rejected"])
+
+
+def test_cmd_matching_abort_exit_and_message(tmp_path, capsys):
+    inbox = _inbox(tmp_path, "a.mp4")
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "x", "filename": "missing.mp4"},
+    ])
+    with pytest.raises(SystemExit) as excinfo:
+        ci.cmd_ingest_clips([str(inbox), "--from-manifest", str(manifest_path)])
+    assert excinfo.value.code == 1
+    assert "manifest matching failed; nothing was written" in (
+        capsys.readouterr().out
+    )
+
+
+def test_cmd_processing_abort_exit_and_message(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.setattr(ci, "probe_video", lambda _path: None)
+    inbox = _inbox(tmp_path, "bad.mp4")
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "bad", "filename": "bad.mp4"},
+    ])
+    with pytest.raises(SystemExit) as excinfo:
+        ci.cmd_ingest_clips([str(inbox), "--from-manifest", str(manifest_path)])
+    assert excinfo.value.code == 1
+    assert "a clip failed to ingest; nothing was written" in (
+        capsys.readouterr().out
+    )
+
+
+def test_cmd_manifest_load_error_exits_2(tmp_path, capsys):
+    inbox = _inbox(tmp_path, "a.mp4")
+    bad = tmp_path / "bad.json"
+    bad.write_text("not json", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        ci.cmd_ingest_clips([str(inbox), "--from-manifest", str(bad)])
+    assert excinfo.value.code == 2

@@ -26,8 +26,11 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -113,17 +116,11 @@ def _normalize(
         raise RuntimeError(f"ffmpeg failed for {src.name}: {proc.stderr.strip()[-500:]}")
 
 
-def _ingest_one(
+def _ingest_probed(
     src: Path, clip_id: str, out_dir: Path,
-    width: int, height: int, fps: int,
-) -> tuple:
-    """Probe + normalize one source; returns (entry, rejection)."""
-    probe = probe_video(src)
-    if probe is None:
-        return None, {
-            "source": src.name,
-            "reason": "ffprobe could not read a video stream",
-        }
+    width: int, height: int, fps: int, probe: Dict[str, Any],
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, str]]]:
+    """Normalize an already-probed source; returns (entry, rejection)."""
     dst = out_dir / f"{clip_id}.mp4"
     try:
         _normalize(src, dst, probe, width, height, fps)
@@ -144,6 +141,20 @@ def _ingest_one(
         "muted": True,
     }
     return entry, None
+
+
+def _ingest_one(
+    src: Path, clip_id: str, out_dir: Path,
+    width: int, height: int, fps: int,
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, str]]]:
+    """Probe + normalize one source; returns (entry, rejection)."""
+    probe = probe_video(src)
+    if probe is None:
+        return None, {
+            "source": src.name,
+            "reason": "ffprobe could not read a video stream",
+        }
+    return _ingest_probed(src, clip_id, out_dir, width, height, fps, probe)
 
 
 def _write_manifest(out_dir: Path, manifest: Dict[str, Any]) -> None:
@@ -172,10 +183,24 @@ def ingest_clips(
         if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
     )
     for src in sources:
+        # Probe before taking an id: a file ffprobe cannot read is
+        # rejected without consuming a numbering slot, so the ids of
+        # the surviving clips do not shift (pre-WP8 semantics; scripts
+        # reference these ids). A file that probes but fails to
+        # normalize HAS taken its id, as before.
+        probe = probe_video(src)
+        if probe is None:
+            rejected.append({
+                "source": src.name,
+                "reason": "ffprobe could not read a video stream",
+            })
+            continue
         base_id = _slugify(src.stem)
         used_ids[base_id] = used_ids.get(base_id, 0) + 1
         clip_id = base_id if used_ids[base_id] == 1 else f"{base_id}-{used_ids[base_id]}"
-        entry, rejection = _ingest_one(src, clip_id, out_dir, width, height, fps)
+        entry, rejection = _ingest_probed(
+            src, clip_id, out_dir, width, height, fps, probe
+        )
         if entry is not None:
             clips.append(entry)
         if rejection is not None:
@@ -192,6 +217,15 @@ def ingest_clips(
 
 
 _CLIP_ID_SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+# Windows reserves these names for devices regardless of extension:
+# an output file named con.mp4 or nul.mp4 is invalid there. The check
+# is on the segment before the first dot (con.txt.mp4 is still CON).
+_WINDOWS_RESERVED = (
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
 
 
 def load_clip_manifest(path: Path) -> List[tuple]:
@@ -232,6 +266,12 @@ def load_clip_manifest(path: Path) -> List[tuple]:
                 f"clip manifest entry {i}: unsafe clip_id {clip_id!r} "
                 "(letters, digits, '.', '_', '-' only)"
             )
+        if clip_id.split(".")[0].casefold() in _WINDOWS_RESERVED:
+            raise ValueError(
+                f"clip manifest entry {i}: clip_id {clip_id!r} begins "
+                "with a reserved Windows device name (con, prn, aux, "
+                "nul, com1-9, lpt1-9); its output file would be invalid"
+            )
         parts = Path(filename).parts
         if Path(filename).is_absolute() or ".." in parts or len(parts) != 1:
             raise ValueError(
@@ -252,47 +292,68 @@ def load_clip_manifest(path: Path) -> List[tuple]:
     return entries
 
 
-def ingest_clips_from_manifest(
-    inbox: Path,
-    clip_manifest_path: Path,
-    output_dir: Optional[Path] = None,
-    width: int = DEFAULT_CANVAS_WIDTH,
-    height: int = DEFAULT_CANVAS_HEIGHT,
-    fps: int = DEFAULT_FPS,
-) -> Dict[str, Any]:
-    """Ingest exactly the clips a web-chat manifest declares (WP8).
+def _name_key(name: str) -> str:
+    """Comparison key for inbox file names: NFC-normalized and
+    case-folded, so a declared name matches the on-disk file across
+    letter-case differences and Unicode normalization forms (both
+    common with Japanese file names from web downloads)."""
+    return unicodedata.normalize("NFC", name).casefold()
 
-    Matching is all-or-nothing: a declared file missing from the
-    inbox, or a video file in the inbox that the manifest does not
-    declare, aborts the ingest (nothing written) with every problem
-    listed in the returned dict's ``rejected``. Matched files are
-    probed and normalized exactly like :func:`ingest_clips`, keeping
-    the declared clip_ids and order.
+
+def _match_declared(
+    inbox: Path, entries: List[tuple], out_dir: Path
+) -> tuple[Dict[str, Path], List[Dict[str, str]]]:
+    """Resolve declared filenames to actual inbox files.
+
+    Returns (resolved, problems): resolved maps each declared
+    filename to the real file to ingest — its on-disk name is what
+    the manifest records as the source. A declared file that is
+    missing, matches several inbox files up to case/normalization,
+    or is claimed by two entries, and any video the manifest does
+    not declare, become problems; the caller aborts before writing.
     """
-    inbox = Path(inbox)
-    out_dir = Path(output_dir) if output_dir else inbox.parent / "clips"
-    entries = load_clip_manifest(clip_manifest_path)
-    manifest: Dict[str, Any] = {
-        "version": 1,
-        "profile": {"width": width, "height": height, "fps": fps},
-        "clips": [],
-        "rejected": [],
-        "from_manifest": Path(clip_manifest_path).name,
-        "matching_aborted": False,
-    }
-    declared = {filename for _cid, filename in entries}
-    declared_paths = {
-        os.path.normcase(str((inbox / fn).resolve())) for _c, fn in entries
-    }
+    by_key: Dict[str, List[Path]] = {}
+    for p in inbox.iterdir():
+        if p.is_file():
+            by_key.setdefault(_name_key(p.name), []).append(p)
+    declared_keys = {_name_key(fn) for _cid, fn in entries}
+    resolved: Dict[str, Path] = {}
+    claimed: Dict[Path, str] = {}
     problems: List[Dict[str, str]] = []
     for clip_id, filename in entries:
-        if not (inbox / filename).is_file():
+        candidates = by_key.get(_name_key(filename), [])
+        if not candidates:
             problems.append({
                 "source": filename,
                 "reason": f"declared for clip_id '{clip_id}' but not found in inbox",
             })
+        elif len(candidates) > 1:
+            names = ", ".join(sorted(p.name for p in candidates))
+            problems.append({
+                "source": filename,
+                "reason": (
+                    f"declared for clip_id '{clip_id}' but several "
+                    f"inbox files match it up to case/normalization: {names}"
+                ),
+            })
+        elif candidates[0] in claimed:
+            problems.append({
+                "source": filename,
+                "reason": (
+                    f"the same inbox file is also declared for "
+                    f"clip_id '{claimed[candidates[0]]}'"
+                ),
+            })
+        else:
+            claimed[candidates[0]] = clip_id
+            resolved[filename] = candidates[0]
+    # Destinations are always <clip_id>.mp4, so an inbox file one
+    # could overwrite is necessarily a video file: declared ones are
+    # checked here, undeclared ones abort in the scan below.
+    source_paths = {os.path.normcase(str(p.resolve())) for p in claimed}
+    for clip_id, filename in entries:
         dest = os.path.normcase(str((out_dir / f"{clip_id}.mp4").resolve()))
-        if dest in declared_paths:
+        if dest in source_paths:
             problems.append({
                 "source": filename,
                 "reason": (
@@ -304,30 +365,120 @@ def ingest_clips_from_manifest(
         p for p in inbox.iterdir()
         if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
     ):
-        if src.name not in declared:
+        if _name_key(src.name) not in declared_keys:
             problems.append({
                 "source": src.name,
                 "reason": "video file not listed in the clip manifest",
             })
+    return resolved, problems
+
+
+def _publish_stage(stage: Path, out_dir: Path, backup: Path) -> None:
+    """Publish every staged file into out_dir as one unit.
+
+    A destination that exists but is not a file aborts the publish
+    before anything moves. Otherwise each existing destination is
+    first moved into backup; if any move then fails, every file
+    already published is removed and every backup restored, so the
+    previous complete ingest survives untouched. Raises OSError on
+    failure, after the rollback.
+    """
+    names = sorted(p.name for p in stage.iterdir())
+    for name in names:
+        dest = out_dir / name
+        if dest.exists() and not dest.is_file():
+            raise OSError(
+                f"cannot publish {name}: {dest} exists and is not a file"
+            )
+    published: List[str] = []
+    try:
+        for name in names:
+            dest = out_dir / name
+            if dest.is_file():
+                os.replace(dest, backup / name)
+            os.replace(stage / name, dest)
+            published.append(name)
+    except OSError:
+        for name in reversed(published):
+            dest = out_dir / name
+            if dest.is_file():
+                dest.unlink()
+            saved = backup / name
+            if saved.exists():
+                os.replace(saved, dest)
+        # The name whose publish failed midway may hold the only
+        # backup not yet restored.
+        for saved in list(backup.iterdir()):
+            os.replace(saved, out_dir / saved.name)
+        raise
+
+
+def ingest_clips_from_manifest(
+    inbox: Path,
+    clip_manifest_path: Path,
+    output_dir: Optional[Path] = None,
+    width: int = DEFAULT_CANVAS_WIDTH,
+    height: int = DEFAULT_CANVAS_HEIGHT,
+    fps: int = DEFAULT_FPS,
+) -> Dict[str, Any]:
+    """Ingest exactly the clips a web-chat manifest declares (WP8).
+
+    All-or-nothing, in both phases. Matching: a declared file
+    missing or ambiguous, a file claimed twice, or a video file in
+    the inbox that the manifest does not declare, aborts the ingest
+    with every problem listed in the returned dict's ``rejected``
+    (``matching_aborted``). Processing: matched files are normalized
+    into a staging directory inside the output dir, and only when
+    every clip succeeds are the outputs and ``manifest.json``
+    published; any failure discards the staging directory and writes
+    nothing (``ingest_aborted``). Publication itself is one unit:
+    if a publish move fails, the previous ingest is restored and
+    the error raises. The returned manifest dict also carries
+    ``from_manifest`` (the clip manifest's file name) — these three
+    keys are part of the manifest-mode result schema.
+    """
+    inbox = Path(inbox)
+    out_dir = Path(output_dir) if output_dir else inbox.parent / "clips"
+    entries = load_clip_manifest(clip_manifest_path)
+    manifest: Dict[str, Any] = {
+        "version": 1,
+        "profile": {"width": width, "height": height, "fps": fps},
+        "clips": [],
+        "rejected": [],
+        "from_manifest": Path(clip_manifest_path).name,
+        "matching_aborted": False,
+        "ingest_aborted": False,
+    }
+    resolved, problems = _match_declared(inbox, entries, out_dir)
     if problems:
         manifest["rejected"] = problems
         manifest["matching_aborted"] = True
         return manifest
     out_dir.mkdir(parents=True, exist_ok=True)
-    clips: List[Dict[str, Any]] = []
-    rejected: List[Dict[str, str]] = []
-    for clip_id, filename in entries:
-        entry, rejection = _ingest_one(
-            inbox / filename, clip_id, out_dir, width, height, fps
-        )
-        if entry is not None:
-            clips.append(entry)
-        if rejection is not None:
-            rejected.append(rejection)
-    manifest["clips"] = clips
-    manifest["rejected"] = rejected
-    _write_manifest(out_dir, manifest)
-    return manifest
+    stage = Path(tempfile.mkdtemp(prefix=".clip-ingest-", dir=out_dir))
+    backup = Path(tempfile.mkdtemp(prefix=".clip-ingest-backup-", dir=out_dir))
+    try:
+        clips: List[Dict[str, Any]] = []
+        rejected: List[Dict[str, str]] = []
+        for clip_id, filename in entries:
+            entry, rejection = _ingest_one(
+                resolved[filename], clip_id, stage, width, height, fps
+            )
+            if entry is not None:
+                clips.append(entry)
+            if rejection is not None:
+                rejected.append(rejection)
+        if rejected:
+            manifest["rejected"] = rejected
+            manifest["ingest_aborted"] = True
+            return manifest
+        manifest["clips"] = clips
+        _write_manifest(stage, manifest)
+        _publish_stage(stage, out_dir, backup)
+        return manifest
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+        shutil.rmtree(backup, ignore_errors=True)
 
 
 def find_clips_manifest(search_from: List[Path]) -> Optional[Path]:
@@ -426,6 +577,8 @@ def cmd_ingest_clips(argv: Sequence[str]) -> None:
         sys.stderr.write(f"Rejected {rej['source']}: {rej['reason']}\n")
     if args.from_manifest and manifest.get("matching_aborted"):
         print("Ingest aborted: manifest matching failed; nothing was written.")
+    elif args.from_manifest and manifest.get("ingest_aborted"):
+        print("Ingest aborted: a clip failed to ingest; nothing was written.")
     else:
         print(f"Ingested {len(manifest['clips'])} clip(s); manifest: {out_dir / MANIFEST_NAME}")
     if manifest["rejected"]:
