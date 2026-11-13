@@ -96,6 +96,34 @@ def test_premature_close_reply_applies_nothing(tmp_path):
     assert "agent-apply-fence-test" not in branches
 
 
+def test_reply_wrapped_in_one_outer_fence_parses():
+    inner = _reply("mod.py", FENCE, "python", "x = 1\n")
+    wrapped = f"{FENCE4}markdown\n{inner}{FENCE4}\n"
+    parsed = pa.parse_reply(wrapped)
+    assert parsed.complete, parsed.problem
+    assert parsed.blocks == [("mod.py", "x = 1\n")]
+
+    # A second fence after the wrapper closes is still a stray fence.
+    parsed = pa.parse_reply(wrapped + FENCE + "\n")
+    assert not parsed.complete
+    assert "stray code fence" in parsed.problem
+
+    # Without a wrapper opening fence, a fence after the end marker
+    # is still rejected (the original safety net is unchanged).
+    parsed = pa.parse_reply(inner + FENCE4 + "\n")
+    assert not parsed.complete
+    assert "stray code fence" in parsed.problem
+
+
+def test_failing_tests_section_uses_fence_longer_than_its_output():
+    test_output = "FAILED x\n" + FENCE + "\nconfusing fence line in output\n"
+    bundle = pa.build_pack_bundle(
+        "task", [("mod.py", "x = 1\n")], "# rules",
+        test_path="tests/test_mod.py", test_output=test_output,
+    )
+    assert f"{FENCE4}text" in bundle
+
+
 def test_build_pack_bundle_uses_longer_fence_for_fenced_content():
     bundle = pa.build_pack_bundle(
         "task", [("doc.md", DOC_WITH_JSON_FENCE)], "# rules"

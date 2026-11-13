@@ -67,6 +67,46 @@ class ParsedReply:
     problem: str = ""
 
 
+def _read_block(
+    lines: List[str], start: int, open_run: int
+) -> Tuple[List[str], int]:
+    """Read one fenced block's content from *lines* starting at *start*.
+
+    *open_run* is the opening fence's backtick count. Returns the
+    content lines and the index of the closing fence line, or -1 when
+    the block is unclosed. See parse_reply for the fence rules.
+    """
+    stack: List[int] = [open_run]
+    content_lines: List[str] = []
+    k = start
+    while k < len(lines):
+        fence = _FENCE_LINE.match(lines[k].strip())
+        if fence is None:
+            content_lines.append(lines[k])
+            k += 1
+            continue
+        run = len(fence.group(1))
+        if fence.group(2):
+            # A tagged fence inside the block opens a nested level.
+            stack.append(run)
+            content_lines.append(lines[k])
+            k += 1
+            continue
+        if len(stack) > 1:
+            if run >= stack[-1]:
+                stack.pop()
+            content_lines.append(lines[k])
+            k += 1
+            continue
+        if run >= stack[0]:
+            return content_lines, k
+        # A shorter bare fence is ordinary content (e.g. the closing
+        # fence of an inner block wrapped in a longer outer fence).
+        content_lines.append(lines[k])
+        k += 1
+    return content_lines, -1
+
+
 def parse_reply(text: str) -> ParsedReply:
     """Parse '### File: `path`' + fenced-block pairs from a reply.
 
@@ -86,6 +126,11 @@ def parse_reply(text: str) -> ParsedReply:
     - Safety net: a fence line outside any block after a block has
       closed is treated as evidence that an inner bare fence closed a
       block prematurely, and the whole reply is rejected.
+    - One exception: web chats often wrap the whole reply in a single
+      outer fence. A fence seen before the first file header is
+      remembered as a wrapper, and one matching bare fence (run >= the
+      wrapper's) after the END_MARKER closes it instead of counting
+      as a stray fence. Any other stray fence still rejects.
     """
     lines = text.splitlines()
     blocks: List[Tuple[str, str]] = []
@@ -93,6 +138,8 @@ def parse_reply(text: str) -> ParsedReply:
     saw_end = False
     saw_continuation = False
     last_closed_path = ""
+    wrapper_run = 0
+    wrapper_closed = False
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
@@ -102,12 +149,26 @@ def parse_reply(text: str) -> ParsedReply:
             saw_continuation = True
         header = _FILE_HEADER.match(lines[i])
         if not header:
-            if blocks and _FENCE_LINE.match(stripped):
-                problem = (
-                    f"stray code fence after block for {last_closed_path}; "
-                    "nested fences likely broke the block"
-                )
-                break
+            fence = _FENCE_LINE.match(stripped)
+            if fence is not None and not blocks and not wrapper_run:
+                # Possible whole-reply wrapper opening fence.
+                wrapper_run = len(fence.group(1))
+            elif fence is not None and blocks:
+                run = len(fence.group(1))
+                if (
+                    wrapper_run
+                    and not wrapper_closed
+                    and saw_end
+                    and not fence.group(2)
+                    and run >= wrapper_run
+                ):
+                    wrapper_closed = True
+                else:
+                    problem = (
+                        f"stray code fence after block for {last_closed_path}; "
+                        "nested fences likely broke the block"
+                    )
+                    break
             i += 1
             continue
         rel_path = header.group(1)
@@ -118,40 +179,8 @@ def parse_reply(text: str) -> ParsedReply:
         if open_match is None:
             problem = f"file block for {rel_path!r} is not followed by a code fence"
             break
-        # Stack of open fence run lengths: the block's own fence first,
-        # then any nested fences opened inside it.
-        stack: List[int] = [len(open_match.group(1))]
-        content_lines: List[str] = []
-        k = j + 1
-        closed = False
-        while k < len(lines):
-            fence = _FENCE_LINE.match(lines[k].strip())
-            if fence is None:
-                content_lines.append(lines[k])
-                k += 1
-                continue
-            run = len(fence.group(1))
-            tag = fence.group(2)
-            if tag:
-                # A tagged fence inside the block opens a nested level.
-                stack.append(run)
-                content_lines.append(lines[k])
-                k += 1
-                continue
-            if len(stack) > 1:
-                if run >= stack[-1]:
-                    stack.pop()
-                content_lines.append(lines[k])
-                k += 1
-                continue
-            if run >= stack[0]:
-                closed = True
-                break
-            # A shorter bare fence is ordinary content (e.g. the closing
-            # fence of an inner block wrapped in a longer outer fence).
-            content_lines.append(lines[k])
-            k += 1
-        if not closed:
+        content_lines, k = _read_block(lines, j + 1, len(open_match.group(1)))
+        if k < 0:
             problem = f"file block for {rel_path!r} is truncated (unclosed fence)"
             break
         content = "\n".join(content_lines)
@@ -337,8 +366,9 @@ def build_pack_bundle(
         parts += [f"### File: `{rel_path}`", f"{fence}{lang}", content.rstrip("\n"),
                   fence, ""]
     if test_path:
-        parts += ["## Failing Tests", f"$ pytest {test_path} -q", "```text",
-                  test_output, "```", ""]
+        test_fence = _fence_for_content(test_output)
+        parts += ["## Failing Tests", f"$ pytest {test_path} -q",
+                  f"{test_fence}text", test_output, test_fence, ""]
     parts += [
         "## Reply Format (strict — follow exactly)",
         "Reply with ONLY file blocks, one per file you change, in this format:",
