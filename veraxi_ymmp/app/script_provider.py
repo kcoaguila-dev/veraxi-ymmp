@@ -71,9 +71,14 @@ def build_script_prompt(topic: str, dossier: str) -> str:
         f"\n\n## Topic\n{topic}\n"
         f"\n## Evidence Dossier\n{dossier}\n"
         "\n## Output Contract\n"
-        "Return ONLY a JSON array of director script entries conforming to "
-        "this JSON Schema — no prose, no commentary:\n"
+        "Return ONLY a JSON object of the form "
+        '{"script": [...], "broll_manifest": [...]} — no prose, no '
+        "commentary. The \"script\" value is an array of director "
+        "script entries conforming to this JSON Schema:\n"
         f"```json\n{schema}\n```\n"
+        "The \"broll_manifest\" value is an array of slide definition "
+        "objects, one per slide referenced by an entry's \"image\" "
+        "field, or an empty array when no slides are referenced.\n"
     )
     return prompt
 
@@ -81,9 +86,12 @@ def build_script_prompt(topic: str, dossier: str) -> str:
 def extract_script_json(text: str) -> Any:
     """Extract the JSON value from a pasted web-chat reply.
 
-    Accepts a bare JSON document, a fenced ```json block, or prose with a
-    JSON array embedded in it. Raises ValueError when nothing parseable
-    is present so the caller can re-prompt.
+    Accepts a bare JSON document, a fenced ```json block, or prose with
+    a JSON object or array embedded in it. The object span is tried
+    before the array span so a prose-wrapped object reply keeps its
+    ``broll_manifest`` instead of silently reducing to the inner
+    ``script`` array. Raises ValueError when nothing parseable is
+    present so the caller can re-prompt.
     """
     cleaned = text.strip()
     fence = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
@@ -93,18 +101,102 @@ def extract_script_json(text: str) -> Any:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
-    start, end = cleaned.find("["), cleaned.rfind("]")
-    if start != -1 and end > start:
+    candidates = []
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start, end = cleaned.find(opener), cleaned.rfind(closer)
+        if start != -1 and end > start:
+            candidates.append((start, -(end - start), cleaned[start : end + 1]))
+    # Earliest span first, outermost first on ties: a prose-wrapped
+    # array must yield the array, not its first entry's object span.
+    for _start, _neg_len, span in sorted(candidates):
         try:
-            return json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Pasted reply is not valid JSON: {exc}") from exc
-    raise ValueError("Pasted reply does not contain a JSON array of script entries.")
+            return json.loads(span)
+        except json.JSONDecodeError:
+            continue
+    raise ValueError(
+        "Pasted reply does not contain a JSON object or array: "
+        f"{cleaned[:120]!r}"
+    )
+
+
+def _canonical_broll_entry(entry: Any) -> Any:
+    """Canonicalize one extracted slide entry to the object shape.
+
+    Legacy appended-style entries (from the pre-WP5 low-tier
+    prompt) mark themselves with ``"type": "broll_manifest"`` and
+    carry the layout in ``slide_type``; the canonical object shape
+    (and the slide renderer) uses ``type`` for the layout itself.
+    """
+    if not isinstance(entry, dict):
+        return entry
+    entry = dict(entry)
+    slide_type = entry.pop("slide_type", None)
+    if entry.get("type") == "broll_manifest":
+        entry.pop("type")
+    if slide_type is not None:
+        entry = {"type": slide_type, **entry}
+    return entry
+
+
+def normalize_script_payload(data: Any) -> dict:
+    """Normalize a parsed reply to the single object contract (WP5).
+
+    The canonical shape is ``{"script": [...], "broll_manifest":
+    [...]}``. Two legacy shapes are accepted leniently so old
+    prompts and saved replies keep working:
+
+    * a bare array of script entries (``broll_manifest`` is empty);
+    * an array whose slide definitions are appended as
+      ``{"type": "broll_manifest", ...}`` entries (extracted into
+      ``broll_manifest`` and canonicalized).
+    """
+    if isinstance(data, dict):
+        script = data.get("script")
+        if not isinstance(script, list):
+            raise ValueError(
+                "Script reply object must contain a \"script\" array."
+            )
+        raw_broll = data.get("broll_manifest", [])
+        if raw_broll is None:
+            raw_broll = []
+        if not isinstance(raw_broll, list):
+            raise ValueError(
+                "Script reply \"broll_manifest\" must be an array."
+            )
+        broll = raw_broll
+        return {"script": script, "broll_manifest": list(broll)}
+    if isinstance(data, list):
+        script_entries: List[Any] = []
+        broll_entries: List[Any] = []
+        for entry in data:
+            if isinstance(entry, dict) and entry.get("type") == (
+                "broll_manifest"
+            ):
+                broll_entries.append(_canonical_broll_entry(entry))
+            else:
+                script_entries.append(entry)
+        return {"script": script_entries, "broll_manifest": broll_entries}
+    raise ValueError(
+        "Script reply must be a JSON object or array, got "
+        f"{type(data).__name__}."
+    )
+
+
+def validate_pasted_payload(raw: str) -> dict:
+    """Parse a pasted reply into the normalized, validated payload.
+
+    Returns ``{"script": [validated entries], "broll_manifest":
+    [...]}`` — the single contract every prompt source now emits.
+    """
+    payload = normalize_script_payload(extract_script_json(raw))
+    entries = validate_director_script(payload["script"])
+    return {"script": entries, "broll_manifest": payload["broll_manifest"]}
 
 
 def validate_pasted_script(raw: str) -> List[DirectorScriptEntry]:
     """Parse a pasted reply and return the validated director script."""
-    return validate_director_script(extract_script_json(raw))
+    payload = normalize_script_payload(extract_script_json(raw))
+    return validate_director_script(payload["script"])
 
 
 def _read_paste_from_stdin() -> str:
@@ -143,6 +235,12 @@ class ManualHandoffProvider:
         self._output_fn = output_fn
         self._prompt_path = prompt_path
         self._max_attempts = max_attempts
+        # The normalized payload of the last successful paste. The
+        # ScriptProvider port returns only the script entries, so the
+        # reply's broll_manifest is surfaced here instead of being
+        # silently dropped at ingest.
+        self.last_broll_manifest: List[Any] = []
+        self.last_payload: Optional[dict] = None
 
     def generate_script(self, topic: str, dossier: str) -> List[DirectorScriptEntry]:
         prompt = build_script_prompt(topic, dossier)
@@ -166,7 +264,11 @@ class ManualHandoffProvider:
             if not raw.strip():
                 raise ValueError("Manual handoff aborted: pasted reply was empty.")
             try:
-                return validate_pasted_script(raw)
+                payload = validate_pasted_payload(raw)
+                self.last_payload = payload
+                self.last_broll_manifest = payload["broll_manifest"]
+                entries: List[DirectorScriptEntry] = payload["script"]
+                return entries
             except ValueError as exc:
                 self._output_fn(format_reprompt_block([str(exc)]))
                 if self._max_attempts is not None and attempts >= self._max_attempts:

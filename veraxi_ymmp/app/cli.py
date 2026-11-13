@@ -382,9 +382,9 @@ def _cmd_export_spec(argv: List[str]) -> None:
     )
     parser.add_argument(
         "--target",
-        choices=["universal", "gemini-flash"],
+        choices=["universal", "low-tier"],
         default="universal",
-        help="Prompt target flavor (universal or gemini-flash)",
+        help="Prompt target flavor (universal or low-tier)",
     )
     args = parser.parse_args(argv)
 
@@ -394,8 +394,8 @@ def _cmd_export_spec(argv: List[str]) -> None:
     else:
         # Load markdown
         template_name = (
-            "GEMINI_FLASH_LOW_SYSTEM_PROMPT.md"
-            if args.target == "gemini-flash"
+            "LOW_TIER_SYSTEM_PROMPT.md"
+            if args.target == "low-tier"
             else "UNIVERSAL_AI_PROMPT.md"
         )
         md_path = Path(__file__).resolve().parent.parent / "templates" / template_name

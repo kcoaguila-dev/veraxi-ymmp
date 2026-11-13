@@ -32,9 +32,9 @@ def test_export_spec_json(capsys):
     assert "emotion" in schema["items"]["properties"]
 
 
-def test_export_spec_gemini_flash(capsys, tmp_path):
-    output_path = tmp_path / "gemini_prompt.md"
-    _cmd_export_spec(["--target", "gemini-flash", "--output", str(output_path)])
+def test_export_spec_low_tier(capsys, tmp_path):
+    output_path = tmp_path / "low_tier_prompt.md"
+    _cmd_export_spec(["--target", "low-tier", "--output", str(output_path)])
 
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8")
