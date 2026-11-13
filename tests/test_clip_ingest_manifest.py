@@ -235,7 +235,11 @@ def test_publish_failure_midway_rolls_back(tmp_path, monkeypatch):
     real_replace = ci.os.replace
 
     def flaky_replace(src, dst):
-        if Path(src).name == "b.mp4" and ".clip-ingest-" in str(src):
+        parent = Path(src).parent.name
+        staged = parent.startswith(".clip-ingest-") and not parent.startswith(
+            ".clip-ingest-backup-"
+        )
+        if Path(src).name == "b.mp4" and staged:
             raise PermissionError("simulated locked destination")
         return real_replace(src, dst)
 
