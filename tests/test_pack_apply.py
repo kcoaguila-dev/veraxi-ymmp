@@ -376,3 +376,51 @@ def test_apply_no_manifest_warns_diff_stat_printed_and_eol(tmp_path):
     )
     assert code == 0
     assert (root / "run.ps1").read_bytes() == b"echo hi\r\n"
+
+
+def test_write_content_file_normalizes_crlf_and_keeps_ps1_crlf(tmp_path):
+    py_file = tmp_path / "x.py"
+    pa._write_content_file(py_file, "a\r\nb\r\n")
+    assert py_file.read_bytes() == b"a\nb\n"
+    ps_file = tmp_path / "x.ps1"
+    pa._write_content_file(ps_file, "a\nb\n")
+    assert ps_file.read_bytes() == b"a\r\nb\r\n"
+
+
+def test_apply_new_file_is_listed_next_to_diff_stat(tmp_path):
+    root = _make_repo(tmp_path)
+    outputs: list = []
+    new_file_reply = (
+        f"### File: `other.py`\n```python\nx = 1\n```\n{pa.END_MARKER}\n"
+    )
+    code = pa.apply_reply(
+        new_file_reply, root, branch_name="agent-wp2-newfile",
+        check_runner=_no_failures, output_fn=outputs.append,
+    )
+    assert code == 0
+    joined = "\n".join(outputs)
+    assert "New files (untracked" in joined
+    assert "other.py (1 lines)" in joined
+
+
+def test_apply_elision_override_flag(tmp_path):
+    root = _make_repo(tmp_path)
+    body = FIXED_MOD + 'MSG = "omitted field is required"\n'
+    outputs: list = []
+    code = pa.apply_reply(
+        _reply(body), root, branch_name="agent-wp2-elision",
+        check_runner=_no_failures, output_fn=outputs.append,
+    )
+    assert code == 1
+    assert "elision marker" in "\n".join(outputs)
+    assert (root / "mod.py").read_text(encoding="utf-8") == BUGGY_MOD
+
+    code = pa.apply_reply(
+        _reply(body), root, allow_elision=True,
+        branch_name="agent-wp2-elision", check_runner=_no_failures,
+        output_fn=lambda _m: None,
+    )
+    assert code == 0
+    assert "omitted field is required" in (
+        root / "mod.py"
+    ).read_text(encoding="utf-8")

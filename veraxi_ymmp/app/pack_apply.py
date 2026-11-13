@@ -22,7 +22,8 @@ Safety invariants:
   (unless --allow-new) and targets whose current content has drifted
   from the packed hash (unless --force-stale); an elision detector
   rejects lazy replies ("rest of the file", "unchanged", bare "...")
-  in lines that are new relative to the old file; a shrink guard
+  in lines that are new relative to the old file (unless
+  --allow-elision); a shrink guard
   rejects a file that loses over 40% of its lines or becomes empty
   (unless --allow-shrink).
 """
@@ -344,6 +345,7 @@ def validate_apply_guards(
     allow_new: Sequence[str] = (),
     force_stale: bool = False,
     allow_shrink: bool = False,
+    allow_elision: bool = False,
 ) -> List[str]:
     """WP2 guards: manifest allowlist/stale base, elision, shrink.
 
@@ -380,7 +382,10 @@ def validate_apply_guards(
                     problems.append(
                         f"{rel_path}: base drifted since pack; re-pack"
                     )
-        problems.extend(_elision_problems(rel_path, new_content, old_content))
+        if not allow_elision:
+            problems.extend(
+                _elision_problems(rel_path, new_content, old_content)
+            )
         if not allow_shrink and target.is_file():
             old_count = len(old_content.splitlines())
             new_count = len(new_content.splitlines())
@@ -489,7 +494,10 @@ def _write_content_file(target: Path, content: str) -> None:
     if target.suffix.lower() in (".bat", ".ps1"):
         data = content.replace("\r\n", "\n").replace("\n", "\r\n")
     else:
-        data = content
+        # Normalize at the write boundary as well: parse_reply already
+        # rejoins content with LF, but a CRLF-bearing content string
+        # from any other path must not leak CRLF into an eol=lf file.
+        data = content.replace("\r\n", "\n")
     target.write_bytes(data.encode("utf-8"))
 
 
@@ -505,6 +513,7 @@ def apply_reply(
     allow_new: Sequence[str] = (),
     force_stale: bool = False,
     allow_shrink: bool = False,
+    allow_elision: bool = False,
 ) -> int:
     """Apply a parsed reply on a new git branch and run the checks.
 
@@ -532,6 +541,7 @@ def apply_reply(
     guard_problems = validate_apply_guards(
         parsed.blocks, root, manifest=manifest, allow_new=allow_new,
         force_stale=force_stale, allow_shrink=allow_shrink,
+        allow_elision=allow_elision,
     )
     if guard_problems:
         output_fn(format_guard_reprompt(guard_problems))
@@ -544,11 +554,15 @@ def apply_reply(
         return 1
 
     changed: List[str] = []
+    new_files: List[Tuple[str, int]] = []
     for rel_path, content in parsed.blocks:
         target = root / rel_path
+        existed = target.is_file()
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_content_file(target, content)
         changed.append(rel_path)
+        if not existed:
+            new_files.append((rel_path, len(content.splitlines())))
     output_fn(f"Applied {len(changed)} file(s) on branch {branch}:")
     for rel_path in changed:
         output_fn(f"  - {rel_path}")
@@ -556,6 +570,12 @@ def apply_reply(
     if diff.returncode == 0 and diff.stdout.strip():
         output_fn("git diff --stat:")
         output_fn(diff.stdout.strip())
+    if new_files:
+        # git diff --stat covers tracked files only; name the new
+        # (untracked) ones explicitly so they are not silently absent.
+        output_fn("New files (untracked; not shown by git diff --stat):")
+        for rel_path, line_count in new_files:
+            output_fn(f"  - {rel_path} ({line_count} lines)")
 
     failures = check_runner(changed, test_path, root)
     if failures:
@@ -714,6 +734,9 @@ def cmd_apply(argv: Sequence[str]) -> None:
     parser.add_argument("--allow-shrink", action="store_true",
                         help="Permit a file to shrink below 60% of its lines "
                              "or become empty")
+    parser.add_argument("--allow-elision", action="store_true",
+                        help="Skip the elision detector (for legitimate new "
+                             "lines containing words like 'omitted')")
     args = parser.parse_args(list(argv))
 
     reply_path = Path(args.reply)
@@ -741,5 +764,6 @@ def cmd_apply(argv: Sequence[str]) -> None:
         allow_new=args.allow_new,
         force_stale=args.force_stale,
         allow_shrink=args.allow_shrink,
+        allow_elision=args.allow_elision,
     )
     sys.exit(code)
