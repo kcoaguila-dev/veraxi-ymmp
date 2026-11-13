@@ -260,6 +260,44 @@ def test_publish_failure_midway_rolls_back(tmp_path, monkeypatch):
     ]
 
 
+def test_crash_mid_publish_keeps_the_previous_manifest(
+    tmp_path, monkeypatch
+):
+    # manifest.json is the commit point and publishes last, so a
+    # hard crash mid-publish (simulated with a BaseException, which
+    # the OSError rollback cannot catch) leaves the previous
+    # complete manifest in place. With plain sorted order,
+    # manifest.json would land before z.mp4 and this would fail.
+    inbox = _inbox(tmp_path, "a.mp4", "z.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4", "z.mp4"})
+    out_dir = tmp_path / "clips"
+    out_dir.mkdir()
+    (out_dir / "a.mp4").write_bytes(b"old-a")
+    (out_dir / "z.mp4").write_bytes(b"old-z")
+    (out_dir / "manifest.json").write_bytes(b"old-manifest")
+    real_replace = ci.os.replace
+
+    def crashing_replace(src, dst):
+        parent = Path(src).parent.name
+        staged = parent.startswith(".clip-ingest-") and not parent.startswith(
+            ".clip-ingest-backup-"
+        )
+        if Path(src).name == "z.mp4" and staged:
+            raise KeyboardInterrupt("simulated hard crash")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(ci.os, "replace", crashing_replace)
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "a", "filename": "a.mp4"},
+        {"clip_id": "z", "filename": "z.mp4"},
+    ])
+    with pytest.raises(KeyboardInterrupt):
+        ci.ingest_clips_from_manifest(
+            inbox, manifest_path, output_dir=out_dir
+        )
+    assert (out_dir / "manifest.json").read_bytes() == b"old-manifest"
+
+
 # --- Review follow-ups (post-merge review of PR #23) -----------------
 
 @pytest.mark.parametrize("clip_id", [
