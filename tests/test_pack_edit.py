@@ -305,7 +305,9 @@ def test_edit_mixed_eol_untouched_lines_preserved(tmp_path):
 
 def test_edit_unicode_line_separator_preserved(tmp_path):
     root = _make_repo(tmp_path)
-    (root / "mod.py").write_text('s = "a"\n', encoding="utf-8")
+    # Byte-exact fixture: write_text would translate \n to \r\n on
+    # Windows and change what the byte assertion below can expect.
+    (root / "mod.py").write_bytes(b's = "a"\n')
     reply = _reply(_edit_block("mod.py", 's = "a"', 's = "a\u2028b"'))
     code = pe.apply_edit_reply(
         reply, root, branch_name="agent-edit-u2028",
