@@ -34,7 +34,23 @@ END_MARKER = "===END OF REPLY==="
 CONTINUATION_MARKER = "===CONTINUATION REQUIRED==="
 
 _FILE_HEADER = re.compile(r"^#{2,3}\s+File:\s*`([^`]+)`\s*$")
-_FENCE_OPEN = re.compile(r"^```[A-Za-z0-9_+.-]*\s*$")
+# A fence line is a run of >= 3 backticks, an optional language tag, and
+# nothing else. Group 1 is the backtick run, group 2 the language tag.
+_FENCE_LINE = re.compile(r"^(`{3,})([A-Za-z0-9_+.-]*)\s*$")
+_FENCE_OPEN = _FENCE_LINE
+_BACKTICK_RUN = re.compile(r"`+")
+
+
+def _fence_for_content(content: str) -> str:
+    """Return a fence longer than the longest backtick run in *content*.
+
+    Minimum 3 backticks. Wrapping a file this way means an inner fence
+    in the file can never be mistaken for the block's closing fence.
+    """
+    longest = 0
+    for match in _BACKTICK_RUN.finditer(content):
+        longest = max(longest, len(match.group(0)))
+    return "`" * max(3, longest + 1)
 
 OutputFn = Callable[[str], None]
 CheckRunner = Callable[
@@ -57,12 +73,26 @@ def parse_reply(text: str) -> ParsedReply:
     A reply is complete only when every fence is closed and the
     END_MARKER line is present without a CONTINUATION_MARKER — anything
     else is treated as truncated output from the web chat.
+
+    Fence handling is length- and depth-aware so a file that itself
+    contains code fences (every prompt template does) is not silently
+    truncated at the first inner closing fence:
+
+    - A block opened with n backticks closes only on a bare line of
+      >= n backticks.
+    - With same-length fences, a tagged inner fence opens a nested
+      level and a bare fence closes the innermost level; the block
+      closes when the depth returns to 0.
+    - Safety net: a fence line outside any block after a block has
+      closed is treated as evidence that an inner bare fence closed a
+      block prematurely, and the whole reply is rejected.
     """
     lines = text.splitlines()
     blocks: List[Tuple[str, str]] = []
     problem = ""
     saw_end = False
     saw_continuation = False
+    last_closed_path = ""
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
@@ -71,33 +101,66 @@ def parse_reply(text: str) -> ParsedReply:
         elif stripped == CONTINUATION_MARKER:
             saw_continuation = True
         header = _FILE_HEADER.match(lines[i])
-        if header:
-            rel_path = header.group(1)
-            j = i + 1
-            while j < len(lines) and not lines[j].strip():
-                j += 1
-            if j >= len(lines) or not _FENCE_OPEN.match(lines[j]):
-                problem = f"file block for {rel_path!r} is not followed by a code fence"
+        if not header:
+            if blocks and _FENCE_LINE.match(stripped):
+                problem = (
+                    f"stray code fence after block for {last_closed_path}; "
+                    "nested fences likely broke the block"
+                )
                 break
-            content_lines: List[str] = []
-            k = j + 1
-            closed = False
-            while k < len(lines):
-                if lines[k].strip() == "```":
-                    closed = True
-                    break
+            i += 1
+            continue
+        rel_path = header.group(1)
+        j = i + 1
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        open_match = _FENCE_OPEN.match(lines[j].strip()) if j < len(lines) else None
+        if open_match is None:
+            problem = f"file block for {rel_path!r} is not followed by a code fence"
+            break
+        # Stack of open fence run lengths: the block's own fence first,
+        # then any nested fences opened inside it.
+        stack: List[int] = [len(open_match.group(1))]
+        content_lines: List[str] = []
+        k = j + 1
+        closed = False
+        while k < len(lines):
+            fence = _FENCE_LINE.match(lines[k].strip())
+            if fence is None:
                 content_lines.append(lines[k])
                 k += 1
-            if not closed:
-                problem = f"file block for {rel_path!r} is truncated (unclosed fence)"
+                continue
+            run = len(fence.group(1))
+            tag = fence.group(2)
+            if tag:
+                # A tagged fence inside the block opens a nested level.
+                stack.append(run)
+                content_lines.append(lines[k])
+                k += 1
+                continue
+            if len(stack) > 1:
+                if run >= stack[-1]:
+                    stack.pop()
+                content_lines.append(lines[k])
+                k += 1
+                continue
+            if run >= stack[0]:
+                closed = True
                 break
-            content = "\n".join(content_lines)
-            if content_lines:
-                content += "\n"
-            blocks.append((rel_path, content))
-            i = k + 1
-            continue
-        i += 1
+            # A shorter bare fence is ordinary content (e.g. the closing
+            # fence of an inner block wrapped in a longer outer fence).
+            content_lines.append(lines[k])
+            k += 1
+        if not closed:
+            problem = f"file block for {rel_path!r} is truncated (unclosed fence)"
+            break
+        content = "\n".join(content_lines)
+        if content_lines:
+            content += "\n"
+        blocks.append((rel_path, content))
+        last_closed_path = rel_path
+        i = k + 1
+        continue
     if not problem:
         if not blocks:
             problem = "no file blocks found in reply"
@@ -270,8 +333,9 @@ def build_pack_bundle(
     parts.append("## Files")
     for rel_path, content in file_contents:
         lang = "python" if rel_path.endswith(".py") else "text"
-        parts += [f"### File: `{rel_path}`", f"```{lang}", content.rstrip("\n"),
-                  "```", ""]
+        fence = _fence_for_content(content)
+        parts += [f"### File: `{rel_path}`", f"{fence}{lang}", content.rstrip("\n"),
+                  fence, ""]
     if test_path:
         parts += ["## Failing Tests", f"$ pytest {test_path} -q", "```text",
                   test_output, "```", ""]
@@ -283,6 +347,13 @@ def build_pack_bundle(
         "followed immediately by a fenced code block containing the COMPLETE "
         "new content of that file (full-file replacement — no diffs, no "
         "elision, no 'rest unchanged' placeholders).",
+        "",
+        "Use a fence of at least FOUR backticks for every file block "
+        "(longer if the file itself contains a longer backtick run). "
+        "Files in this repo contain ``` fences of their own; a 3-backtick "
+        "outer fence would end the block at the first inner fence and "
+        "silently truncate the file, so the longer fence is required, "
+        "not cosmetic.",
         "",
         "End the reply with a line containing only:",
         END_MARKER,
