@@ -235,3 +235,20 @@ def test_moviepy_renderer_composes_video_clip(tmp_path):
     )
     assert out_path.exists() and out_path.stat().st_size > 0
     assert result.metadata["duration"] == 1.0
+
+
+@ffmpeg_required
+def test_ingest_clips_rejected_file_does_not_consume_an_id(tmp_path):
+    # Regression (WP8 refactor): id assignment moved ahead of the
+    # probe, so an unreadable file sharing a stem consumed the base
+    # id and the surviving clip became "clip-2". Scripts reference
+    # these ids, so probe failures must not take a numbering slot:
+    # clip.mov sorts before clip.mp4 and is rejected; the good file
+    # keeps the id "clip" it had before the refactor.
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "clip.mov").write_bytes(b"not a video")
+    _make_source_clip(inbox / "clip.mp4")
+    result = ci.ingest_clips(inbox)
+    assert [c["id"] for c in result["clips"]] == ["clip"]
+    assert [r["source"] for r in result["rejected"]] == ["clip.mov"]

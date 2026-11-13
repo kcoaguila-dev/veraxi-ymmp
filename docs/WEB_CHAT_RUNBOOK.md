@@ -27,9 +27,8 @@ to work around.
 veraxi-ymmp session-start > session-start.txt
 ```
 
-(`session-start` arrives with WP7. On a checkout where the command
-is not recognized, use the fallback below — it is the same content
-minus the live git state.)
+(On a checkout where the command is not recognized, use the
+fallback below — it is the same content minus the live git state.)
 
 Open the file, copy everything, and paste it as the first message of
 the web chat. It contains the slim rules (`AGENTS_WEB.md`), the
@@ -150,17 +149,21 @@ renderer uses it verbatim.
    each `clip_id` from the script to the downloaded filename, in
    script order.
 4. Ingest by manifest — matching is by the manifest, not by probing
-   or guessing (`--from-manifest` arrives with WP8; on a checkout
-   without it, use the probing fallback noted below and assign the
-   returned clip ids by hand):
+   or guessing (on a checkout without `--from-manifest`, use the
+   probing fallback noted below and assign the returned clip ids
+   by hand):
 
 ```powershell
 veraxi-ymmp ingest-clips downloads/ --from-manifest clip-manifest.json
 ```
 
-Missing or unmatched files are reported by name. Download or rename
-exactly those and re-run; do not hand-edit the generated
-`clips/manifest.json`.
+Manifest ingest is all-or-nothing: missing or unmatched files are
+reported by name, and if any declared clip then fails to read or
+normalize, the whole ingest aborts and writes nothing — there is
+no partial `clips/` state to clean up. Fix exactly what the
+messages name and re-run; do not hand-edit the generated
+`clips/manifest.json`. Declared names match the files on disk even
+when they differ in letter case or Unicode normalization form.
 
 (Without `--from-manifest`, `ingest-clips` falls back to probing
 every video in the folder with ffprobe and normalizing it — fine for
