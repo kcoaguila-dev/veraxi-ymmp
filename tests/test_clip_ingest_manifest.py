@@ -172,7 +172,11 @@ def test_output_dir_overlapping_a_source_aborts(tmp_path):
     assert {p.name: p.read_bytes() for p in inbox.iterdir()} == before
 
 
-def test_probe_failure_is_not_a_matching_abort(tmp_path):
+def test_probe_failure_is_not_a_matching_abort(tmp_path, monkeypatch):
+    # Stub the probe: this test exercises the flag/manifest logic and
+    # must not require ffprobe on the machine (probe_video would raise
+    # FileNotFoundError where ffprobe is absent).
+    monkeypatch.setattr(ci, "probe_video", lambda _path: None)
     # Matching succeeded; the file is just unreadable. The manifest IS
     # written (with the rejection), so the run must not claim a
     # matching abort / "nothing was written".
