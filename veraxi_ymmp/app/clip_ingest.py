@@ -373,6 +373,46 @@ def _match_declared(
     return resolved, problems
 
 
+def _publish_stage(stage: Path, out_dir: Path, backup: Path) -> None:
+    """Publish every staged file into out_dir as one unit.
+
+    A destination that exists but is not a file aborts the publish
+    before anything moves. Otherwise each existing destination is
+    first moved into backup; if any move then fails, every file
+    already published is removed and every backup restored, so the
+    previous complete ingest survives untouched. Raises OSError on
+    failure, after the rollback.
+    """
+    names = sorted(p.name for p in stage.iterdir())
+    for name in names:
+        dest = out_dir / name
+        if dest.exists() and not dest.is_file():
+            raise OSError(
+                f"cannot publish {name}: {dest} exists and is not a file"
+            )
+    published: List[str] = []
+    try:
+        for name in names:
+            dest = out_dir / name
+            if dest.is_file():
+                os.replace(dest, backup / name)
+            os.replace(stage / name, dest)
+            published.append(name)
+    except OSError:
+        for name in reversed(published):
+            dest = out_dir / name
+            if dest.is_file():
+                dest.unlink()
+            saved = backup / name
+            if saved.exists():
+                os.replace(saved, dest)
+        # The name whose publish failed midway may hold the only
+        # backup not yet restored.
+        for saved in list(backup.iterdir()):
+            os.replace(saved, out_dir / saved.name)
+        raise
+
+
 def ingest_clips_from_manifest(
     inbox: Path,
     clip_manifest_path: Path,
@@ -391,9 +431,11 @@ def ingest_clips_from_manifest(
     into a staging directory inside the output dir, and only when
     every clip succeeds are the outputs and ``manifest.json``
     published; any failure discards the staging directory and writes
-    nothing (``ingest_aborted``). The returned manifest dict also
-    carries ``from_manifest`` (the clip manifest's file name) —
-    these three keys are part of the manifest-mode result schema.
+    nothing (``ingest_aborted``). Publication itself is one unit:
+    if a publish move fails, the previous ingest is restored and
+    the error raises. The returned manifest dict also carries
+    ``from_manifest`` (the clip manifest's file name) — these three
+    keys are part of the manifest-mode result schema.
     """
     inbox = Path(inbox)
     out_dir = Path(output_dir) if output_dir else inbox.parent / "clips"
@@ -414,6 +456,7 @@ def ingest_clips_from_manifest(
         return manifest
     out_dir.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".clip-ingest-", dir=out_dir))
+    backup = Path(tempfile.mkdtemp(prefix=".clip-ingest-backup-", dir=out_dir))
     try:
         clips: List[Dict[str, Any]] = []
         rejected: List[Dict[str, str]] = []
@@ -429,13 +472,13 @@ def ingest_clips_from_manifest(
             manifest["rejected"] = rejected
             manifest["ingest_aborted"] = True
             return manifest
-        for staged in sorted(stage.iterdir()):
-            os.replace(staged, out_dir / staged.name)
         manifest["clips"] = clips
-        _write_manifest(out_dir, manifest)
+        _write_manifest(stage, manifest)
+        _publish_stage(stage, out_dir, backup)
         return manifest
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+        shutil.rmtree(backup, ignore_errors=True)
 
 
 def find_clips_manifest(search_from: List[Path]) -> Optional[Path]:

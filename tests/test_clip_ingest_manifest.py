@@ -199,6 +199,63 @@ def test_probe_failure_aborts_ingest_and_writes_nothing(
     assert list(out_dir.iterdir()) == []
 
 
+def test_publish_blocked_by_directory_keeps_previous_ingest(
+    tmp_path, monkeypatch
+):
+    inbox = _inbox(tmp_path, "a.mp4", "b.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4", "b.mp4"})
+    out_dir = tmp_path / "clips"
+    out_dir.mkdir()
+    (out_dir / "a.mp4").write_bytes(b"old-a")
+    (out_dir / "manifest.json").write_bytes(b"old-manifest")
+    (out_dir / "b.mp4").mkdir()  # a directory blocks b's destination
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "a", "filename": "a.mp4"},
+        {"clip_id": "b", "filename": "b.mp4"},
+    ])
+    with pytest.raises(OSError):
+        ci.ingest_clips_from_manifest(
+            inbox, manifest_path, output_dir=out_dir
+        )
+    assert (out_dir / "a.mp4").read_bytes() == b"old-a"
+    assert (out_dir / "manifest.json").read_bytes() == b"old-manifest"
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "a.mp4", "b.mp4", "manifest.json",
+    ]
+
+
+def test_publish_failure_midway_rolls_back(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, "a.mp4", "b.mp4")
+    _stub_probe_and_normalize(monkeypatch, {"a.mp4", "b.mp4"})
+    out_dir = tmp_path / "clips"
+    out_dir.mkdir()
+    (out_dir / "a.mp4").write_bytes(b"old-a")
+    (out_dir / "b.mp4").write_bytes(b"old-b")
+    (out_dir / "manifest.json").write_bytes(b"old-manifest")
+    real_replace = ci.os.replace
+
+    def flaky_replace(src, dst):
+        if Path(src).name == "b.mp4" and ".clip-ingest-" in str(src):
+            raise PermissionError("simulated locked destination")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(ci.os, "replace", flaky_replace)
+    manifest_path = _write_manifest(tmp_path, [
+        {"clip_id": "a", "filename": "a.mp4"},
+        {"clip_id": "b", "filename": "b.mp4"},
+    ])
+    with pytest.raises(PermissionError):
+        ci.ingest_clips_from_manifest(
+            inbox, manifest_path, output_dir=out_dir
+        )
+    assert (out_dir / "a.mp4").read_bytes() == b"old-a"
+    assert (out_dir / "b.mp4").read_bytes() == b"old-b"
+    assert (out_dir / "manifest.json").read_bytes() == b"old-manifest"
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "a.mp4", "b.mp4", "manifest.json",
+    ]
+
+
 # --- Review follow-ups (post-merge review of PR #23) -----------------
 
 @pytest.mark.parametrize("clip_id", [
