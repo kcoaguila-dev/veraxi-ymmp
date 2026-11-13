@@ -1,6 +1,7 @@
 """Phase 2: ScriptProvider port + ManualHandoffProvider + CLI --provider flag."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -169,3 +170,103 @@ def test_ingest_script_provider_manual(tmp_path, monkeypatch):
     _cmd_ingest_script([str(md), "--provider", "manual"])
     script = json.loads((tmp_path / "script.json").read_text(encoding="utf-8"))
     assert script == sp.validate_pasted_script(GOOD_JSON)
+
+
+# --- WP5: single object contract + lenient ingest ---------------------------
+
+BROLL_CANONICAL = [
+    {
+        "type": "vs",
+        "filename": "broll/slide_01.png",
+        "title": "世間の誤解 vs 技術の実態",
+        "hero_title": "表面的な楽観 vs 物理的な制約",
+        "left_box": ["一般的なイメージ", "設定変更だけで完全回避", "amber"],
+        "right_box": ["一次資料の現実", "メモリ境界破壊により遠隔掌握", "rose"],
+        "bottom_text": "根本的なプロセス再起動のみが有効打",
+        "theme_color": "blue",
+    }
+]
+
+# The same slide in the legacy appended-entry shape.
+BROLL_LEGACY_ENTRY = {
+    "type": "broll_manifest",
+    "slide_type": "vs",
+    "filename": "broll/slide_01.png",
+    "title": "世間の誤解 vs 技術の実態",
+    "hero_title": "表面的な楽観 vs 物理的な制約",
+    "left_box": ["一般的なイメージ", "設定変更だけで完全回避", "amber"],
+    "right_box": ["一次資料の現実", "メモリ境界破壊により遠隔掌握", "rose"],
+    "bottom_text": "根本的なプロセス再起動のみが有効打",
+    "theme_color": "blue",
+}
+
+SHAPE_OBJECT = json.dumps(
+    {"script": GOOD_ENTRIES, "broll_manifest": BROLL_CANONICAL},
+    ensure_ascii=False,
+)
+SHAPE_ARRAY_EMBEDDED = json.dumps(
+    GOOD_ENTRIES + [BROLL_LEGACY_ENTRY], ensure_ascii=False
+)
+SHAPE_BARE_ARRAY = GOOD_JSON
+
+
+def test_wp5_three_shapes_normalize_identically():
+    payload_object = sp.validate_pasted_payload(SHAPE_OBJECT)
+    payload_embedded = sp.validate_pasted_payload(SHAPE_ARRAY_EMBEDDED)
+    assert payload_object == payload_embedded
+    assert payload_object["broll_manifest"] == BROLL_CANONICAL
+    assert payload_object["script"] == sp.validate_pasted_script(GOOD_JSON)
+
+    payload_bare = sp.validate_pasted_payload(SHAPE_BARE_ARRAY)
+    assert payload_bare["script"] == payload_object["script"]
+    assert payload_bare["broll_manifest"] == []
+
+
+def test_wp5_fenced_and_prose_wrapped_object_keep_broll():
+    fenced = f"Here is the script:\n```json\n{SHAPE_OBJECT}\n```"
+    assert sp.validate_pasted_payload(fenced) == sp.validate_pasted_payload(
+        SHAPE_OBJECT
+    )
+    prose = f"Sure, here you go: {SHAPE_OBJECT} — hope that helps!"
+    assert sp.validate_pasted_payload(prose) == sp.validate_pasted_payload(
+        SHAPE_OBJECT
+    )
+
+
+def test_wp5_normalize_rejects_bad_shapes():
+    with pytest.raises(ValueError, match="must contain a \"script\" array"):
+        sp.normalize_script_payload({"broll_manifest": []})
+    with pytest.raises(ValueError, match="must be an array"):
+        sp.normalize_script_payload(
+            {"script": [], "broll_manifest": {"type": "vs"}}
+        )
+    with pytest.raises(ValueError, match="must be a JSON object or array"):
+        sp.normalize_script_payload("just a string")
+
+
+def test_wp5_provider_surfaces_broll_manifest():
+    provider = sp.ManualHandoffProvider(
+        paste_fn=lambda: SHAPE_ARRAY_EMBEDDED, output_fn=lambda _m: None
+    )
+    entries = provider.generate_script("T", "D")
+    assert entries == sp.validate_pasted_script(GOOD_JSON)
+    assert provider.last_broll_manifest == BROLL_CANONICAL
+
+
+def test_wp5_prompt_sources_agree_on_object_contract():
+    templates = Path(sp.__file__).resolve().parent.parent / "templates"
+    universal = (templates / "UNIVERSAL_AI_PROMPT.md").read_text(
+        encoding="utf-8"
+    )
+    low_tier = (templates / "LOW_TIER_SYSTEM_PROMPT.md").read_text(
+        encoding="utf-8"
+    )
+    built = sp.build_script_prompt("T", "D")
+    for source in (universal, low_tier, built):
+        assert '"broll_manifest"' in source
+        assert "JSON array" not in source
+    assert "single JSON object" in universal
+    assert "single JSON object" in low_tier
+    assert '"type": "broll_manifest"' not in low_tier
+    assert "slide_type" not in low_tier
+    assert "Return ONLY a JSON object" in built
