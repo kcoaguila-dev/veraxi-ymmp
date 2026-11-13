@@ -382,8 +382,17 @@ def _publish_stage(stage: Path, out_dir: Path, backup: Path) -> None:
     already published is removed and every backup restored, so the
     previous complete ingest survives untouched. Raises OSError on
     failure, after the rollback.
+
+    ``manifest.json`` is published last: it is the commit point of
+    the ingest. A hard crash mid-publish (which no rollback can
+    catch) can still leave new clip files beside it, but the
+    surviving manifest is the previous complete one, whose recorded
+    checksums expose the mix instead of blessing it.
     """
-    names = sorted(p.name for p in stage.iterdir())
+    names = sorted(
+        (p.name for p in stage.iterdir()),
+        key=lambda n: (n == MANIFEST_NAME, n),
+    )
     for name in names:
         dest = out_dir / name
         if dest.exists() and not dest.is_file():
@@ -399,6 +408,12 @@ def _publish_stage(stage: Path, out_dir: Path, backup: Path) -> None:
             os.replace(stage / name, dest)
             published.append(name)
     except OSError:
+        # Rollback is best-effort: if an unlink or a restore here
+        # itself raises, that error replaces the original one and
+        # the caller's cleanup discards any unrestored backups, so
+        # the output can be left partial. Accepted for this
+        # single-user CLI — re-running the ingest is the recovery —
+        # but not a guarantee to build on silently.
         for name in reversed(published):
             dest = out_dir / name
             if dest.is_file():
