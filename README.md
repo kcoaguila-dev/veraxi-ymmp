@@ -106,6 +106,8 @@ If local AI tooling is unavailable, development can continue from a web chat by 
 
 Both apply paths fail closed — a malformed, truncated, or unsafe reply changes nothing and prints a re-prompt block to paste back to the web chat.
 
+**Step-by-step procedure: [docs/WEB_CHAT_RUNBOOK.md](docs/WEB_CHAT_RUNBOOK.md)** — session start, the code loop, the video loop (script, slides, clip ingest), and recovery for every rejection type.
+
 ---
 
 ## Prerequisites & Installation
