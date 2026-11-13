@@ -71,6 +71,50 @@ def test_backup_and_restore_cycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert len(history_final) == 3
 
 
+def test_backups_on_identical_clock_tick_do_not_overwrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Back-to-back backups must never share an ID, even if the clock doesn't advance.
+
+    Coarse clocks (Windows, Python 3.10) can return the same datetime for consecutive
+    calls. Previously the second-level ID was de-duplicated but the microsecond
+    fallback was not, so the later snapshot silently overwrote the earlier one.
+    """
+    import veraxi_ymmp.app.history as history
+    from datetime import datetime as real_datetime
+
+    frozen = real_datetime(2026, 11, 12, 14, 4, 57, 874884)
+
+    class FrozenDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[no-untyped-def,override]
+            return frozen
+
+    monkeypatch.setattr(history, "datetime", FrozenDatetime)
+
+    proj_dir = tmp_path / "frozen_proj"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    script_file = proj_dir / "script.json"
+
+    ids = []
+    for i in range(4):
+        script_file.write_text(
+            json.dumps([{"character": "a", "text": f"v{i}"}]), encoding="utf-8"
+        )
+        snap_id = backup_project_script(proj_dir, reason=f"tick_{i}")
+        assert snap_id is not None
+        ids.append(snap_id)
+
+    assert len(set(ids)) == 4, f"snapshot IDs collided: {ids}"
+    history_list = list_script_history(proj_dir)
+    assert len(history_list) == 4
+    # Each snapshot kept its own content (no overwrite) and its ID is restorable.
+    previews = sorted(h["preview"] for h in history_list)
+    assert previews == ["a: v0", "a: v1", "a: v2", "a: v3"]
+    for snap_id in ids:
+        assert history.SAFE_ID_PATTERN.match(snap_id)
+
+
 def test_cleanup_stale_audio_on_override(tmp_path: Path) -> None:
     proj_dir = tmp_path / "audio_proj"
     audio_dir = proj_dir / "audio"
