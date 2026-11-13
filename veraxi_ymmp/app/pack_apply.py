@@ -600,8 +600,18 @@ def build_pack_bundle(
     agents_md: str,
     test_path: Optional[str] = None,
     test_output: str = "",
+    mode: str = "full",
 ) -> str:
-    """Assemble the single markdown bundle for a web-chat coding task."""
+    """Assemble the single markdown bundle for a web-chat coding task.
+
+    ``mode`` is "full" (the reply replaces whole files) or "edit"
+    (WP4: the reply is SEARCH/REPLACE edit blocks, applied by
+    ``veraxi_ymmp.app.pack_edit``). Only the Reply Format section
+    differs; the files themselves are always included in full, since
+    an edit-mode SEARCH block must be copied from the real content.
+    """
+    if mode not in ("full", "edit"):
+        raise ValueError(f"unknown pack mode: {mode!r}")
     parts: List[str] = ["# Coding Task Bundle", "", "## Task", task, ""]
     parts += ["## Rules", agents_md.strip(), ""]
     parts.append("## Files")
@@ -618,6 +628,34 @@ def build_pack_bundle(
         test_fence = _fence_for_content(test_output)
         parts += ["## Failing Tests", f"$ pytest {test_path} -q",
                   f"{test_fence}text", test_output, test_fence, ""]
+    if mode == "edit":
+        parts += [
+            "## Reply Format (strict — follow exactly)",
+            "Reply with ONLY edit blocks, one per change, in this format:",
+            "",
+            "### Edit: `relative/path/from/repo/root.py`",
+            "<<<<<<< SEARCH",
+            "(exact current text, copied verbatim from the file above — "
+            "including indentation and blank lines)",
+            "=======",
+            "(the replacement text)",
+            ">>>>>>> REPLACE",
+            "",
+            "You may send several edit blocks, including several for the "
+            "same file; they are applied in order. Each SEARCH text must "
+            "occur EXACTLY ONCE in its file: zero matches or more than "
+            "one match rejects the whole reply and nothing is applied. "
+            "Include enough surrounding context lines to make every "
+            "SEARCH unique. Do not retype whole files, and do not use "
+            "diffs or line numbers — the SEARCH text is the anchor.",
+            "",
+            "End the reply with a line containing only:",
+            END_MARKER,
+            "A truncated or marker-less reply is rejected without "
+            "applying anything.",
+            "",
+        ]
+        return "\n".join(parts)
     parts += [
         "## Reply Format (strict — follow exactly)",
         "Reply with ONLY file blocks, one per file you change, in this format:",
@@ -675,6 +713,10 @@ def cmd_pack(argv: Sequence[str]) -> None:
                              "against the current directory (default: "
                              "AGENTS_WEB.md at the repo root if it exists, "
                              "else AGENTS.md)")
+    parser.add_argument("--mode", choices=("full", "edit"), default="full",
+                        help="Reply format for the bundle: full-file "
+                             "replacement (default) or SEARCH/REPLACE "
+                             "edit blocks (WP4, applied with apply-edit)")
     args = parser.parse_args(list(argv))
 
     root = _repo_root()
@@ -704,10 +746,20 @@ def cmd_pack(argv: Sequence[str]) -> None:
             agents_md = agents_path.read_text(encoding="utf-8")
         else:
             agents_md = "(no AGENTS_WEB.md or AGENTS.md found at repo root)"
+    if args.mode == "full":
+        for rel, content in file_contents:
+            line_count = len(content.splitlines())
+            if line_count > 400:
+                sys.stderr.write(
+                    f"Hint: {rel} has {line_count} lines (> 400); "
+                    "consider 'pack --mode edit' so the web chat replies "
+                    "with SEARCH/REPLACE blocks instead of retyping the "
+                    "whole file.\n"
+                )
     test_output = _run_failing_test(args.test, root) if args.test else ""
     bundle = build_pack_bundle(
         args.task, file_contents, agents_md,
-        test_path=args.test, test_output=test_output,
+        test_path=args.test, test_output=test_output, mode=args.mode,
     )
     if len(bundle) > args.budget:
         sys.stderr.write(
