@@ -16,18 +16,30 @@ Safety invariants:
   and the model is asked for a continuation instead.
 - apply refuses paths outside the repo, anything under .git, and test
   files unless --allow-tests is given.
+- WP2 guards, all checked before any branch or file is touched:
+  `pack -o` writes a manifest sidecar (path, sha256, line count per
+  file); `apply --manifest` rejects targets outside the manifest
+  (unless --allow-new) and targets whose current content has drifted
+  from the packed hash (unless --force-stale); an elision detector
+  rejects lazy replies ("rest of the file", "unchanged", bare "...")
+  in lines that are new relative to the old file (unless
+  --allow-elision); a shrink guard
+  rejects a file that loses over 40% of its lines or becomes empty
+  (unless --allow-shrink).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_BUDGET = 60_000
 END_MARKER = "===END OF REPLY==="
@@ -259,6 +271,155 @@ def validate_target_paths(
     return errors
 
 
+def _content_sha256(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def build_manifest(
+    file_contents: List[Tuple[str, str]], packed_at: Optional[str] = None
+) -> Dict[str, Any]:
+    """Manifest sidecar for a pack bundle: per-file hash + line count."""
+    return {
+        "packed_at": packed_at
+        or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "files": [
+            {
+                "path": rel_path,
+                "sha256": _content_sha256(content),
+                "line_count": len(content.splitlines()),
+            }
+            for rel_path, content in file_contents
+        ],
+    }
+
+
+def load_manifest(path: Path) -> Dict[str, Any]:
+    """Load and minimally validate a pack manifest sidecar."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("files"), list):
+        raise ValueError(f"manifest {path} has no 'files' list")
+    return data
+
+
+_ELISION_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"rest of (the )?(file|code|function)",
+        r"\bunchanged\b",
+        r"same as before",
+        r"remains the same",
+        r"\bomitted\b",
+    )
+]
+_ELLIPSIS_ONLY_LINE = re.compile(r"^(?:#|//|/\*|<!--)?\s*\.\.\.\s*(?:\*/|-->)?$")
+
+
+def _elision_problems(
+    rel_path: str, new_content: str, old_content: str
+) -> List[str]:
+    """Elision markers in lines that are new relative to the old file.
+
+    Scanning only new lines keeps files that legitimately contain
+    words like "unchanged" applicable, as long as the reply does not
+    add new elision language of its own.
+    """
+    old_lines = set(old_content.splitlines())
+    problems: List[str] = []
+    for lineno, line in enumerate(new_content.splitlines(), start=1):
+        if line in old_lines:
+            continue
+        if any(p.search(line) for p in _ELISION_PATTERNS) or (
+            _ELLIPSIS_ONLY_LINE.match(line.strip())
+        ):
+            problems.append(
+                f"{rel_path}:{lineno}: elision marker in new line: "
+                f"{line.strip()!r}"
+            )
+    return problems
+
+
+def validate_apply_guards(
+    blocks: List[Tuple[str, str]],
+    root: Path,
+    manifest: Optional[Dict[str, Any]] = None,
+    allow_new: Sequence[str] = (),
+    force_stale: bool = False,
+    allow_shrink: bool = False,
+    allow_elision: bool = False,
+) -> List[str]:
+    """WP2 guards: manifest allowlist/stale base, elision, shrink.
+
+    Returns problem strings (empty = all guards pass). Runs entirely
+    against the current on-disk state, before any branch is created
+    or any file is written.
+    """
+    problems: List[str] = []
+    manifest_map: Dict[str, Dict[str, Any]] = {}
+    if manifest is not None:
+        manifest_map = {
+            str(entry.get("path")): entry
+            for entry in manifest.get("files", [])
+            if isinstance(entry, dict)
+        }
+    allow_new_set = set(allow_new)
+    for rel_path, new_content in blocks:
+        target = root / rel_path
+        old_content = (
+            target.read_text(encoding="utf-8") if target.is_file() else ""
+        )
+        if manifest is not None:
+            entry = manifest_map.get(rel_path)
+            if entry is None:
+                if rel_path not in allow_new_set:
+                    problems.append(
+                        f"{rel_path}: not in pack manifest "
+                        f"(--allow-new {rel_path} permits a new file)"
+                    )
+            elif not force_stale:
+                if not target.is_file() or (
+                    _content_sha256(old_content) != entry.get("sha256")
+                ):
+                    problems.append(
+                        f"{rel_path}: base drifted since pack; re-pack"
+                    )
+        if not allow_elision:
+            problems.extend(
+                _elision_problems(rel_path, new_content, old_content)
+            )
+        if not allow_shrink and target.is_file():
+            old_count = len(old_content.splitlines())
+            new_count = len(new_content.splitlines())
+            if not new_content and old_content:
+                problems.append(
+                    f"{rel_path}: new content is empty "
+                    "(--allow-shrink permits this)"
+                )
+            elif old_count >= 30 and new_count < 0.6 * old_count:
+                problems.append(
+                    f"{rel_path}: shrinks from {old_count} to {new_count} "
+                    "lines (< 60% of the original; --allow-shrink "
+                    "permits this)"
+                )
+    return problems
+
+
+def format_guard_reprompt(problems: List[str]) -> str:
+    """Re-prompt block for replies rejected by the WP2 apply guards."""
+    lines = [
+        "================ LLM RE-PROMPT BLOCK (COPY & PASTE TO AI) ================",
+        "Your reply was NOT applied because it failed the apply guards:",
+    ]
+    for problem in problems:
+        lines.append(f"  - [GUARD] {problem}")
+    lines.append(
+        "Please resend the COMPLETE content of every file — full-file "
+        "replacement with no elision, no 'rest unchanged' placeholders, "
+        f"and no shrinkage — ending with a line containing only {END_MARKER}."
+    )
+    lines.append("==========================================================================")
+    return "\n".join(lines)
+
+
 def format_continuation_request(parsed: ParsedReply) -> str:
     """Re-prompt block asking the model to resend/continue an incomplete reply."""
     lines = [
@@ -322,6 +483,24 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _write_content_file(target: Path, content: str) -> None:
+    """Write *content* respecting the repo's .gitattributes EOL rules.
+
+    The repo sets `text=auto eol=lf` with CRLF only for .bat/.ps1.
+    Writing bytes directly avoids text-mode translation (on Windows,
+    write_text would turn LF into CRLF for every file, contradicting
+    eol=lf); .bat/.ps1 content is converted to CRLF explicitly.
+    """
+    if target.suffix.lower() in (".bat", ".ps1"):
+        data = content.replace("\r\n", "\n").replace("\n", "\r\n")
+    else:
+        # Normalize at the write boundary as well: parse_reply already
+        # rejoins content with LF, but a CRLF-bearing content string
+        # from any other path must not leak CRLF into an eol=lf file.
+        data = content.replace("\r\n", "\n")
+    target.write_bytes(data.encode("utf-8"))
+
+
 def apply_reply(
     reply_text: str,
     root: Path,
@@ -330,12 +509,17 @@ def apply_reply(
     branch_name: Optional[str] = None,
     check_runner: CheckRunner = run_check_commands,
     output_fn: OutputFn = print,
+    manifest: Optional[Dict[str, Any]] = None,
+    allow_new: Sequence[str] = (),
+    force_stale: bool = False,
+    allow_shrink: bool = False,
+    allow_elision: bool = False,
 ) -> int:
     """Apply a parsed reply on a new git branch and run the checks.
 
     Returns 0 when the reply applied cleanly and all checks pass, 1
-    otherwise. A rejected reply (incomplete, malformed, unsafe paths)
-    modifies no files and creates no branch.
+    otherwise. A rejected reply (incomplete, malformed, unsafe paths,
+    or failing a WP2 guard) modifies no files and creates no branch.
     """
     parsed = parse_reply(reply_text)
     if not parsed.blocks:
@@ -349,6 +533,19 @@ def apply_reply(
         for error in path_errors:
             output_fn(f"Error: reply rejected — {error}. No files modified.")
         return 1
+    if manifest is None:
+        output_fn(
+            "Warning: no --manifest given; pack allowlist and "
+            "stale-base checks are unavailable."
+        )
+    guard_problems = validate_apply_guards(
+        parsed.blocks, root, manifest=manifest, allow_new=allow_new,
+        force_stale=force_stale, allow_shrink=allow_shrink,
+        allow_elision=allow_elision,
+    )
+    if guard_problems:
+        output_fn(format_guard_reprompt(guard_problems))
+        return 1
 
     branch = branch_name or f"agent-apply-{datetime.now():%Y%m%d-%H%M%S}"
     proc = _git(root, "checkout", "-b", branch)
@@ -357,14 +554,28 @@ def apply_reply(
         return 1
 
     changed: List[str] = []
+    new_files: List[Tuple[str, int]] = []
     for rel_path, content in parsed.blocks:
         target = root / rel_path
+        existed = target.is_file()
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        _write_content_file(target, content)
         changed.append(rel_path)
+        if not existed:
+            new_files.append((rel_path, len(content.splitlines())))
     output_fn(f"Applied {len(changed)} file(s) on branch {branch}:")
     for rel_path in changed:
         output_fn(f"  - {rel_path}")
+    diff = _git(root, "diff", "--stat")
+    if diff.returncode == 0 and diff.stdout.strip():
+        output_fn("git diff --stat:")
+        output_fn(diff.stdout.strip())
+    if new_files:
+        # git diff --stat covers tracked files only; name the new
+        # (untracked) ones explicitly so they are not silently absent.
+        output_fn("New files (untracked; not shown by git diff --stat):")
+        for rel_path, line_count in new_files:
+            output_fn(f"  - {rel_path} ({line_count} lines)")
 
     failures = check_runner(changed, test_path, root)
     if failures:
@@ -489,6 +700,12 @@ def cmd_pack(argv: Sequence[str]) -> None:
     if args.output:
         Path(args.output).write_text(bundle, encoding="utf-8")
         print(f"Wrote pack bundle ({len(bundle)} chars) to {args.output}")
+        manifest_path = Path(f"{args.output}.manifest.json")
+        manifest_path.write_text(
+            json.dumps(build_manifest(file_contents), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote pack manifest to {manifest_path}")
     else:
         print(bundle)
 
@@ -506,17 +723,47 @@ def cmd_apply(argv: Sequence[str]) -> None:
                         help="Targeted pytest file to run after applying")
     parser.add_argument("--branch", default=None,
                         help="Branch name to create (default: agent-apply-<timestamp>)")
+    parser.add_argument("--manifest", default=None,
+                        help="Pack manifest sidecar (bundle.md.manifest.json) "
+                             "enabling the allowlist and stale-base guards")
+    parser.add_argument("--allow-new", action="append", default=[],
+                        help="Permit this target path even though it is not "
+                             "in the manifest (repeatable)")
+    parser.add_argument("--force-stale", action="store_true",
+                        help="Apply even if a target's base drifted since pack")
+    parser.add_argument("--allow-shrink", action="store_true",
+                        help="Permit a file to shrink below 60% of its lines "
+                             "or become empty")
+    parser.add_argument("--allow-elision", action="store_true",
+                        help="Skip the elision detector (for legitimate new "
+                             "lines containing words like 'omitted')")
     args = parser.parse_args(list(argv))
 
     reply_path = Path(args.reply)
     if not reply_path.is_file():
         sys.stderr.write(f"Error: reply file not found: {reply_path}\n")
         sys.exit(2)
+    manifest = None
+    if args.manifest:
+        manifest_file = Path(args.manifest)
+        if not manifest_file.is_file():
+            sys.stderr.write(f"Error: manifest file not found: {args.manifest}\n")
+            sys.exit(2)
+        try:
+            manifest = load_manifest(manifest_file)
+        except (ValueError, json.JSONDecodeError) as exc:
+            sys.stderr.write(f"Error: could not load manifest: {exc}\n")
+            sys.exit(2)
     code = apply_reply(
         reply_path.read_text(encoding="utf-8"),
         _repo_root(),
         allow_tests=args.allow_tests,
         test_path=args.test,
         branch_name=args.branch,
+        manifest=manifest,
+        allow_new=args.allow_new,
+        force_stale=args.force_stale,
+        allow_shrink=args.allow_shrink,
+        allow_elision=args.allow_elision,
     )
     sys.exit(code)
