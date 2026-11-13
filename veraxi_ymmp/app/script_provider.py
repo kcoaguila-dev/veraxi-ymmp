@@ -101,13 +101,18 @@ def extract_script_json(text: str) -> Any:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
+    candidates = []
     for opener, closer in (("{", "}"), ("[", "]")):
         start, end = cleaned.find(opener), cleaned.rfind(closer)
         if start != -1 and end > start:
-            try:
-                return json.loads(cleaned[start : end + 1])
-            except json.JSONDecodeError:
-                continue
+            candidates.append((start, -(end - start), cleaned[start : end + 1]))
+    # Earliest span first, outermost first on ties: a prose-wrapped
+    # array must yield the array, not its first entry's object span.
+    for _start, _neg_len, span in sorted(candidates):
+        try:
+            return json.loads(span)
+        except json.JSONDecodeError:
+            continue
     raise ValueError(
         "Pasted reply does not contain a JSON object or array: "
         f"{cleaned[:120]!r}"
@@ -151,11 +156,14 @@ def normalize_script_payload(data: Any) -> dict:
             raise ValueError(
                 "Script reply object must contain a \"script\" array."
             )
-        broll = data.get("broll_manifest") or []
-        if not isinstance(broll, list):
+        raw_broll = data.get("broll_manifest", [])
+        if raw_broll is None:
+            raw_broll = []
+        if not isinstance(raw_broll, list):
             raise ValueError(
                 "Script reply \"broll_manifest\" must be an array."
             )
+        broll = raw_broll
         return {"script": script, "broll_manifest": list(broll)}
     if isinstance(data, list):
         script_entries: List[Any] = []

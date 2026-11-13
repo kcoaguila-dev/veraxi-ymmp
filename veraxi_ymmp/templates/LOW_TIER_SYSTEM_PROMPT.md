@@ -126,18 +126,13 @@ Place slide definition objects in the top-level `"broll_manifest"` array of the 
 {
   "script": [
     {
-      "type": "bgm",
-      "path": "assets/bgm/2_23_AM.mp3",
-      "volume": 18
-    },
-    {
       "character": "ずんだもん",
       "emotion": "excited",
       "motion": "none",
       "character_position": "right",
       "text": "「最新の暗号化だから絶対に安全」…そう信じてる人は今すぐ確認するのだ！",
       "image": null,
-      "bgm": null,
+      "bgm": "assets/bgm/2_23_AM.mp3",
       "sfx": null,
       "subtitle_position": "bottom_center",
       "subtitle_style": "outlined",
