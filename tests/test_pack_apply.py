@@ -424,3 +424,73 @@ def test_apply_elision_override_flag(tmp_path):
     assert "omitted field is required" in (
         root / "mod.py"
     ).read_text(encoding="utf-8")
+
+
+# --- WP3: slim web rules file ----------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_agents_web_md_drift_guard():
+    web = (REPO_ROOT / "AGENTS_WEB.md").read_text(encoding="utf-8")
+    assert len(web) <= 3500
+    for banned in ("teamwork-preview", "ctags", "Select-String"):
+        assert banned not in web
+
+
+def test_cmd_pack_default_rules_prefers_agents_web(tmp_path, monkeypatch, capsys):
+    root = _make_repo(tmp_path)
+    (root / "AGENTS_WEB.md").write_text("# WEB RULES MARKER\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+    pa.cmd_pack(["--task", "Fix add", "--files", "mod.py"])
+    out = capsys.readouterr().out
+    assert "WEB RULES MARKER" in out
+    assert "Be careful." not in out  # the AGENTS.md body was not embedded
+
+
+def test_cmd_pack_rules_flag_overrides_default(tmp_path, monkeypatch, capsys):
+    root = _make_repo(tmp_path)
+    (root / "AGENTS_WEB.md").write_text("# WEB RULES MARKER\n", encoding="utf-8")
+    (root / "CUSTOM_RULES.md").write_text("# CUSTOM RULES MARKER\n",
+                                          encoding="utf-8")
+    monkeypatch.chdir(root)
+    pa.cmd_pack(["--task", "Fix add", "--files", "mod.py",
+                 "--rules", "CUSTOM_RULES.md"])
+    out = capsys.readouterr().out
+    assert "CUSTOM RULES MARKER" in out
+    assert "WEB RULES MARKER" not in out
+
+
+def test_web_rules_bundle_is_much_smaller_for_wp1_files():
+    agents_md = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    web_md = (REPO_ROOT / "AGENTS_WEB.md").read_text(encoding="utf-8")
+    wp1_files = [
+        (
+            "veraxi_ymmp/app/pack_apply.py",
+            (REPO_ROOT / "veraxi_ymmp/app/pack_apply.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+    ]
+    bundle_full = pa.build_pack_bundle("WP1 task", wp1_files, agents_md)
+    bundle_web = pa.build_pack_bundle("WP1 task", wp1_files, web_md)
+    saving = len(bundle_full) - len(bundle_web)
+    # The saving is exactly the rules-size difference, and it is large:
+    # AGENTS.md is ~11k chars, AGENTS_WEB.md is capped at 3.5k.
+    assert saving == len(agents_md.strip()) - len(web_md.strip())
+    assert saving > 7_500
+
+
+def test_cmd_pack_rules_flag_resolves_against_cwd(tmp_path, monkeypatch, capsys):
+    root = _make_repo(tmp_path)
+    subdir = root / "sub"
+    subdir.mkdir()
+    (subdir / "LOCAL_RULES.md").write_text("# LOCAL CWD RULES\n",
+                                           encoding="utf-8")
+    (root / "LOCAL_RULES.md").write_text("# ROOT RULES\n", encoding="utf-8")
+    monkeypatch.chdir(subdir)
+    pa.cmd_pack(["--task", "Fix add", "--files", "mod.py",
+                 "--rules", "LOCAL_RULES.md"])
+    out = capsys.readouterr().out
+    assert "LOCAL CWD RULES" in out
+    assert "ROOT RULES" not in out

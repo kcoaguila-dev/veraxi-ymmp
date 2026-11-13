@@ -1,9 +1,10 @@
 """pack / apply: the coding-agent fallback for web-chat models.
 
 When a web chat (e.g. Gemini) has to stand in for a local coding agent,
-``veraxi-ymmp pack`` emits ONE markdown bundle — the task, the AGENTS.md
-rules, the named files, and the failing test output — with a strict
-reply format. ``veraxi-ymmp apply`` parses the reply's file blocks
+``veraxi-ymmp pack`` emits ONE markdown bundle — the task, the rules
+(AGENTS_WEB.md by default, the slim web-chat distillation of
+AGENTS.md; --rules PATH overrides), the named files, and the failing
+test output — with a strict reply format. ``veraxi-ymmp apply`` parses the reply's file blocks
 (full-file replacement only), applies them on a fresh git branch, and
 runs ruff / mypy / the targeted pytest, printing any failures as the
 next paste-back re-prompt block, in the same style as the script loop.
@@ -602,7 +603,7 @@ def build_pack_bundle(
 ) -> str:
     """Assemble the single markdown bundle for a web-chat coding task."""
     parts: List[str] = ["# Coding Task Bundle", "", "## Task", task, ""]
-    parts += ["## Rules (AGENTS.md)", agents_md.strip(), ""]
+    parts += ["## Rules", agents_md.strip(), ""]
     parts.append("## Files")
     for rel_path, content in file_contents:
         lang = "python" if rel_path.endswith(".py") else "text"
@@ -669,6 +670,11 @@ def cmd_pack(argv: Sequence[str]) -> None:
                         help=f"Max bundle characters (default {DEFAULT_BUDGET})")
     parser.add_argument("-o", "--output", default=None,
                         help="Write the bundle to this file (default: stdout)")
+    parser.add_argument("--rules", default=None,
+                        help="Rules file to embed, as a path resolved "
+                             "against the current directory (default: "
+                             "AGENTS_WEB.md at the repo root if it exists, "
+                             "else AGENTS.md)")
     args = parser.parse_args(list(argv))
 
     root = _repo_root()
@@ -679,12 +685,25 @@ def cmd_pack(argv: Sequence[str]) -> None:
             sys.stderr.write(f"Error: file not found in repo: {rel}\n")
             sys.exit(2)
         file_contents.append((rel, path.read_text(encoding="utf-8")))
-    agents_path = root / "AGENTS.md"
-    agents_md = (
-        agents_path.read_text(encoding="utf-8")
-        if agents_path.is_file()
-        else "(no AGENTS.md found at repo root)"
-    )
+    if args.rules:
+        # An explicit path is the user's own reference: resolve it
+        # against the current directory (like the reply file and -o),
+        # not the repo root. Only the automatic default selection
+        # below is repo-root based.
+        rules_path = Path(args.rules)
+        if not rules_path.is_file():
+            sys.stderr.write(f"Error: rules file not found: {args.rules}\n")
+            sys.exit(2)
+        agents_md = rules_path.read_text(encoding="utf-8")
+    else:
+        web_path = root / "AGENTS_WEB.md"
+        agents_path = root / "AGENTS.md"
+        if web_path.is_file():
+            agents_md = web_path.read_text(encoding="utf-8")
+        elif agents_path.is_file():
+            agents_md = agents_path.read_text(encoding="utf-8")
+        else:
+            agents_md = "(no AGENTS_WEB.md or AGENTS.md found at repo root)"
     test_output = _run_failing_test(args.test, root) if args.test else ""
     bundle = build_pack_bundle(
         args.task, file_contents, agents_md,
