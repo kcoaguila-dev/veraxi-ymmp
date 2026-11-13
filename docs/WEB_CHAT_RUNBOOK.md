@@ -13,7 +13,9 @@ to work around.
 1. Never edit the reply by hand to "fix" a rejection. Re-prompt with
    the block the tool prints — it names the exact problem.
 2. Never paste secrets, API keys, or local machine paths into a web
-   chat. The bundle is safe to paste as-is; do not add to it.
+   chat. The bundle does **not** redact anything — it embeds the
+   packed files and raw test output verbatim, and test output can
+   contain absolute paths. Review the bundle before you paste it.
 3. Complete files or exact anchored edits only. No "rest unchanged",
    no summaries of code — the guards reject them anyway.
 4. One task per chat session where possible. Long chats drift; the
@@ -24,6 +26,10 @@ to work around.
 ```powershell
 veraxi-ymmp session-start > session-start.txt
 ```
+
+(`session-start` arrives with WP7. On a checkout where the command
+is not recognized, use the fallback below — it is the same content
+minus the live git state.)
 
 Open the file, copy everything, and paste it as the first message of
 the web chat. It contains the slim rules (`AGENTS_WEB.md`), the
@@ -37,7 +43,9 @@ itself as the first message and state the task in one or two sentences.
 
 ### 2.1 Pack the task
 
-Full-file mode (default; best for small files and new files):
+Full-file mode (default; best for small files that already exist —
+`pack` cannot include a file that is not on disk yet; new files
+arrive via the reply and are admitted with `--allow-new`, below):
 
 ```powershell
 veraxi-ymmp pack --task "Fix the retry backoff in the fetcher" `
@@ -91,8 +99,10 @@ Outcomes:
     shrink is genuinely intended, say so in the chat and re-apply
     with `--allow-shrink`; otherwise re-prompt.
   - *file not in manifest* — the reply touched an unlisted file.
-    Either pack a new bundle that includes it, or re-apply with
-    `--allow-new <path>` if the new file is intended.
+    For a file that exists in the repo, pack a new bundle that
+    includes it. For a genuinely new file, re-apply with
+    `--allow-new <path>` (`pack` cannot include it — it is not on
+    disk yet).
   - *SEARCH matches 0 / N places* (edit mode) — the anchor text does
     not match the file exactly once. Re-prompt with the re-prompt
     block; the model must quote the file's current text verbatim.
@@ -140,7 +150,9 @@ renderer uses it verbatim.
    each `clip_id` from the script to the downloaded filename, in
    script order.
 4. Ingest by manifest — matching is by the manifest, not by probing
-   or guessing:
+   or guessing (`--from-manifest` arrives with WP8; on a checkout
+   without it, use the probing fallback noted below and assign the
+   returned clip ids by hand):
 
 ```powershell
 veraxi-ymmp ingest-clips downloads/ --from-manifest clip-manifest.json
@@ -173,8 +185,16 @@ you and the chat; the tooling only moves files.
 
 ## 5. What the tooling guarantees
 
-- A malformed, truncated, or stale reply writes **nothing** and
-  creates **no branch** (WP1–WP4 guards).
+- A malformed or truncated reply writes **nothing** and creates
+  **no branch**.
+- Full-mode `apply --manifest` also rejects a stale base and writes
+  **nothing**; without `--manifest` that check is skipped.
+- Edit mode has no manifest or base-hash check: it rejects a reply
+  whose SEARCH text no longer matches exactly once, but an edit
+  whose SEARCH text still matches applies even if other parts of
+  the file changed since packing. That is by design — the anchor
+  *is* the context — but re-pack before editing a file you know
+  changed elsewhere.
 - Edits apply all-or-nothing: every anchor must match exactly once.
 - Japanese text and each file's existing line endings survive the
   round trip byte-exactly outside the edited spans.
