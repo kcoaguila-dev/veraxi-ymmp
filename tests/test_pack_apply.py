@@ -479,3 +479,18 @@ def test_web_rules_bundle_is_much_smaller_for_wp1_files():
     # AGENTS.md is ~11k chars, AGENTS_WEB.md is capped at 3.5k.
     assert saving == len(agents_md.strip()) - len(web_md.strip())
     assert saving > 7_500
+
+
+def test_cmd_pack_rules_flag_resolves_against_cwd(tmp_path, monkeypatch, capsys):
+    root = _make_repo(tmp_path)
+    subdir = root / "sub"
+    subdir.mkdir()
+    (subdir / "LOCAL_RULES.md").write_text("# LOCAL CWD RULES\n",
+                                           encoding="utf-8")
+    (root / "LOCAL_RULES.md").write_text("# ROOT RULES\n", encoding="utf-8")
+    monkeypatch.chdir(subdir)
+    pa.cmd_pack(["--task", "Fix add", "--files", "mod.py",
+                 "--rules", "LOCAL_RULES.md"])
+    out = capsys.readouterr().out
+    assert "LOCAL CWD RULES" in out
+    assert "ROOT RULES" not in out

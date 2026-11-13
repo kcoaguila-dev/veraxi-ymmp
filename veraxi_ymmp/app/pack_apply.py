@@ -671,8 +671,10 @@ def cmd_pack(argv: Sequence[str]) -> None:
     parser.add_argument("-o", "--output", default=None,
                         help="Write the bundle to this file (default: stdout)")
     parser.add_argument("--rules", default=None,
-                        help="Rules file to embed (default: AGENTS_WEB.md "
-                             "if it exists, else AGENTS.md)")
+                        help="Rules file to embed, as a path resolved "
+                             "against the current directory (default: "
+                             "AGENTS_WEB.md at the repo root if it exists, "
+                             "else AGENTS.md)")
     args = parser.parse_args(list(argv))
 
     root = _repo_root()
@@ -684,9 +686,11 @@ def cmd_pack(argv: Sequence[str]) -> None:
             sys.exit(2)
         file_contents.append((rel, path.read_text(encoding="utf-8")))
     if args.rules:
+        # An explicit path is the user's own reference: resolve it
+        # against the current directory (like the reply file and -o),
+        # not the repo root. Only the automatic default selection
+        # below is repo-root based.
         rules_path = Path(args.rules)
-        if not rules_path.is_absolute():
-            rules_path = root / rules_path
         if not rules_path.is_file():
             sys.stderr.write(f"Error: rules file not found: {args.rules}\n")
             sys.exit(2)

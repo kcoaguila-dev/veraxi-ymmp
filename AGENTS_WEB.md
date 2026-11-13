@@ -25,7 +25,8 @@ remains the full governance text.
 - No local machine paths, usernames, emails, or secrets in any file;
   `scripts/check_no_local_paths.py` must pass.
 - The current year is 2026. Sources older than 12 months need
-  explicit historical framing; never treat 2023–2025 as current.
+  explicit historical framing; never treat 2023–2025 as the
+  current year.
 
 ## Quality bar
 
@@ -40,8 +41,9 @@ remains the full governance text.
 - Do not edit tests or prompt templates unless the task explicitly
   says so.
 - Return complete files only: no diffs, no truncation, and no
-  "rest unchanged" placeholders. Apply rejects elided replies and
-  files that shrink without explanation.
+  "rest unchanged" placeholders. Apply rejects elided replies,
+  empty replacements, and — for files of 30+ lines — replacements
+  under 60% of the original line count (override: --allow-shrink).
 - State any assumption you could not verify from the bundle instead
   of guessing silently.
 - If the full reply does not fit in one message, say so; never cut
