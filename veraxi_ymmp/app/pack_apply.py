@@ -114,7 +114,9 @@ def _read_block(
     return content_lines, -1
 
 
-def _strip_outer_wrapper(lines: List[str]) -> List[str]:
+def _strip_outer_wrapper(
+    lines: List[str],
+) -> Tuple[List[str], Optional[str]]:
     """Remove a whole-reply wrapper fence, strictly at the envelope.
 
     Web chats often wrap an entire reply in one outer fence. Unwrap
@@ -122,9 +124,12 @@ def _strip_outer_wrapper(lines: List[str]) -> List[str]:
     non-empty line is a bare fence whose run is at least as long:
     then the pair is unambiguously an envelope, and removing it
     before parsing cannot be confused with any fence inside a file
-    block. Anything else is returned unchanged and fails closed in
-    parse_reply (a wrapper whose closing fence is missing leaves a
-    stray fence behind, which rejects the reply).
+    block. Returns (lines, None) on success or when there is no
+    wrapper at all, and (lines, problem) when the reply opens with a
+    fence but has no valid closing wrapper fence — that case must
+    fail closed, because the opening fence means the reply *claims*
+    to be wrapped, so a missing, tagged, or shorter closer is
+    evidence of truncation, not a plain unwrapped reply.
     """
     start = 0
     end = len(lines)
@@ -132,19 +137,21 @@ def _strip_outer_wrapper(lines: List[str]) -> List[str]:
         start += 1
     while end > start and not lines[end - 1].strip():
         end -= 1
-    if end - start < 2:
-        return lines
-    open_match = _FENCE_LINE.match(lines[start].strip())
+    if start >= end:
+        return lines, None
+    first, last = start, end - 1
+    open_match = _FENCE_LINE.match(lines[first].strip())
     if open_match is None:
-        return lines
-    close_match = _FENCE_LINE.match(lines[end - 1].strip())
+        return lines, None
+    close_match = _FENCE_LINE.match(lines[last].strip())
     if (
-        close_match is None
+        first == last
+        or close_match is None
         or close_match.group(2)
         or len(close_match.group(1)) < len(open_match.group(1))
     ):
-        return lines
-    return lines[start + 1:end - 1]
+        return lines, "unclosed wrapper code fence"
+    return lines[first + 1:last], None
 
 
 def parse_reply(text: str) -> ParsedReply:
@@ -169,8 +176,12 @@ def parse_reply(text: str) -> ParsedReply:
     - A whole-reply wrapper fence is removed beforehand by
       _strip_outer_wrapper, strictly at the envelope, so no fence
       inside the reply can ever be mistaken for its closing fence.
+      A reply that opens with a wrapper fence but has no valid
+      closing wrapper fence is rejected outright (fail closed).
     """
-    lines = _strip_outer_wrapper(text.splitlines())
+    lines, wrapper_problem = _strip_outer_wrapper(text.splitlines())
+    if wrapper_problem is not None:
+        return ParsedReply(complete=False, problem=wrapper_problem)
     blocks: List[Tuple[str, str]] = []
     problem = ""
     saw_end = False

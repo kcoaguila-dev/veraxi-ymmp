@@ -103,16 +103,86 @@ def test_reply_wrapped_in_one_outer_fence_parses():
     assert parsed.complete, parsed.problem
     assert parsed.blocks == [("mod.py", "x = 1\n")]
 
-    # A second fence after the wrapper closes is still a stray fence.
+    # A shorter fence after the wrapper content is not a valid
+    # wrapper closer: the reply now fails closed as an unclosed
+    # wrapper instead of parsing as if it were never wrapped.
     parsed = pa.parse_reply(wrapped + FENCE + "\n")
     assert not parsed.complete
-    assert "stray code fence" in parsed.problem
+    assert "wrapper" in parsed.problem
 
     # Without a wrapper opening fence, a fence after the end marker
     # is still rejected (the original safety net is unchanged).
     parsed = pa.parse_reply(inner + FENCE4 + "\n")
     assert not parsed.complete
     assert "stray code fence" in parsed.problem
+
+
+def _make_git_repo(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    root.mkdir()
+    for args in (
+        ["init", "-q"],
+        ["config", "user.email", "test@example.com"],
+        ["config", "user.name", "Test"],
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True,
+                       capture_output=True)
+    (root / "doc.md").write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True,
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
+                   check=True, capture_output=True)
+    return root
+
+
+def _assert_apply_writes_nothing(tmp_path: Path, reply: str) -> None:
+    parsed = pa.parse_reply(reply)
+    assert not parsed.complete
+    assert "wrapper" in parsed.problem
+    root = _make_git_repo(tmp_path)
+    code = pa.apply_reply(
+        reply, root, branch_name="agent-apply-wrapper-fail",
+        check_runner=lambda changed, test_path, root_: [],
+        output_fn=lambda _m: None,
+    )
+    assert code == 1
+    assert (root / "doc.md").read_text(encoding="utf-8") == "original\n"
+    branches = subprocess.run(
+        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+    ).stdout
+    assert "agent-apply-wrapper-fail" not in branches
+
+
+def test_apply_reply_unclosed_wrapper_rejected(tmp_path):
+    # Opens with a wrapper fence, contains a valid block and the end
+    # marker, but never closes the wrapper: fail closed.
+    reply = f"{FENCE4}markdown\n" + _reply(
+        "doc.md", FENCE, "markdown", "new content\n"
+    )
+    parsed = pa.parse_reply(reply)
+    assert not parsed.complete
+    assert parsed.problem == "unclosed wrapper code fence"
+    _assert_apply_writes_nothing(tmp_path, reply)
+
+
+def test_apply_reply_unmatched_wrapper_closer_rejected(tmp_path):
+    # The closing fence is shorter than the wrapper opening fence.
+    reply = (
+        f"{FENCE4}markdown\n"
+        + _reply("doc.md", FENCE, "markdown", "new content\n")
+        + f"{FENCE}\n"
+    )
+    _assert_apply_writes_nothing(tmp_path, reply)
+
+
+def test_apply_reply_tagged_wrapper_closer_rejected(tmp_path):
+    # A tagged line is not a bare closing fence for the wrapper.
+    reply = (
+        f"{FENCE4}markdown\n"
+        + _reply("doc.md", FENCE, "markdown", "new content\n")
+        + f"{FENCE4}markdown\n"
+    )
+    _assert_apply_writes_nothing(tmp_path, reply)
 
 
 def test_failing_tests_section_uses_fence_longer_than_its_output():
