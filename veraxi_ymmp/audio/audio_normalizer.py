@@ -20,6 +20,19 @@ from veraxi_ymmp.core.constants import (
 )
 from veraxi_ymmp.core.logging import logger
 
+def get_ffmpeg_exe() -> str:
+    """Resolve FFmpeg executable from system PATH or bundled imageio_ffmpeg."""
+    import shutil
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+        return str(imageio_ffmpeg.get_ffmpeg_exe())
+    except Exception:
+        return "ffmpeg"
+
+
 PLATFORM_TARGETS: Dict[str, Dict[str, float]] = {
     "youtube": {"I": -14.0, "TP": -1.0, "LRA": 11.0},
     "spotify": {"I": -14.0, "TP": -1.0, "LRA": 11.0},
@@ -62,7 +75,7 @@ def gain_stage_audio_file(
         f"loudnorm=I={target_i}:TP={target_tp}:LRA=11.0:print_format=summary"
     )
     cmd = [
-        "ffmpeg",
+        get_ffmpeg_exe(),
         "-y",
         "-i", str(src),
         "-af", loudnorm_filter,
@@ -171,7 +184,7 @@ def normalize_video_audio(
     )
 
     cmd = [
-        "ffmpeg",
+        get_ffmpeg_exe(),
         "-y",
         "-i", str(input_path),
         "-vcodec", "copy",
@@ -230,4 +243,5 @@ __all__ = [
     "gain_stage_audio_file",
     "normalize_all_platforms",
     "normalize_video_audio",
+    "get_ffmpeg_exe",
 ]

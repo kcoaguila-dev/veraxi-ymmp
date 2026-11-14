@@ -318,3 +318,70 @@ def test_wp5_prompt_sources_agree_on_object_contract():
     assert '"type": "broll_manifest"' not in low_tier
     assert "slide_type" not in low_tier
     assert "Return ONLY a JSON object" in built
+
+
+def test_generate_script_file_writes_broll_and_thumbnail_config(tmp_path, monkeypatch):
+    thumb_cfg = {
+        "badge": "一次資料検証",
+        "title_line1": "巨額投資の真実",
+        "title_line2": "決算書が暴く現実",
+        "sub_hook": "見落とされた数値",
+    }
+    full_reply = json.dumps(
+        {
+            "script": GOOD_ENTRIES,
+            "broll_manifest": BROLL_CANONICAL,
+            "thumbnail_config": thumb_cfg,
+        },
+        ensure_ascii=False,
+    )
+    monkeypatch.setattr(sp, "_read_paste_from_stdin", lambda: full_reply)
+    script_out = tmp_path / "script.json"
+    entries = sp.generate_script_file(
+        "manual", "Test Topic", "Dossier", script_out, tmp_path / "script_prompt.md"
+    )
+    assert entries == sp.validate_pasted_script(GOOD_JSON)
+    assert json.loads(script_out.read_text(encoding="utf-8")) == entries
+    assert json.loads((tmp_path / "broll_manifest.json").read_text(encoding="utf-8")) == BROLL_CANONICAL
+    assert json.loads((tmp_path / "thumbnail_config.json").read_text(encoding="utf-8")) == thumb_cfg
+
+
+def test_manual_provider_extra_validator_reprompts():
+    outputs: list = []
+    calls = {"n": 0}
+
+    def custom_gate(_payload):
+        calls["n"] += 1
+        return ["[PACING] Retention score too low"] if calls["n"] == 1 else []
+
+    provider = sp.ManualHandoffProvider(
+        paste_fn=_paste_queue(GOOD_JSON, GOOD_JSON),
+        output_fn=outputs.append,
+        extra_validator=custom_gate,
+    )
+    entries = provider.generate_script("T", "D")
+    assert entries == sp.validate_pasted_script(GOOD_JSON)
+    joined = "\n".join(outputs)
+    assert "LLM RE-PROMPT BLOCK" in joined
+    assert "[PACING] Retention score too low" in joined
+
+
+def test_ingest_script_pure_notebooklm_table_with_provider(tmp_path, monkeypatch):
+    md = tmp_path / "evidence.md"
+    md.write_text(
+        "| # | Claim | Verbatim Quote | Source & Page | Hard Metric |\n"
+        "|---|---|---|---|---|\n"
+        "| 1 | 認証不要のリモート実行欠陥 | 認証不要でサーバーを掌握可能 | CVE-2024-XXXX p.2 | CVSS 9.8 |\n",
+        encoding="utf-8",
+    )
+    reply_obj = json.dumps(
+        {"script": GOOD_ENTRIES, "broll_manifest": BROLL_CANONICAL},
+        ensure_ascii=False,
+    )
+    monkeypatch.setattr(sp, "_read_paste_from_stdin", lambda: reply_obj)
+    monkeypatch.setattr(sp, "build_project_gate_validator", lambda *_a, **_k: (lambda _p: []))
+    _cmd_ingest_script([str(md), "--provider", "manual"])
+    assert (tmp_path / "script.json").is_file()
+    assert (tmp_path / "broll_manifest.json").is_file()
+    claims = json.loads((tmp_path / "claims.json").read_text(encoding="utf-8"))
+    assert isinstance(claims, list)

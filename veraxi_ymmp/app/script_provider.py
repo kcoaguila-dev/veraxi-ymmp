@@ -17,11 +17,13 @@ back to the manual flow.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from veraxi_ymmp.core.constants import DEFAULT_SPEAKER_MAP
 from veraxi_ymmp.core.schema import get_director_script_schema
@@ -31,6 +33,32 @@ PASTE_TERMINATOR = "---END---"
 
 OutputFn = Callable[[str], None]
 PasteFn = Callable[[], str]
+PayloadValidator = Callable[[Dict[str, Any]], List[str]]
+
+_EXTRA_VALIDATOR_CTX: contextvars.ContextVar[Optional[PayloadValidator]] = (
+    contextvars.ContextVar("veraxi_extra_validator", default=None)
+)
+_LAST_PROVIDER: Optional["ManualHandoffProvider"] = None
+
+
+@contextlib.contextmanager
+def _using_extra_validator(
+    validator: Optional[PayloadValidator],
+) -> Iterator[None]:
+    """Temporarily bind an extra payload validator for generate_with_provider."""
+    token = _EXTRA_VALIDATOR_CTX.set(validator)
+    try:
+        yield
+    finally:
+        _EXTRA_VALIDATOR_CTX.reset(token)
+
+
+class _MultiValidationError(ValueError):
+    """Carry multiple structured error lines through ValueError handoff."""
+
+    def __init__(self, errors: List[str]) -> None:
+        super().__init__("; ".join(errors))
+        self.errors = errors
 
 
 def format_reprompt_block(errors: List[str]) -> str:
@@ -78,7 +106,10 @@ def build_script_prompt(topic: str, dossier: str) -> str:
         f"```json\n{schema}\n```\n"
         "The \"broll_manifest\" value is an array of slide definition "
         "objects, one per slide referenced by an entry's \"image\" "
-        "field, or an empty array when no slides are referenced.\n"
+        "field, or an empty array when no slides are referenced. "
+        "Do NOT invent video clip_ids; standard B-roll slides are "
+        "rendered automatically from \"broll_manifest\". Optionally, "
+        "include a \"thumbnail_config\" object for the 3-split thumbnail.\n"
     )
     return prompt
 
@@ -213,6 +244,134 @@ def _read_paste_from_stdin() -> str:
     return "\n".join(lines)
 
 
+def _extract_thumbnail_config(raw: str) -> Optional[Dict[str, Any]]:
+    """Extract optional ``thumbnail_config`` dict from a pasted JSON reply."""
+    try:
+        data = extract_script_json(raw)
+    except ValueError:
+        return None
+    if isinstance(data, dict) and isinstance(data.get("thumbnail_config"), dict):
+        return dict(data["thumbnail_config"])
+    return None
+
+
+def _collect_slide_texts(spec: Dict[str, Any]) -> List[str]:
+    """Collect visible text elements from a broll_manifest entry for load checks."""
+    skip_keys = {
+        "type", "filename", "theme_color", "color", "is_vertical",
+        "image_path", "image", "asset", "layout", "show_caption",
+        "show_header", "show_citation",
+    }
+    color_tokens = {"blue", "emerald", "amber", "purple", "rose", "red", "green"}
+    texts: List[str] = []
+    for k, v in spec.items():
+        if k in skip_keys or v is None:
+            continue
+        if isinstance(v, str) and v.strip():
+            texts.append(v.strip())
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, str) and item.strip().lower() not in color_tokens:
+                    texts.append(item.strip())
+                elif isinstance(item, (list, tuple)):
+                    for sub in item:
+                        if isinstance(sub, str) and sub.strip().lower() not in color_tokens:
+                            texts.append(sub.strip())
+                elif isinstance(item, dict):
+                    for sub_v in item.values():
+                        if isinstance(sub_v, str) and sub_v.strip().lower() not in color_tokens:
+                            texts.append(sub_v.strip())
+    return texts
+
+
+def _validate_cuts_and_broll(
+    payload: Dict[str, Any], project_dir: Path
+) -> List[str]:
+    """Validate visible cut lengths, unmapped ASCII tokens, and slide load."""
+    from veraxi_ymmp.audio.phonetics import find_unmapped_ascii_tokens, strip_phonetic_ruby
+    from veraxi_ymmp.graphics.broll import MAX_SLIDE_CHARS, MAX_SLIDE_ELEMENTS, check_cognitive_load
+
+    errors: List[str] = []
+    for idx, entry in enumerate(payload.get("script", [])):
+        if not isinstance(entry, dict):
+            continue
+        text = str(entry.get("text", ""))
+        char = str(entry.get("character", "unknown"))
+        vis_len = len(strip_phonetic_ruby(text))
+        if vis_len > 40:
+            errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({vis_len} chars).")
+        unmapped = find_unmapped_ascii_tokens(text, project_dir=project_dir)
+        if unmapped:
+            errors.append(
+                f"Cut #{idx} ({char}): Unmapped ASCII token(s) {unmapped}; "
+                "use katakana or inline ruby '{Word|よみ}'."
+            )
+
+    for s_idx, spec in enumerate(payload.get("broll_manifest", [])):
+        if not isinstance(spec, dict):
+            errors.append(f"broll_manifest[{s_idx}] must be an object.")
+            continue
+        title = str(spec.get("title") or spec.get("filename") or f"slide_{s_idx}")
+        try:
+            check_cognitive_load(
+                title,
+                _collect_slide_texts(spec),
+                max_chars=MAX_SLIDE_CHARS,
+                max_elements=MAX_SLIDE_ELEMENTS + 6,
+            )
+        except ValueError as exc:
+            errors.append(f"[BROLL] {exc}")
+    return errors
+
+
+def build_project_gate_validator(
+    project_dir: Path,
+    audit_pacing: bool = True,
+    audit_facts: bool = True,
+) -> PayloadValidator:
+    """Build a validator enforcing retention pacing, slide load, and fact gates."""
+    resolved_dir = project_dir.resolve()
+
+    def _validate(payload: Dict[str, Any]) -> List[str]:
+        errors = _validate_cuts_and_broll(payload, resolved_dir)
+        script_entries = payload.get("script", [])
+
+        if audit_pacing:
+            from veraxi_ymmp.editorial.pacing import audit_script_pacing
+            report = audit_script_pacing(list(script_entries))
+            if report.retention_score < 80:
+                pacing_msgs = [
+                    f"[PACING {v.rule_name}] {v.message} (Remedy: {v.remedy})"
+                    for v in report.violations
+                    if v.severity in {"ERROR", "WARNING"}
+                ]
+                errors.extend(
+                    pacing_msgs
+                    or [f"[PACING] Retention score {report.retention_score}/100 is below 80."]
+                )
+
+        claims_path = resolved_dir / "claims.json"
+        if audit_facts and claims_path.is_file():
+            from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
+            tmp_script = resolved_dir / ".candidate_script.tmp.json"
+            try:
+                tmp_script.write_text(
+                    json.dumps(script_entries, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                outcome = audit_project_facts(tmp_script)
+                for r in outcome.blockers:
+                    errors.append(
+                        f"[FACTS] {r.claim.id} (cut {r.claim.cut_index}) "
+                        f"{r.verdict.value}: {r.reason}"
+                    )
+            finally:
+                tmp_script.unlink(missing_ok=True)
+        return errors
+
+    return _validate
+
+
 class ManualHandoffProvider:
     """ScriptProvider that hands off to a human + web chat (e.g. Gemini).
 
@@ -230,16 +389,19 @@ class ManualHandoffProvider:
         output_fn: OutputFn = print,
         prompt_path: Optional[Path] = None,
         max_attempts: Optional[int] = None,
+        extra_validator: Optional[PayloadValidator] = None,
     ) -> None:
         self._paste_fn = paste_fn or _read_paste_from_stdin
         self._output_fn = output_fn
         self._prompt_path = prompt_path
         self._max_attempts = max_attempts
+        self._extra_validator = extra_validator
         # The normalized payload of the last successful paste. The
         # ScriptProvider port returns only the script entries, so the
         # reply's broll_manifest is surfaced here instead of being
         # silently dropped at ingest.
         self.last_broll_manifest: List[Any] = []
+        self.last_thumbnail_config: Optional[Dict[str, Any]] = None
         self.last_payload: Optional[dict] = None
 
     def generate_script(self, topic: str, dossier: str) -> List[DirectorScriptEntry]:
@@ -265,12 +427,18 @@ class ManualHandoffProvider:
                 raise ValueError("Manual handoff aborted: pasted reply was empty.")
             try:
                 payload = validate_pasted_payload(raw)
+                if self._extra_validator is not None:
+                    extra_errors = self._extra_validator(payload)
+                    if extra_errors:
+                        raise _MultiValidationError(extra_errors)
                 self.last_payload = payload
                 self.last_broll_manifest = payload["broll_manifest"]
+                self.last_thumbnail_config = _extract_thumbnail_config(raw)
                 entries: List[DirectorScriptEntry] = payload["script"]
                 return entries
             except ValueError as exc:
-                self._output_fn(format_reprompt_block([str(exc)]))
+                err_list = exc.errors if isinstance(exc, _MultiValidationError) else [str(exc)]
+                self._output_fn(format_reprompt_block(err_list))
                 if self._max_attempts is not None and attempts >= self._max_attempts:
                     raise ValueError(
                         f"Manual handoff did not converge after {attempts} "
@@ -291,11 +459,17 @@ def generate_with_provider(
     ``api`` is reserved for a future key-backed provider and raises
     RuntimeError until one is configured; unknown names raise ValueError.
     """
+    global _LAST_PROVIDER
+    _LAST_PROVIDER = None
     provider_name = (name or "manual").lower()
     if provider_name == "manual":
         provider = ManualHandoffProvider(
-            paste_fn=paste_fn, output_fn=output_fn, prompt_path=prompt_path
+            paste_fn=paste_fn,
+            output_fn=output_fn,
+            prompt_path=prompt_path,
+            extra_validator=_EXTRA_VALIDATOR_CTX.get(),
         )
+        _LAST_PROVIDER = provider
         return provider.generate_script(topic, dossier)
     if provider_name == "api":
         raise RuntimeError(
@@ -311,21 +485,39 @@ def generate_script_file(
     dossier: str,
     script_path: Path,
     prompt_path: Optional[Path] = None,
+    extra_validator: Optional[PayloadValidator] = None,
 ) -> List[DirectorScriptEntry]:
     """Generate a script via the named provider and write it to script_path.
 
-    Shared by the ``ideate`` and ``ingest-script`` CLI commands. An
-    unavailable provider (e.g. ``api`` without a key) is a clean CLI
-    error (exit 2), not a traceback.
+    Shared by the ``ideate`` and ``ingest-script`` CLI commands. Also writes
+    ``broll_manifest.json`` and ``thumbnail_config.json`` beside ``script_path``
+    when the provider reply includes them. An unavailable provider (e.g. ``api``
+    without a key) is a clean CLI error (exit 2), not a traceback.
     """
+    global _LAST_PROVIDER
+    _LAST_PROVIDER = None
     try:
-        entries = generate_with_provider(
-            provider_name, topic, dossier, prompt_path=prompt_path
-        )
+        with _using_extra_validator(extra_validator):
+            entries = generate_with_provider(
+                provider_name, topic, dossier, prompt_path=prompt_path
+            )
     except RuntimeError as exc:
         sys.stderr.write(f"Error: {exc}\n")
         raise SystemExit(2) from exc
     script_path.write_text(
         json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    if _LAST_PROVIDER is not None:
+        if _LAST_PROVIDER.last_broll_manifest:
+            broll_path = script_path.parent / "broll_manifest.json"
+            broll_path.write_text(
+                json.dumps(_LAST_PROVIDER.last_broll_manifest, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        if _LAST_PROVIDER.last_thumbnail_config:
+            thumb_path = script_path.parent / "thumbnail_config.json"
+            thumb_path.write_text(
+                json.dumps(_LAST_PROVIDER.last_thumbnail_config, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
     return entries

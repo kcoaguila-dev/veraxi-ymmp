@@ -455,7 +455,17 @@ class CharacterPSDRegistry:
                 "\x1c!体\x1d0",
                 "\x1c尻尾のような何か\x1d0",
             ]
-            if emotion == "surprised":
+            if emotion in ("crying", "scared"):
+                layers.extend(["n130", "n106", "n139", "n138"])
+                paths.extend(
+                    [
+                        "\x1c*頭_正面向き\x1d0\x1c!眉\x1d0\x1c*困り眉\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c!目\x1d0\x1c*><\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c涙\x1d0",
+                        "\x1c*頭_正面向き\x1d0\x1c汗\x1d0",
+                    ]
+                )
+            elif emotion == "surprised":
                 layers.extend(["n145", "n132"])
                 paths.extend(
                     [

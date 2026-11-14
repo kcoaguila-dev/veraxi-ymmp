@@ -523,11 +523,12 @@ def tune_audio_query_pitch(audio_query: Dict[str, Any]) -> Dict[str, Any]:
             moras[0]["vowel_length"] = 0.13
             moras[1]["vowel_length"] = 0.15
 
-        # Anti-glitch safeguard: clamp extreme pitch spikes (> 5.88 log-F0) that cause metallic squeaks
+        # Anti-glitch safeguard: clamp extreme runaway spikes (> 6.30 log-F0) that cause vocoder breakdown
+        # Preserves natural anime character high-register inflection peaks (5.85 - 6.15 log-F0)
         for m in moras:
             current_pitch = m.get("pitch", 0.0)
-            if current_pitch > 5.88:
-                m["pitch"] = round(5.85 + (current_pitch - 5.88) * 0.15, 3)
+            if current_pitch > 6.30:
+                m["pitch"] = round(6.25 + (current_pitch - 6.30) * 0.15, 3)
     return audio_query
 
 

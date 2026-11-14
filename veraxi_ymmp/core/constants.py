@@ -11,8 +11,8 @@ FRAMES_PER_CHAR = 5
 MIN_LENGTH_FRAMES = 30
 
 # VOICEVOX defaults
-DEFAULT_VOICEVOX_URL = "http://localhost:50021"
-DEFAULT_VOICEVOX_TIMEOUT = 30
+DEFAULT_VOICEVOX_URL = "http://127.0.0.1:50021"
+DEFAULT_VOICEVOX_TIMEOUT = 60
 DEFAULT_SPEAKER_ID = 3  # Zundamon
 DEFAULT_SPEAKER_MAP: Dict[str, int] = {
     "ずんだもん": 3,
@@ -88,9 +88,9 @@ DEFAULT_AUDIO_SAMPLE_RATE: int = 48000
 
 # Audio tempo sculpting and zero-gap clamping defaults
 DEFAULT_SPEAKER_SPEED_MAP: Dict[str, float] = {
-    "ずんだもん": 1.18,
-    "四国めたん": 1.12,
-    "春日部つむぎ": 1.14,
+    "ずんだもん": 1.00,
+    "四国めたん": 1.00,
+    "春日部つむぎ": 1.00,
 }
 DEFAULT_SPEECH_PADDING_SEC: float = 0.05
 DEFAULT_PUNCHLINE_PAUSE_SEC: float = 0.25

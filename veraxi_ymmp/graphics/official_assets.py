@@ -539,7 +539,7 @@ def render_official_image_slide(
         draw.text((x1 + 20, (cite_y1 + cite_y2) / 2), badge_str, font=fonts["small"], fill=col, anchor="lm")
 
         # Source Text
-        cite_font = _fit_font(draw, citation_text, fonts["small"], max_width=x2 - (x1 + 28 + badge_w) - 20, base_size=22, min_size=16)
+        cite_font = _fit_font(draw, citation_text, fonts["small"], max_width=x2 - (x1 + 28 + badge_w) - 20, base_size=24, min_size=20)
         draw.text((x1 + 28 + badge_w, (cite_y1 + cite_y2) / 2), citation_text, font=cite_font, fill=COLOR_TEXT_SECONDARY, anchor="lm")
 
         # 2. Main Framed Card for the Official Image
@@ -672,7 +672,7 @@ def render_official_data_slide(
 
     # Official Citation Line inside the card
     cite_y = y2 - 40
-    f_cite = _fit_font(draw, citation_text, fonts["small"], max_width=card_inner_w, base_size=22, min_size=16)
+    f_cite = _fit_font(draw, citation_text, fonts["small"], max_width=card_inner_w, base_size=24, min_size=20)
     draw.text((x1 + 36, cite_y), citation_text, font=f_cite, fill=COLOR_TEXT_SECONDARY, anchor="lm")
 
     # Bottom Impact Banner

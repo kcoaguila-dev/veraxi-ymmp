@@ -45,7 +45,7 @@ This skill governs all dialogue generation, staging metadata, and pacing rules f
 
 ## 4. Rhythmic Syncopation & Dialogue Ping-Pong (卓球ラリー原則)
 - **Anti-Monotony:** Monotonous sentence lengths (all cuts uniformly 28–38 chars) are strictly banned.
-- **Micro-Reactions:** Scripts MUST include $\ge 5\text{--}10\%$ 1-beat micro-reaction cuts ($\le 12$ chars, e.g. `「はぁ！？」`, `「嘘でしょ！？」`, `「正気なのだ！？」`, `「あり得ませんわ」`) to create rapid comedic contrast and natural breath marks for VOICEVOX.
+- **Micro-Reactions:** Scripts MUST include $\ge 5\text{--}10\%$ 1-beat micro-reaction cuts ($\le 12$ chars, e.g. `「ええっ！？」`, `「嘘でしょ！？」`, `「正気なのだ！？」`, `「あり得ませんわ」`) to create rapid comedic contrast and natural breath marks for VOICEVOX.
 - **Line Ceilings:** Maximum 2 lines per speech bubble. Character ceiling $\le 35\text{--}40$ characters per dialogue cut.
 
 ---
@@ -93,3 +93,30 @@ NEVER structure videos as boring corporate lectures with generic bullet lists (`
 - **Clean Audio:** NEVER inject slapstick cartoon SFX (`pon.wav` banned). Use only clean non-vocal instrumental BGM ducked to balanced levels ($\le 0.18$ volume for -16 LUFS speech).
 - **Pro Dark Slate B-Roll:** Background `#0F172A` / `#1E293B`. 1-Slide-1-Impact: Total characters across slide $\le 100$. Maximum 6 text elements. Zero nested bullets.
 - **YouTube Thumbnail:** 3-Split layout (character reaction right, high-contrast headline left, bottom-right timestamp safe zone protected).
+
+
+---
+
+## 11. Conversational Naturalness & Rival Quality Protocol (対話の自然性・ライバル品質プロトコル)
+
+Top YouTube explainer channels (ゆっくり解説, ずんだもん解説) succeed because dialogue feels like lively human comedy/banter, not AI-generated SEC filing bullet points.
+
+1. **Anti-Echo / Anti-Parrot Mandate (オウム返しの厳禁):**
+   - **Banned:** Explainer states `「1日で2000億円以上の資金が消えていますわ」` $	o$ Reactor echoes `「1日2000億円！？回収できるのか！？」`.
+   - **Remedy:** Reactors must NEVER copy-paste the explainer's metric followed by `！？`. Translate numbers immediately into **visceral emotion, street-level scale, or comedic comparison**:
+     - *Bad:* `「たった3ヶ月で18.4兆円！？正気じゃないのだ！」`
+     - *Good (Rival Quality):* `「ちょ、国家予算どころか毎日スカイツリーを建てて爆破してるような桁なのだ！？」`
+     - *Bad:* `「コストが半額になるのだ！？」`
+     - *Good (Rival Quality):* `「は、半額！？スーパーの見切り品じゃあるまいし、そんな上手い話あるわけないのだ！」`
+2. **Spoken Dialogue vs. Written Press Releases (体言止め・ニュース原稿読み上げの禁止):**
+   - VoiceVox synthesizes bare Sino-Japanese verbal nouns (`〜を突破。`, `〜を記録。`, `〜へ低下。`) with a dead, robotic falling pitch.
+   - Spoken dialogue MUST always end in conversational inflected predicates:
+     - *Banned:* `「AWS営業利益は177億ドルを突破。」`
+     - *Required:* `「AWSの営業利益は177億ドルを軽々と叩き出していますのよ。」`
+3. **Authentic Character Voice & Anti-Register Drift (キャラクター固有の語尾と文体の死守):**
+   - **四国めたん:** Sarcastic gothic aristocrat. Uses `〜ですわ`, `〜ますわよ`, `〜かしら`, `〜のよ`. BANNED from dropping into flat corporate announcer `〜です。` / `〜ます。`, and banned from archaic samurai keigo (`左様でございますわ`).
+   - **春日部つむぎ:** Cheerful, cheeky server-room insider kouhai. MUST use natural colloquial endings (`〜っすよ！`, `〜じゃないすか！`, `〜っすね！`). BANNED from sterile corporate speech disguised with generic `〜んだよ！` / `〜の！`.
+   - **ずんだもん:** Raw human vulnerability, money panic, gullible optimism, and greed. Speaks with relatable human perspective (ずんだ餅, ソシャゲ課金, お小遣い, 家賃).
+4. **Varying Affirmations & Dynamic Banter (定型相槌の重複禁止):**
+   - Repeating `「その通りですわ」` multiple times across a video sounds mechanical.
+   - Use lively, varied conversational reactions: `「甘いですわね」`, `「仰る通りですわ」`, `「核心を突きましたわね」`, `「愚問ですわ」`, `「まさにその通りなのだ！」`.

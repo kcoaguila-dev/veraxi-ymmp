@@ -99,10 +99,15 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator structure
 
 ---
 
-## 3. Operational Command Reference (The 4-Step Golden Path)
+## 3. Operational Command Reference (The 5-Step Golden Path)
+
+Every video project MUST be executed continuously through all 5 steps without halting before completion:
 
 1. **Topic Ideation & NotebookLM Dossier:**
    `veraxi-ymmp ideate "<Topic>" --archetype post_mortem`
+   - *Step 1.5 NotebookLM Human-in-the-Loop (HITL) Gate:* The user uploads primary source filings/prospectuses into NotebookLM, executes the multi-turn prompt sequence, and inputs the resulting Forensic Evidence Extraction Matrix table into the conversation or `evidence.md`.
+   - *Project Source Isolation Invariant:* Every project under `projects/<slug>/` MUST be strictly isolated. Primary sources in `sources/` and evidence tables must exclusively belong to the active project. Never leak or copy stale or unrelated documents from prior projects.
+   - *Runtime Scalability:* Supports standard short formats (~50-80 cuts, 3-5 min) as well as long-form deep-dive formats (~180-220 cuts, 8-12 min) with proportional 50/30/20 cast balance and multiple retention checkpoints.
 2. **Evidence Table Ingestion & Antigravity Scripting (`script-hygiene` $\rightarrow$ `script.json` & `claims.json`):**
    `veraxi-ymmp ingest-script projects/<slug>/dialogue_raw.md -o projects/<slug>/script.json`
 3. **Epistemic Fact Audit & Retention Pacing Gate:**
@@ -110,6 +115,11 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator structure
 4. **Full Multi-Target Compilation & Loudness Normalization:**
    `veraxi-ymmp run projects/<slug>/`
    `veraxi-ymmp normalize <video.mp4> -p youtube`
+5. **Autonomous Multimodal QA & Visual Inspection Gate (Fail-Closed Delivery Invariant):**
+   `veraxi-ymmp qa projects/<slug>/`
+   - Use `read_file` to visually audit all extracted narrative milestone keyframes in `qa_frames/` (Cold Open hook, First Slide, 3rd speaker entrance, and Ending) and `thumbnail.png`.
+   - Verify: 100% TTS audio coverage, 0 truncated cast entrances, concentric subtitle plates, speaker color theming, and 0 bracket/AI-slop cliches (`【...】`).
+   - **Hand-off Prohibition**: Never present completion or deliver final deliverables to the user until Step 5 is executed and visually verified in the same continuous turn sequence.
 
 - **Architectural Fitness Check:** `pytest tests/test_architectural_fitness.py -q`
 - **Privacy & Secret Scan:** `python scripts/check_no_local_paths.py`

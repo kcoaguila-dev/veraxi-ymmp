@@ -66,32 +66,32 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   renderer.render("artifacts/qa_test.mp4")
   ```
 
-### 3. Audio & Visual QA (AI Multimodal Inspection)
-- Use your `view_file` tool to watch `artifacts/qa_test.mp4`.
-- **CRITICAL**: Ensure the MP4 render is long enough to cover *every single character's* first spoken line. (Do not rely on a 2-second truncation if a character speaks later).
-- **Review Criteria**:
-  - **Audio Check**: Verify that Voicevox actually ran and generated `.wav` files in `artifacts/audio/`. Do not assume the audio exists just because the video rendered! Check the directory contents or the MP4 metadata.
-  - Do ALL characters appear on screen in the correct layout? (e.g., Metan on left, Zundamon on right).
-  - Are the speech bubble colors correctly themed for the speaker? (e.g., Green for Zundamon, Pink for Metan).
-  - Does the B-roll image pop up at the correct time?
-  - Are the subtitles readable and correctly positioned?
-  - Is the pacing (TTS duration) correct?
-
-### 4. High-CTR YouTube Thumbnail Generation & QA
-- Every generated video project MUST have a publication-grade YouTube thumbnail (`thumbnail.png`).
-- Auto-generate using `veraxi_ymmp.graphics.thumbnail`:
-  ```python
-  from veraxi_ymmp.graphics.thumbnail import generate_project_thumbnail
-  generate_project_thumbnail(proj_dir, out_path=proj_dir / "thumbnail.png")
+### 3. Turnkey QA Command & Narrative Keyframe Extraction
+- Run the autonomous multimodal QA command:
+  ```bash
+  veraxi-ymmp qa <project_dir>
   ```
-- **Thumbnail Review Criteria (Multimodal Inspection via `view_file`)**:
-  - **3-Split Composition**: Prominent character reaction face on the right (Zundamon/Metan), punchy copy on the left.
-  - **YouTube Safe Zone**: Bottom-right corner strictly clear of text or critical facial features (protected against duration badge `12:34`).
-  - **Multi-layer Outline (袋文字)**: Text has thick black stroke + drop shadow and is easily readable on mobile.
-  - **Jump Rate**: Key trigger word (e.g. 「ボロ儲け」「大波乱」) is highlighted in gold/red.
-  - **Character Cutout (白フチ)**: Clean white sticker rim stroke separating character from the dark blurred background.
+- This automatically:
+  1. Verifies 100% of dialogue cuts have synthesized VOICEVOX audio in `<project_dir>/audio/`.
+  2. Ensures preview video duration covers all cast members (including 3rd speaker debut).
+  3. Audits thumbnail config against banned robotic brackets (`【...】`).
+  4. Extracts 5 narrative milestone keyframe PNGs to `<project_dir>/qa_frames/`:
+     - `01_cold_open.png` (Hook confrontation)
+     - `02_first_slide.png` (First B-roll slide)
+     - `03_guest_entrance.png` (3rd speaker mid-roll debut)
+     - `04_mid_reaction.png` (Mid-video reaction cut)
+     - `05_ending.png` (Closing cut)
 
-### 5. Revision Loop
-- If ANY QA check fails (missing audio, off-center text, overlapping characters, speech bubble outline mismatch), fix the script/code and re-render.
-- Re-inspect until the video is publication-ready.
-- Hand off the final artifacts to the user only after passing autonomous QA.
+### 4. Audio & Visual QA (AI Multimodal Inspection via `read_file`)
+- **CRITICAL**: Use `read_file` to visually inspect all extracted PNGs in `<project_dir>/qa_frames/` and `thumbnail.png`.
+- **Visual Staging Checklist**:
+  - Do ALL characters appear on screen in the correct layout? (Metan on left, Zundamon/Tsumugi alternating on right).
+  - Are speech bubble colors correctly themed? (Green for Zundamon, Pink for Metan, Orange for Tsumugi).
+  - Does B-roll pop up with characters shifted to the presenter spot without clipping?
+  - Are subtitles readable, concentric, and $\le 2$ lines per speech bubble?
+  - **Thumbnail Checklist**: 3-split layout, white sticker rim cutout, no robotic brackets (`【...】`), and bottom-right duration safe zone clear.
+
+### 5. Revision Loop & Delivery Invariant
+- **Continuous Execution**: You MUST perform steps 1 through 4 continuously in the same production turn sequence.
+- **Fail-Closed Gate**: If ANY QA check fails (missing audio, off-center text, overlapping characters, speech bubble outline mismatch, truncated preview), fix the script/code and re-render immediately.
+- **Hand-off Prohibition**: Never stop or declare completion to the user until multimodal QA has been executed, inspected, and verified.

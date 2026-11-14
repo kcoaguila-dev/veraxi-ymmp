@@ -115,66 +115,65 @@ For the next task in the same session, pack a fresh bundle and repeat
 from 2.1. When the session gets long or confused, start a new chat
 and repeat section 1 — nothing is lost; the repo is the memory.
 
-## 3. Video task loop
+## 3. Video task loop (Zero-Quota NotebookLM + Web-Chat Golden Path)
 
-### 3.1 Script from the web chat
+### 3.1 Ideate & NotebookLM Evidence Extraction
 
-Use the repo's script prompt (the same one the pipeline builds) with
-your topic and dossier. The expected reply is a single JSON object:
+1. Scaffold the project dossier and resolve primary source filings:
 
-```json
-{"script": [ ... ], "broll_manifest": [ ... ]}
+```powershell
+veraxi-ymmp ideate "Your Topic Here" --archetype post_mortem
 ```
 
-Older reply shapes (a bare array, or an array with appended b-roll
-entries) are also accepted — ingest normalizes them — but the object
-shape is the contract to ask for. Save the reply as `script.json`
-(or paste it through the manual handoff when the pipeline asks for
-the script). If ingest rejects the payload, it prints what is wrong;
-paste that back into the chat and ask for a corrected object.
+2. Open `projects/<slug>/notebooklm_dossier.md`, upload the primary source filings/documents to **Gemini NotebookLM**, and run Turns 1–4.
+3. Save the resulting Turn 4 Forensic Evidence Extraction Matrix table as `projects/<slug>/evidence.md`.
 
-### 3.2 B-roll slides
+### 3.2 Script & B-roll Generation in Web Chat
 
-Slides render from the reply's `broll_manifest`: each entry's `type`
-is the slide layout (`metric`, `vs`, `chart`, `quote`, ...). If a
-slide looks wrong, check the manifest entry's `type` first — the
-renderer uses it verbatim.
+Run the manual handoff command against your NotebookLM evidence table:
 
-### 3.3 Clips generated in the web app
+```powershell
+veraxi-ymmp ingest-script projects/<slug>/evidence.md --provider manual
+```
 
-1. Generate the clips in the web AI app from the script's clip
-   descriptions.
+This writes `projects/<slug>/script_prompt.md` (embedding your verified NotebookLM evidence, `UNIVERSAL_AI_PROMPT.md`, and the JSON Schema) and waits for your paste. Copy `script_prompt.md` into **Gemini Web, Claude Web, or ChatGPT**, then paste the reply back and terminate with `---END---`.
+
+The expected reply is a single JSON object:
+
+```json
+{"script": [ ... ], "broll_manifest": [ ... ], "thumbnail_config": { ... }}
+```
+
+Older reply shapes (a bare array, or an array with appended b-roll entries) are also accepted — ingest normalizes them — but the object shape is the contract to ask for.
+
+During handoff, the CLI automatically runs **cut-length, unmapped ASCII/ruby, B-roll cognitive load, retention pacing (>= 80), and fact-parity** checks. If anything fails, it prints an `LLM RE-PROMPT BLOCK` to paste back into the web chat without writing broken files. Once valid, it automatically writes `script.json`, `broll_manifest.json`, `thumbnail_config.json` (if provided), and `claims.json`.
+
+### 3.3 Validate, Build, and Multimodal QA
+
+Run the local compiler pipeline (zero AI quota required):
+
+```powershell
+veraxi-ymmp validate projects/<slug>/script.json --audit-facts --audit-pacing
+veraxi-ymmp run projects/<slug>/ --render-video --normalize-loudness
+veraxi-ymmp qa projects/<slug>/
+```
+
+Slides render automatically from `broll_manifest.json` (`type`: `metric`, `vs`, `overview`, `official_data`, etc.). You do **not** need custom video clips.
+
+### 3.4 (Optional) Custom Video Clips from a Web App
+
+> **Optional step:** Video clip ingestion (`ingest-clips`) is **not required** for standard slide/infographic videos. Only use this if you specifically want to overlay external AI-generated video clips (`clip_id`) onto timeline cuts.
+
+1. Generate the clips in the web AI app from the script's clip descriptions.
 2. Download them into one folder (names do not matter yet).
-3. Have the web chat produce the clip manifest: a JSON list mapping
-   each `clip_id` from the script to the downloaded filename, in
-   script order.
-4. Ingest by manifest — matching is by the manifest, not by probing
-   or guessing (on a checkout without `--from-manifest`, use the
-   probing fallback noted below and assign the returned clip ids
-   by hand):
+3. Have the web chat produce the clip manifest: a JSON list mapping each `clip_id` from the script to the downloaded filename, in script order.
+4. Ingest by manifest — matching is by the manifest, not by probing or guessing:
 
 ```powershell
 veraxi-ymmp ingest-clips downloads/ --from-manifest clip-manifest.json
 ```
 
-Manifest ingest is all-or-nothing: missing or unmatched files are
-reported by name, and if any declared clip then fails to read or
-normalize, the whole ingest aborts and writes nothing — there is
-no partial `clips/` state to clean up. Fix exactly what the
-messages name and re-run; do not hand-edit the generated
-`clips/manifest.json`. Declared names match the files on disk even
-when they differ in letter case or Unicode normalization form.
-
-(Without `--from-manifest`, `ingest-clips` falls back to probing
-every video in the folder with ffprobe and normalizing it — fine for
-locally produced clips, but it cannot know which file belongs to
-which scene.)
-
-### 3.4 Build
-
-Run the pipeline as usual for the project (validate, then compile).
-The Director-pass decisions — staging, emotion, pacing — stay with
-you and the chat; the tooling only moves files.
+Manifest ingest is all-or-nothing: missing or unmatched files are reported by name, and if any declared clip then fails to read or normalize, the whole ingest aborts and writes nothing. Fix what the messages name and re-run; do not hand-edit `clips/manifest.json`. (Without `--from-manifest`, `ingest-clips` probes every video in the folder with ffprobe.)
 
 ## 4. When something else goes wrong
 

@@ -30,6 +30,24 @@ YOUTUBE_SCOPES = [
 ]
 
 
+def configure_ipv4_socket() -> None:
+    """Ensure socket resolution prefers IPv4 on networks where IPv6 routes are unroutable."""
+    import socket
+
+    if getattr(socket, "_ipv4_configured", False):
+        return
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def patched_getaddrinfo(host: Any, port: Any, family: int = 0, type: int = 0, proto: int = 0, flags: int = 0) -> Any:
+        res = orig_getaddrinfo(host, port, family, type, proto, flags)
+        if family == 0:
+            return sorted(res, key=lambda x: 0 if x[0] == socket.AF_INET else 1)
+        return res
+
+    socket.getaddrinfo = patched_getaddrinfo  # type: ignore[assignment]
+    socket._ipv4_configured = True  # type: ignore[attr-defined]
+
+
 def get_default_token_path() -> Path:
     """Return the default path to the YouTube token."""
     config_dir = Path.home() / ".veraxi-ymmp"
@@ -165,6 +183,7 @@ def authenticate_youtube(
     no_browser: bool = False,
 ) -> Path:
     """Bootstrap YouTube OAuth2 authentication and write the token to disk."""
+    configure_ipv4_socket()
     if not client_secrets_path.exists():
         raise FileNotFoundError(f"Client secrets file not found: {client_secrets_path}")
 
@@ -218,6 +237,7 @@ def load_credentials(token_path: Path) -> Any:
 
 def refresh_credentials(credentials: Credentials, token_path: Optional[Path] = None) -> Credentials:
     """Refresh expired credentials and optionally persist the refreshed token."""
+    configure_ipv4_socket()
     if credentials.expired and credentials.refresh_token:
         logger.info("Refreshing expired YouTube credentials.")
         credentials.refresh(Request())

@@ -56,7 +56,7 @@ def _fit_font(
     default_font: Any,
     max_width: float,
     base_size: int,
-    min_size: int = 20,
+    min_size: int = 22,
     bold: bool = True,
 ) -> Any:
     """Automatically steps down font size if text width exceeds max_width."""
@@ -76,7 +76,7 @@ def get_fonts() -> dict:
         "hero": _load_broll_font(64), "hero_sub": _load_broll_font(30), "title": _load_broll_font(36),
         "card_title_lg": _load_broll_font(40), "card_title": _load_broll_font(32), "body": _load_broll_font(26),
         "footer": _load_broll_font(30), "badge": _load_broll_font(30), "num": _load_broll_font(34),
-        "small": _load_broll_font(22, bold=False),
+        "small": _load_broll_font(26, bold=True),
     }
 
 def get_pill_text_color(pill_bg: Tuple[int, int, int]) -> Tuple[int, int, int, int]:
@@ -251,10 +251,10 @@ def render_clash_slide(
     img, draw, fonts = create_slide_base(title, step_tag=step_tag, theme_color=theme_color, is_vertical=is_vertical)
     x1, x2 = (56, 1024) if is_vertical else (70, 1340)
 
-    # 1. Hero Total Line
+    # 1. Hero Total Line (Gracefully centered between top bar and clash podiums)
     if hero_metric:
-        h_y = 150 if not is_vertical else 140
-        f_hero = _fit_font(draw, hero_metric, fonts["hero"], max_width=float(x2 - x1), base_size=52 if not is_vertical else 40, min_size=30)
+        h_y = 182 if not is_vertical else 166
+        f_hero = _fit_font(draw, hero_metric, fonts["hero"], max_width=float(x2 - x1), base_size=52 if not is_vertical else 40, min_size=32)
         draw.text((x1, h_y), hero_metric, font=f_hero, fill=theme_color, anchor="lm")
 
     # 2. Split Clash Podiums
@@ -273,16 +273,23 @@ def render_clash_slide(
         draw.rounded_rectangle([bx1, mid_y1, bx2, mid_y1 + 8], radius=4, fill=bcol)
         inner_w = float(bx2 - bx1 - 48)
 
-        fn_name = _fit_font(draw, bname, fonts["card_title"], max_width=inner_w, base_size=28, min_size=20)
+        fn_name = _fit_font(draw, bname, fonts["card_title"], max_width=inner_w, base_size=30, min_size=24)
         draw.text((bx1 + 24, mid_y1 + 42), bname, font=fn_name, fill=bcol, anchor="lm")
 
         metric_txt = bmetric or bname
-        fn_metric = _fit_font(draw, metric_txt, fonts["hero"], max_width=inner_w, base_size=56, min_size=30)
+        fn_metric = _fit_font(draw, metric_txt, fonts["hero"], max_width=inner_w, base_size=56, min_size=34)
         draw.text((bx1 + 24, mid_y1 + 120), metric_txt, font=fn_metric, fill=COLOR_TEXT_PRIMARY, anchor="lm")
 
         if bsub:
-            fn_sub = _fit_font(draw, bsub, fonts["small"], max_width=inner_w, base_size=22, min_size=16)
-            draw.text((bx1 + 26, mid_y1 + 200), bsub, font=fn_sub, fill=COLOR_TEXT_SECONDARY, anchor="lm")
+            fn_sub = _fit_font(draw, bsub, fonts["small"], max_width=inner_w, base_size=26 if not is_vertical else 22, min_size=22 if not is_vertical else 19)
+            if draw.textlength(bsub, font=fn_sub) > inner_w and len(bsub) > 16:
+                mid = len(bsub) // 2
+                split_idx = next((mid + o for o in range(min(5, mid)) if bsub[mid + o] in " ・、/へをの"), mid)
+                f_w = _load_broll_font(22 if not is_vertical else 18, bold=True)
+                draw.text((bx1 + 26, mid_y1 + 188), bsub[:split_idx].strip(), font=f_w, fill=(226, 232, 240, 255), anchor="lm")
+                draw.text((bx1 + 26, mid_y1 + 218), bsub[split_idx:].strip(), font=f_w, fill=(226, 232, 240, 255), anchor="lm")
+            else:
+                draw.text((bx1 + 26, mid_y1 + 200), bsub, font=fn_sub, fill=(226, 232, 240, 255), anchor="lm")
 
     # Center VS Badge
     vs_cx = (left_x2 + right_x1) // 2

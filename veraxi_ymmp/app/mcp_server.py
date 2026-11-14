@@ -13,7 +13,7 @@ import tempfile
 from PIL import Image
 
 from veraxi_ymmp.graphics.broll import render_from_manifest
-from veraxi_ymmp.audio.audio_normalizer import normalize_video_audio, PLATFORM_TARGETS
+from veraxi_ymmp.audio.audio_normalizer import get_ffmpeg_exe, normalize_video_audio, PLATFORM_TARGETS
 from veraxi_ymmp.core.logging import logger
 
 try:
@@ -303,7 +303,7 @@ def normalize_project_audio(project_dir: str, platform: str = "youtube") -> Dict
     measured_tp = 0.0
     try:
         cmd = [
-            "ffmpeg", "-i", str(target_video),
+            get_ffmpeg_exe(), "-i", str(target_video),
             "-af", "loudnorm=I=-14:print_format=json",
             "-f", "null", "-"
         ]

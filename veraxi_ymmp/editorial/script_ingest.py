@@ -64,7 +64,7 @@ def normalize_speaker(raw_name: str) -> Optional[str]:
 
 def detect_emotion(text: str) -> Emotion:
     """Heuristic emotion detector from sentence endings and punctuation."""
-    if "！？" in text or "?!" in text or "ええっ" in text or "はぁ" in text:
+    if "！？" in text or "?!" in text or "ええっ" in text or "なんだって" in text:
         return "surprised"
     if "のだー" in text or "やった" in text or "すごい" in text:
         return "excited"
@@ -77,10 +77,15 @@ def detect_emotion(text: str) -> Emotion:
     return "normal"
 
 
+def _visible_length(s: str) -> int:
+    """Calculate character length ignoring inline phonetic ruby tags {Kanji|yomi}."""
+    return len(re.sub(r"\{([^{}|]+)\|[^{}|]+\}", r"\1", s))
+
+
 def split_text_to_char_limit(text: str, max_chars: int = 38) -> List[str]:
     """Split text into cuts <= max_chars, breaking naturally on punctuation or BudouX semantic phrases."""
     text = text.strip()
-    if len(text) <= max_chars:
+    if _visible_length(text) <= max_chars:
         return [text]
 
     # Split preserving punctuation delimiters
@@ -107,7 +112,7 @@ def split_text_to_char_limit(text: str, max_chars: int = 38) -> List[str]:
     parser = _get_budoux_parser()
 
     for item in reconstructed:
-        if len(item) <= max_chars:
+        if _visible_length(item) <= max_chars:
             phrases.append(item)
         else:
             # Protect inline ruby tags {Kanji|yomi} from being split
@@ -126,8 +131,8 @@ def split_text_to_char_limit(text: str, max_chars: int = 38) -> List[str]:
                     if tok in c:
                         c = c.replace(tok, orig)
                 # Hard fallback if an indivisible token itself exceeds max_chars
-                if len(c) > max_chars:
-                    while len(c) > max_chars:
+                if _visible_length(c) > max_chars:
+                    while _visible_length(c) > max_chars:
                         phrases.append(c[:max_chars])
                         c = c[max_chars:]
                     if c:
@@ -139,7 +144,7 @@ def split_text_to_char_limit(text: str, max_chars: int = 38) -> List[str]:
     chunks: List[str] = []
     accum = ""
     for p in phrases:
-        if len(accum) + len(p) <= max_chars:
+        if _visible_length(accum) + _visible_length(p) <= max_chars:
             accum += p
         else:
             if accum:
@@ -156,13 +161,40 @@ def parse_markdown_dialogue(markdown_content: str) -> List[DirectorScriptEntry]:
     pattern = re.compile(
         r"^(?:\d+[\.\)]\s*)?(?:[-*]\s*)?\[?(?:\*\*)?([a-zA-Z\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]+)(?:\*\*)?\]?\s*[:：]\s*(.+)$"
     )
+    slide_directive_pattern = re.compile(
+        r"^(?:<!--\s*slide:\s*([^\s>]+)\s*-->|\[(?:slide|image):\s*([^\]]+)\])", re.IGNORECASE
+    )
+    inline_slide_pattern = re.compile(
+        r"(?:<!--\s*slide:\s*([^\s>]+)\s*-->|\[(?:slide|image):\s*([^\]]+)\])", re.IGNORECASE
+    )
 
     raw_cuts: List[Dict[str, Any]] = []
+    active_slide: Optional[str] = None
 
     for line in markdown_content.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or line.startswith("|") or line.startswith("```"):
             continue
+
+        # Check for standalone slide directive e.g. <!-- slide: broll/slide_01.png --> or [slide: broll/slide_01.png]
+        slide_m = slide_directive_pattern.match(line)
+        if slide_m:
+            target = (slide_m.group(1) or slide_m.group(2) or "").strip()
+            if target.lower() in {"none", "null", "clear", ""}:
+                active_slide = None
+            else:
+                active_slide = target
+            continue
+
+        # Check for inline slide tag in dialogue line e.g. [slide: broll/slide_01.png] [四国めたん]: ...
+        inline_m = inline_slide_pattern.search(line)
+        if inline_m:
+            target = (inline_m.group(1) or inline_m.group(2) or "").strip()
+            if target.lower() in {"none", "null", "clear", ""}:
+                active_slide = None
+            else:
+                active_slide = target
+            line = inline_slide_pattern.sub("", line).strip()
 
         match = pattern.match(line)
         if not match:
@@ -188,7 +220,7 @@ def parse_markdown_dialogue(markdown_content: str) -> List[DirectorScriptEntry]:
                 "motion": motion,
                 "bgm": None,
                 "sfx": None,
-                "image": None if cut_idx < 3 else None,  # Cold open hook protection
+                "image": None if cut_idx < 3 else active_slide,  # Cold open hook protection
                 "character_position": DEFAULT_POSITIONS.get(speaker, "left"),
                 "subtitle_position": "bottom_center",
                 "subtitle_style": "outlined",

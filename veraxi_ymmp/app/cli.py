@@ -280,8 +280,10 @@ def _cmd_validate(argv: List[str]) -> None:
         char = entry.get("character", "unknown")
         text = entry.get("text", "")
         if isinstance(text, str):
-            if len(text) > 40:
-                errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({len(text)} chars).")
+            from veraxi_ymmp.audio.phonetics import strip_phonetic_ruby
+            vis_len = len(strip_phonetic_ruby(text))
+            if vis_len > 40:
+                errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({vis_len} chars).")
             from veraxi_ymmp.audio.phonetics import find_unmapped_ascii_tokens
             unmapped = find_unmapped_ascii_tokens(text, project_dir=script_path.parent)
             if unmapped:
@@ -465,20 +467,31 @@ def _cmd_ingest_script(argv: list[str]) -> None:
     from veraxi_ymmp.epistemic.facts import claims_to_json
 
     content = md_path.read_text(encoding="utf-8")
-    script_entries = parse_markdown_dialogue(content)
+    table_rows = parse_markdown_evidence_table(content)
 
     if args.provider:
-        from veraxi_ymmp.app.script_provider import generate_script_file
-        script_entries = generate_script_file(
-            args.provider, md_path.stem, content, out_path,
-            out_path.parent / "script_prompt.md",
+        from veraxi_ymmp.app.script_provider import (
+            build_project_gate_validator,
+            generate_script_file,
         )
-
-    out_path.write_text(json.dumps(script_entries, indent=2, ensure_ascii=False), encoding="utf-8")
+        topic_name = md_path.stem
+        seed_path = md_path.parent / "script_seed.json"
+        if seed_path.is_file():
+            try:
+                topic_name = str(json.loads(seed_path.read_text(encoding="utf-8")).get("topic") or topic_name)
+            except Exception:
+                pass
+        validator = build_project_gate_validator(out_path.parent, audit_pacing=True, audit_facts=True)
+        script_entries = generate_script_file(
+            args.provider, topic_name, content, out_path,
+            out_path.parent / "script_prompt.md", extra_validator=validator,
+        )
+    else:
+        script_entries = parse_markdown_dialogue(content)
+        out_path.write_text(json.dumps(script_entries, indent=2, ensure_ascii=False), encoding="utf-8")
     sys.stdout.write(f"Successfully ingested {len(script_entries)} cuts from {md_path} -> {out_path}\n")
 
     # If evidence table is present or --claims-out specified, ingest claims.json
-    table_rows = parse_markdown_evidence_table(content)
     if table_rows or args.claims_out:
         manifest_path = Path(args.manifest) if args.manifest else md_path.parent / "sources" / "manifest.json"
         manifest_data = None
@@ -496,6 +509,7 @@ def _cmd_ingest_script(argv: list[str]) -> None:
 def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
     """Dispatch an argv[1] subcommand; return True when it was handled."""
     from veraxi_ymmp.app.cli_ideate import cmd_ideate
+    from veraxi_ymmp.app.cli_qa import cmd_qa
     from veraxi_ymmp.app.clip_ingest import cmd_ingest_clips
     from veraxi_ymmp.app.pack_apply import cmd_apply, cmd_pack
     from veraxi_ymmp.app.pack_edit import cmd_apply_edit
@@ -515,6 +529,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
         "capture-sec": _cmd_capture_sec,
         "ideate": cmd_ideate,
         "ingest-script": _cmd_ingest_script,
+        "qa": cmd_qa,
         "pack": cmd_pack,
         "apply": cmd_apply,
         "apply-edit": cmd_apply_edit,

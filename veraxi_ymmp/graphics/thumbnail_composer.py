@@ -24,12 +24,14 @@ def create_vs_duel_background(
     h: int = 1080,
     left_color: Tuple[int, int, int] = (14, 165, 233),   # Azure Cyan (Microsoft/Tech)
     right_color: Tuple[int, int, int] = (239, 68, 68),  # Crimson Red (Amazon/Urgency)
+    enable_speedlines: bool = False,
+    enable_lightning: bool = False,
 ) -> Image.Image:
     """
     Renders a dynamic two-tone battle clash background for VS / duel comparison videos.
-    Left side: Cool high-tech aura + concentration lines
-    Right side: Fiery high-urgency aura + concentration lines
-    Center: Diagonal energy slash & lightning seam dividing the arena
+    Left side: Cool high-tech aura
+    Right side: Fiery high-urgency aura
+    Center: Deep contrast Dark Slate transition with subtle vignette
     """
     canvas = Image.new("RGBA", (w, h), (8, 11, 18, 255))
     aura = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -50,54 +52,55 @@ def create_vs_duel_background(
     aura = aura.filter(ImageFilter.GaussianBlur(65))
     canvas = Image.alpha_composite(canvas, aura)
 
-    # 3. Manga Speedlines / Concentration Rays from Both Corners
-    lines_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ldraw = ImageDraw.Draw(lines_layer)
-    random.seed(42)
+    # 3. Optional Manga Speedlines (disabled by default to prevent visual noise / dirty scanlines)
+    if enable_speedlines:
+        lines_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ldraw = ImageDraw.Draw(lines_layer)
+        random.seed(42)
 
-    # Left rays
-    for i in range(48):
-        angle = random.uniform(-0.4, 0.4)
-        length = random.uniform(900, 1500)
-        p0 = (lx + 220 * math.cos(angle), ly + 220 * math.sin(angle))
-        p1 = (lx + length * math.cos(angle - 0.015), ly + length * math.sin(angle - 0.015))
-        p2 = (lx + length * math.cos(angle + 0.015), ly + length * math.sin(angle + 0.015))
-        ldraw.polygon([p0, p1, p2], fill=left_color + (22,))
+        # Left rays
+        for i in range(48):
+            angle = random.uniform(-0.4, 0.4)
+            length = random.uniform(900, 1500)
+            p0 = (lx + 220 * math.cos(angle), ly + 220 * math.sin(angle))
+            p1 = (lx + length * math.cos(angle - 0.015), ly + length * math.sin(angle - 0.015))
+            p2 = (lx + length * math.cos(angle + 0.015), ly + length * math.sin(angle + 0.015))
+            ldraw.polygon([p0, p1, p2], fill=left_color + (22,))
 
-    # Right rays
-    for i in range(48):
-        angle = random.uniform(math.pi - 0.4, math.pi + 0.4)
-        length = random.uniform(900, 1500)
-        p0 = (rx + 220 * math.cos(angle), ry + 220 * math.sin(angle))
-        p1 = (rx + length * math.cos(angle - 0.015), ry + length * math.sin(angle - 0.015))
-        p2 = (rx + length * math.cos(angle + 0.015), ry + length * math.sin(angle + 0.015))
-        ldraw.polygon([p0, p1, p2], fill=right_color + (22,))
+        # Right rays
+        for i in range(48):
+            angle = random.uniform(math.pi - 0.4, math.pi + 0.4)
+            length = random.uniform(900, 1500)
+            p0 = (rx + 220 * math.cos(angle), ry + 220 * math.sin(angle))
+            p1 = (rx + length * math.cos(angle - 0.015), ry + length * math.sin(angle - 0.015))
+            p2 = (rx + length * math.cos(angle + 0.015), ry + length * math.sin(angle + 0.015))
+            ldraw.polygon([p0, p1, p2], fill=right_color + (22,))
 
-    lines_layer = lines_layer.filter(ImageFilter.GaussianBlur(2))
-    canvas = Image.alpha_composite(canvas, lines_layer)
+        lines_layer = lines_layer.filter(ImageFilter.GaussianBlur(2))
+        canvas = Image.alpha_composite(canvas, lines_layer)
 
-    # 4. Diagonal Lightning / Energy Slash Divider down Center
-    clash_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    cdraw = ImageDraw.Draw(clash_layer)
-    # Jagged lightning path
-    cx_top = 1010
-    cx_bot = 910
-    points: List[Tuple[float, float]] = [(cx_top, 0)]
-    steps = 14
-    for s in range(1, steps):
-        t = s / steps
-        base_x = cx_top + (cx_bot - cx_top) * t
-        jitter_x = base_x + random.uniform(-25, 25)
-        points.append((jitter_x, h * t))
-    points.append((cx_bot, h))
+    # 4. Optional Diagonal Lightning / Energy Slash Divider (disabled by default to prevent glitch/crack appearance)
+    if enable_lightning:
+        clash_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        cdraw = ImageDraw.Draw(clash_layer)
+        cx_top = 1010
+        cx_bot = 910
+        points: List[Tuple[float, float]] = [(cx_top, 0)]
+        steps = 14
+        for s in range(1, steps):
+            t = s / steps
+            base_x = cx_top + (cx_bot - cx_top) * t
+            jitter_x = base_x + random.uniform(-25, 25)
+            points.append((jitter_x, h * t))
+        points.append((cx_bot, h))
 
-    # Glow layer for lightning
-    for width, alpha in [(24, 45), (12, 110), (4, 230)]:
-        for idx in range(len(points) - 1):
-            cdraw.line([points[idx], points[idx + 1]], fill=(255, 255, 255, alpha), width=width)
+        # Glow layer for lightning
+        for width, alpha in [(24, 45), (12, 110), (4, 230)]:
+            for idx in range(len(points) - 1):
+                cdraw.line([points[idx], points[idx + 1]], fill=(255, 255, 255, alpha), width=width)
 
-    clash_layer = clash_layer.filter(ImageFilter.GaussianBlur(3))
-    canvas = Image.alpha_composite(canvas, clash_layer)
+        clash_layer = clash_layer.filter(ImageFilter.GaussianBlur(3))
+        canvas = Image.alpha_composite(canvas, clash_layer)
 
     # 5. Vignette for text pop
     vignette = Image.new("L", (w, h), 0)
@@ -298,47 +301,98 @@ def draw_manga_speech_bubble(
     border_w: int = 5,
 ) -> None:
     """
-    Renders a comic/manga dialogue speech bubble with pointer tail.
-    Increases viewer curiosity by putting emotional character panic into a visual quote.
+    Renders a comic/manga dialogue speech bubble with unified silhouette pointer tail.
+    Uses morphological dilation on a combined mask so no interior seam lines or stray
+    diagonal lines can EVER intersect or cross the speech bubble text.
     """
     if not text:
         return
 
     bbox = font.getbbox(text)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    px, py = 24, 14
+    tw = int(bbox[2] - bbox[0])
+    th = int(bbox[3] - bbox[1])
+    px, py = 28, 16
     bw = tw + px * 2
     bh = th + py * 2
 
     bx = int(bubble_center_xy[0] - bw // 2)
     by = int(bubble_center_xy[1] - bh // 2)
 
-    bubble_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    bdraw = ImageDraw.Draw(bubble_layer)
+    # Frame boundary protection
+    if bx + bw > canvas.width - 24:
+        bx = int(canvas.width - 24 - bw)
+    if bx < 24:
+        bx = 24
 
-    # 1. Ambient Drop Shadow
-    s_off = 8
-    bdraw.rounded_rectangle([bx + s_off, by + s_off, bx + bw + s_off, by + bh + s_off], radius=20, fill=(0, 0, 0, 160))
-    bubble_layer = bubble_layer.filter(ImageFilter.GaussianBlur(8))
-    bdraw = ImageDraw.Draw(bubble_layer)
+    # 1. Unified Mask for Bubble Body + Pointer Tail
+    mask = Image.new("L", canvas.size, 0)
+    mdraw = ImageDraw.Draw(mask)
+    mdraw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=20, fill=255)
 
-    # 2. Main Bubble Body
-    bdraw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=20, fill=bg_color, outline=border_color, width=border_w)
-
-    # 3. Pointer Tail towards character mouth
+    # 2. Geometric Pointer Tail (Attaches to true closest exterior edge)
     tx, ty = tail_target_xy
-    # Determine attachment point on bubble edge closest to tail
-    attach_x = bx + bw if tx > bubble_center_xy[0] else bx
-    attach_y = by + bh // 2
-    p0 = (attach_x, attach_y - 12)
-    p1 = (attach_x, attach_y + 12)
-    p2 = (tx, ty)
-    bdraw.polygon([p0, p1, p2], fill=bg_color)
-    bdraw.line([p0, p2], fill=border_color, width=border_w)
-    bdraw.line([p1, p2], fill=border_color, width=border_w)
+    is_inside = (bx <= tx <= bx + bw) and (by <= ty <= by + bh)
+    if not is_inside:
+        if ty >= by + bh:
+            # Target is below bubble: attach to bottom edge
+            attach_x = int(min(max(tx, bx + 35), bx + bw - 35))
+            attach_y = by + bh
+            p0 = (attach_x - 18, attach_y)
+            p1 = (attach_x + 18, attach_y)
+            p2 = (tx, ty)
+            mdraw.polygon([p0, p1, p2], fill=255)
+        elif ty <= by:
+            # Target is above bubble: attach to top edge
+            attach_x = int(min(max(tx, bx + 35), bx + bw - 35))
+            attach_y = by
+            p0 = (attach_x - 18, attach_y)
+            p1 = (attach_x + 18, attach_y)
+            p2 = (tx, ty)
+            mdraw.polygon([p0, p1, p2], fill=255)
+        elif tx >= bx + bw:
+            # Target is to right of bubble: attach to right edge
+            attach_x = bx + bw
+            attach_y = int(min(max(ty, by + 25), by + bh - 25))
+            p0 = (attach_x, attach_y - 18)
+            p1 = (attach_x, attach_y + 18)
+            p2 = (tx, ty)
+            mdraw.polygon([p0, p1, p2], fill=255)
+        else:
+            # Target is to left of bubble: attach to left edge
+            attach_x = bx
+            attach_y = int(min(max(ty, by + 25), by + bh - 25))
+            p0 = (attach_x, attach_y - 18)
+            p1 = (attach_x, attach_y + 18)
+            p2 = (tx, ty)
+            mdraw.polygon([p0, p1, p2], fill=255)
+
+    # 3. Outer Silhouette Dilation for Border & Shadow (Zero internal lines possible)
+    dilated_mask = mask
+    for _ in range(border_w):
+        dilated_mask = dilated_mask.filter(ImageFilter.MaxFilter(3))
+
+    # Ambient Drop Shadow
+    s_off = 8
+    shadow_mask = dilated_mask.filter(ImageFilter.GaussianBlur(10))
+    shadow_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 160))
+    shadow_layer.putalpha(shadow_mask)
+
+    # Outer Border Layer
+    border_layer = Image.new("RGBA", canvas.size, border_color)
+    border_layer.putalpha(dilated_mask)
+
+    # Solid Fill Layer
+    fill_layer = Image.new("RGBA", canvas.size, bg_color)
+    fill_layer.putalpha(mask)
+
+    # Composite layers
+    bubble_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    bubble_layer.paste(shadow_layer, (s_off, s_off), shadow_layer)
+    bubble_layer = Image.alpha_composite(bubble_layer, border_layer)
+    bubble_layer = Image.alpha_composite(bubble_layer, fill_layer)
 
     # 4. Text inside bubble
+    bdraw = ImageDraw.Draw(bubble_layer)
     tx_pos = bx + px - bbox[0]
     ty_pos = by + py - bbox[1]
     bdraw.text((tx_pos, ty_pos), text, font=font, fill=text_color)

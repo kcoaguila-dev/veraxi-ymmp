@@ -484,7 +484,7 @@ def audit_project_facts(
             cent_mags: List[float] = []
             for cc in claims:
                 if cc.weight is ClaimWeight.CENTRAL:
-                    cent_mags.extend(extract_scaled_magnitudes(cc.text + (" " + cc.derivation if cc.derived and cc.derivation else "")))
+                    cent_mags.extend(extract_scaled_magnitudes(cc.text + (" " + cc.derivation if cc.derivation else "")))
 
             thumb_p = project_dir / "thumbnail_config.json"
             if thumb_p.is_file():

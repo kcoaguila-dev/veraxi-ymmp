@@ -140,7 +140,8 @@ class TimelineIR:
             if vc.character not in first_end_frames:
                 first_end_frames[vc.character] = vc.start_frame + vc.length
         max_first_end_sec = max(first_end_frames.values()) / max(self.fps, 1)
-        return max(default_max, max_first_end_sec)
+        # Add safety padding to account for renderer inter-clip audio spacing and ensure dialogue is heard
+        return max(default_max, max_first_end_sec + 10.0)
 
 
 @dataclass

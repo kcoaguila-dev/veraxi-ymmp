@@ -70,8 +70,9 @@ def render_matrix_slide(
     # Table Geometry
     table_y1 = 145 if not is_vertical else 135
     row_count = min(len(rows), 4)
-    row_h = 80 if not is_vertical else 72
-    table_y2 = table_y1 + 54 + (row_count * row_h)
+    row_h = 92 if not is_vertical else 80
+    head_h = 60
+    table_y2 = table_y1 + head_h + (row_count * row_h)
 
     # Table Container Box
     draw.rounded_rectangle([x1, table_y1, x2, table_y2], radius=16, fill=(20, 29, 47, 255), outline=COLOR_BORDER, width=2)
@@ -79,7 +80,7 @@ def render_matrix_slide(
 
     # Column Widths
     w_total = x2 - x1
-    col0_w = int(w_total * 0.24)
+    col0_w = int(w_total * 0.22)
     col1_w = int((w_total - col0_w) * 0.50)
     col2_w = w_total - col0_w - col1_w
 
@@ -88,12 +89,11 @@ def render_matrix_slide(
     c2_x = c1_x + col1_w
 
     # 1. Header Row
-    head_h = 54
     draw.rounded_rectangle([x1, table_y1, x2, table_y1 + head_h], radius=16, fill=COLOR_SURFACE)
     draw.line([(x1, table_y1 + head_h), (x2, table_y1 + head_h)], fill=COLOR_BORDER, width=2)
 
-    f_th = fonts["badge"]
-    f_th_ent = _load_broll_font(26, bold=True)
+    f_th = _load_broll_font(26, bold=True)
+    f_th_ent = _load_broll_font(32, bold=True)
     th_y = table_y1 + head_h // 2
 
     # Dimension Title
@@ -108,9 +108,9 @@ def render_matrix_slide(
     draw.text((c2_x + 18, th_y), ent_right, font=f_th_ent, fill=ACCENT_AMBER, anchor="lm")
 
     # 2. Data Rows
-    f_lbl = _load_broll_font(24, bold=True)
-    f_val = _load_broll_font(22, bold=False)
-    f_val_bold = _load_broll_font(22, bold=True)
+    f_lbl = _load_broll_font(28, bold=True)
+    f_val = _load_broll_font(26, bold=False)
+    f_val_bold = _load_broll_font(26, bold=True)
 
     for idx, rdata in enumerate(rows[:row_count]):
         ry1 = table_y1 + head_h + (idx * row_h)
@@ -137,11 +137,11 @@ def render_matrix_slide(
         r_color = ACCENT_GREEN if adv in ("right", "aws", "amzn") else (ACCENT_RED if adv in ("left", "msft", "copilot") else COLOR_TEXT_PRIMARY)
 
         # Render Left Value
-        l_font = _fit_font(draw, l_val, f_val_bold if adv in ("left", "msft") else f_val, max_width=col1_w - 36, base_size=22, min_size=17)
+        l_font = _fit_font(draw, l_val, f_val_bold if adv in ("left", "msft") else f_val, max_width=col1_w - 36, base_size=28, min_size=22)
         draw.text((c1_x + 18, rcy), l_val, font=l_font, fill=l_color, anchor="lm")
 
         # Render Right Value
-        r_font = _fit_font(draw, r_val, f_val_bold if adv in ("right", "aws", "amzn") else f_val, max_width=col2_w - 36, base_size=22, min_size=17)
+        r_font = _fit_font(draw, r_val, f_val_bold if adv in ("right", "aws", "amzn") else f_val, max_width=col2_w - 36, base_size=28, min_size=22)
         draw.text((c2_x + 18, rcy), r_val, font=r_font, fill=r_color, anchor="lm")
 
     # 3. Bottom Takeaway Card
@@ -207,13 +207,13 @@ def render_architecture_flow_slide(
     x1, x2 = (56, 1024) if is_vertical else (70, 1340)
 
     # 2 Routes stacked vertically
-    r_h = 195 if not is_vertical else 180
+    r_h = 240 if not is_vertical else 200
     r_gap = 24
-    top_y = 145 if not is_vertical else 135
+    top_y = 130 if not is_vertical else 125
 
-    f_route_title = _load_broll_font(26, bold=True)
-    f_node_title = _load_broll_font(22, bold=True)
-    f_node_sub = _load_broll_font(17, bold=False)
+    f_route_title = _load_broll_font(30, bold=True)
+    f_node_title = _load_broll_font(28, bold=True)
+    f_node_sub = _load_broll_font(22, bold=False)
 
     for idx, rdata in enumerate(routes[:2]):
         ry1 = top_y + idx * (r_h + r_gap)
@@ -227,50 +227,51 @@ def render_architecture_flow_slide(
         # Route Header Tag (Left badge)
         r_name = str(rdata.get("name", f"ルート {idx+1}"))
         nw = draw.textlength(r_name, font=f_route_title) + 28
-        draw.rounded_rectangle([x1 + 24, ry1 + 14, x1 + 24 + nw, ry1 + 52], radius=8, fill=rcol)
-        draw.text((x1 + 24 + nw // 2, ry1 + 33), r_name, font=f_route_title, fill=get_pill_text_color(rcol), anchor="mm")
+        draw.rounded_rectangle([x1 + 24, ry1 + 14, x1 + 24 + nw, ry1 + 54], radius=8, fill=rcol)
+        draw.text((x1 + 24 + nw // 2, ry1 + 34), r_name, font=f_route_title, fill=get_pill_text_color(rcol), anchor="mm")
 
         # Route Sub-takeaway (Right aligned)
         r_sub = str(rdata.get("takeaway", ""))
         if r_sub:
-            draw.text((x2 - 24, ry1 + 33), r_sub, font=f_node_title, fill=rcol, anchor="rm")
+            f_takeaway = _load_broll_font(28, bold=True)
+            draw.text((x2 - 24, ry1 + 34), r_sub, font=f_takeaway, fill=rcol, anchor="rm")
 
         # Pipeline Steps
         steps = rdata.get("steps", [])
         n_steps = max(len(steps), 1)
         avail_w = (x2 - x1) - 48
-        arrow_w = 36
+        arrow_w = 40
         total_arrow_w = (n_steps - 1) * arrow_w
         box_w = (avail_w - total_arrow_w) // n_steps
 
         step_y1 = ry1 + 68
-        step_y2 = ry2 - 20
+        step_y2 = ry2 - 18
         step_cy = (step_y1 + step_y2) // 2
 
         cur_bx = x1 + 24
         for s_idx, st in enumerate(steps):
             bx2 = cur_bx + box_w
             # Step Node Card
-            draw.rounded_rectangle([cur_bx, step_y1, bx2, step_y2], radius=10, fill=COLOR_SURFACE, outline=COLOR_BORDER, width=1)
+            draw.rounded_rectangle([cur_bx, step_y1, bx2, step_y2], radius=12, fill=COLOR_SURFACE, outline=COLOR_BORDER, width=1)
 
             node_txt = str(st.get("node", ""))
             sub_txt = str(st.get("sub", ""))
 
             if sub_txt:
-                fn_txt = _fit_font(draw, node_txt, f_node_title, max_width=box_w - 16, base_size=22, min_size=16)
-                draw.text(((cur_bx + bx2) // 2, step_cy - 12), node_txt, font=fn_txt, fill=COLOR_TEXT_PRIMARY, anchor="mm")
-                fn_sub = _fit_font(draw, sub_txt, f_node_sub, max_width=box_w - 16, base_size=17, min_size=13)
-                draw.text(((cur_bx + bx2) // 2, step_cy + 16), sub_txt, font=fn_sub, fill=COLOR_TEXT_SECONDARY, anchor="mm")
+                fn_txt = _fit_font(draw, node_txt, f_node_title, max_width=box_w - 20, base_size=30, min_size=24)
+                draw.text(((cur_bx + bx2) // 2, step_cy - 18), node_txt, font=fn_txt, fill=COLOR_TEXT_PRIMARY, anchor="mm")
+                fn_sub = _fit_font(draw, sub_txt, f_node_sub, max_width=box_w - 20, base_size=24, min_size=20)
+                draw.text(((cur_bx + bx2) // 2, step_cy + 18), sub_txt, font=fn_sub, fill=(226, 232, 240, 255), anchor="mm")
             else:
-                fn_txt = _fit_font(draw, node_txt, f_node_title, max_width=box_w - 16, base_size=24, min_size=16)
+                fn_txt = _fit_font(draw, node_txt, f_node_title, max_width=box_w - 20, base_size=32, min_size=26)
                 draw.text(((cur_bx + bx2) // 2, step_cy), node_txt, font=fn_txt, fill=COLOR_TEXT_PRIMARY, anchor="mm")
 
             # Arrow to next step (crisp vector polygon, zero font tofu)
             if s_idx < n_steps - 1:
                 arr_x = bx2 + arrow_w // 2
                 draw.polygon(
-                    [(arr_x - 7, step_cy - 9), (arr_x + 9, step_cy), (arr_x - 7, step_cy + 9)],
-                    fill=COLOR_BORDER,
+                    [(arr_x - 10, step_cy - 12), (arr_x + 12, step_cy), (arr_x - 10, step_cy + 12)],
+                    fill=rcol,
                 )
 
             cur_bx = bx2 + arrow_w
@@ -360,13 +361,13 @@ def render_domino_slide(
 
         # Stage Title
         st_title = str(sdata.get("title", ""))
-        fn_title = _fit_font(draw, st_title, f_stage_title, max_width=card_w - 36, base_size=26, min_size=18)
+        fn_title = _fit_font(draw, st_title, f_stage_title, max_width=card_w - 36, base_size=26, min_size=20)
         draw.text((cur_x + 20, c_y1 + 115), st_title, font=fn_title, fill=COLOR_TEXT_PRIMARY, anchor="lm")
 
         # Stage Subtext / Metric
         st_sub = str(sdata.get("sub", ""))
         if st_sub:
-            fn_sub = _fit_font(draw, st_sub, f_stage_sub, max_width=card_w - 36, base_size=20, min_size=15)
+            fn_sub = _fit_font(draw, st_sub, f_stage_sub, max_width=card_w - 36, base_size=22, min_size=18)
             draw.text((cur_x + 20, c_y1 + 180), st_sub, font=fn_sub, fill=scol, anchor="lm")
 
         # Arrow to next stage (crisp vector polygon, zero font tofu)

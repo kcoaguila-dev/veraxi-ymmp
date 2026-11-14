@@ -285,9 +285,9 @@ class VoicevoxClient:
                 audio_query["speedScale"] = float(speed_scale)
             if clamp_silence:
                 if "prePhonemeLength" in audio_query:
-                    audio_query["prePhonemeLength"] = min(float(audio_query["prePhonemeLength"]), 0.02)
+                    audio_query["prePhonemeLength"] = min(float(audio_query["prePhonemeLength"]), 0.06)
                 if "postPhonemeLength" in audio_query:
-                    audio_query["postPhonemeLength"] = min(float(audio_query["postPhonemeLength"]), 0.02)
+                    audio_query["postPhonemeLength"] = min(float(audio_query["postPhonemeLength"]), 0.06)
         except requests.exceptions.RequestException as e:
             raise VoicevoxError(f"Failed to create audio_query: {e}")
 

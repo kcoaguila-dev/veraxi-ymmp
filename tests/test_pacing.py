@@ -29,7 +29,7 @@ def test_audit_healthy_trio() -> None:
 
     # Cuts 5 - 10 (Midroll approaches)
     for _ in range(3):
-        script.append({"character": "四国めたん", "text": "電力と送電網が最強のテーマですわ。"})
+        script.append({"character": "四国めたん", "text": "電力と送電網が最強のテーマですわ。", "image": "broll/slide_01.png"})
         script.append({"character": "ずんだもん", "text": "データセンターに電力が必須なのだ！"})
 
     # Cut 11: Tsumugi enters at 50% mark
@@ -43,7 +43,7 @@ def test_audit_healthy_trio() -> None:
     script.append({"character": "四国めたん", "text": "キャッシュフローの確認が鍵ですわ。"})
     script.append({"character": "春日部つむぎ", "text": "物理インフラと自社キャッシュですね！"})
     script.append({"character": "ずんだもん", "text": "まさにその通りなのだ！"})
-    script.append({"character": "四国めたん", "text": "チャンネル登録よろしくお願いいたしますわ。"})
+    script.append({"character": "四国めたん", "text": "次回の検証も絶対に見逃さないでくださいまし！"})
 
     report = audit_script_pacing(script)
     assert report.is_healthy
@@ -225,3 +225,57 @@ def test_rival_retention_rules() -> None:
     ]
     r6 = audit_script_pacing(script_qualified_pricing)
     assert not any(v.rule_name == "NAKED_PRICING_AMBIGUITY" for v in r6.violations)
+
+
+def test_conversational_naturalness_invariants() -> None:
+    # 1. Echo Parrot Violation
+    script_echo = [
+        {"character": "四国めたん", "text": "1日で2000億円以上の資金が消えていますわ。"},
+        {"character": "ずんだもん", "text": "1日2000億円！？正気じゃないのだ！"},
+        {"character": "四国めたん", "text": "粗利益率は66%へと低下していますわ。"},
+        {"character": "ずんだもん", "text": "66%へと低下！？暴落なのだ！"},
+    ]
+    r1 = audit_script_pacing(script_echo)
+    assert any(v.rule_name == "ECHO_PARROT_VIOLATION" for v in r1.violations)
+
+    # 2. Taigendome Headline Violation
+    script_taigendome = [
+        {"character": "四国めたん", "text": "最新四半期のAWS営業利益は177億ドルを突破。"},
+        {"character": "ずんだもん", "text": "すごいのだ！"},
+    ]
+    r2 = audit_script_pacing(script_taigendome)
+    assert any(v.rule_name == "TAIGENDOME_HEADLINE_VIOLATION" for v in r2.violations)
+
+    # 3. Repetitive Affirmation Cliche & Archaic Keigo
+    script_affirmations = [
+        {"character": "ずんだもん", "text": "ヤバいのだ！"},
+        {"character": "四国めたん", "text": "その通りですわ。大変ですわ。"},
+        {"character": "ずんだもん", "text": "大変なのだ！"},
+        {"character": "四国めたん", "text": "その通りですわ。大問題ですわ。"},
+        {"character": "四国めたん", "text": "左様でございますわ。"},
+    ]
+    r3 = audit_script_pacing(script_affirmations)
+    assert any(v.rule_name == "REPETITIVE_AFFIRMATION_CLICHE" for v in r3.violations)
+    assert any(v.rule_name == "ARCHAIC_KEIGO_DRIFT" for v in r3.violations)
+
+    # 4. Specialist Register Drift
+    script_tsumugi_drift = [
+        {"character": "ずんだもん", "text": "hook 1"},
+        {"character": "四国めたん", "text": "hook 2"},
+        {"character": "ずんだもん", "text": "hook 3"},
+        {"character": "四国めたん", "text": "hook 4"},
+        {"character": "春日部つむぎ", "text": "話は全然違うんだよ！"},
+        {"character": "春日部つむぎ", "text": "専用チップがあるんだ！"},
+        {"character": "春日部つむぎ", "text": "原価を圧縮できるの！"},
+        {"character": "春日部つむぎ", "text": "乗り換え準備でパニックだけどね！"},
+    ]
+    r4 = audit_script_pacing(script_tsumugi_drift)
+    assert any(v.rule_name == "SPECIALIST_REGISTER_DRIFT" for v in r4.violations)
+
+    # 5. Zundamon Out-of-Character Reactions (No cynical/aggressive sighs like "はぁ！？")
+    script_zundamon_ooc = [
+        {"character": "四国めたん", "text": "インフラ投資マネーですわ。"},
+        {"character": "ずんだもん", "text": "はぁ！？"},
+    ]
+    r5 = audit_script_pacing(script_zundamon_ooc)
+    assert any(v.rule_name == "ZUNDAMON_OOC_REACTION" for v in r5.violations)

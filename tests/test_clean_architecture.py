@@ -835,7 +835,7 @@ class TestAudioNormalizerService:
             assert res == dummy_out.resolve()
             assert mock_run.called
             cmd = mock_run.call_args[0][0]
-            assert cmd[0] == "ffmpeg"
+            assert "ffmpeg" in cmd[0].lower()
             assert "-vcodec" in cmd
             assert "loudnorm=I=-16.0:TP=-1.0:LRA=11.0:print_format=summary" in cmd[cmd.index("-af") + 1]
 

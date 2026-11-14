@@ -356,6 +356,38 @@ def audit_script_pacing(
             )
         )
 
+    # 8b. Check Zundamon Out-of-Character Reactions (No cynical/aggressive sighs like "はぁ！？" or delinquent sneers)
+    zundamon_ooc_patterns = [
+        r"^はぁ[！？!?…・]*$",
+        r"^はぁ[？?]",
+        r"^(?:ちっ|チッ|ケッ|ふん)[！!？?…]*$",
+    ]
+    zundamon_ooc_violations = []
+    for idx, entry in enumerate(dialogue_entries):
+        if entry["character"] == "ずんだもん":
+            text = str(entry.get("text", "")).strip()
+            for pat in zundamon_ooc_patterns:
+                if re.search(pat, text):
+                    zundamon_ooc_violations.append((idx, text))
+                    break
+
+    if zundamon_ooc_violations:
+        violations.append(
+            PacingRuleViolation(
+                rule_name="ZUNDAMON_OOC_REACTION",
+                severity="ERROR",
+                character="ずんだもん",
+                message=f"Zundamon expresses out-of-character aggressive/cynical reactions at {len(zundamon_ooc_violations)} cut(s): "
+                + ", ".join(f"#{i} ('{t}')" for i, t in zundamon_ooc_violations),
+                remedy=(
+                    "Zundamon is a naive, high-energy mascot fairy, not a cynical or aggressive delinquent. "
+                    "He NEVER says 'はぁ！？' or sneers. Follow top rival YouTube channels (ゆっくり解説 / ずんだもん解説) "
+                    "and use authentic shocked reactions: 'ええっ！？', 'な、なんだってー！？', 'ふぇぇ…！？', 'ひえええっ！？', "
+                    "'そんなのありかよー！', or '正気じゃないのだ！'."
+                ),
+            )
+        )
+
     # 9. Check Yes-Man Metan (Metan must not act as an agreeable corporate presenter)
     metan_entries = [
         (idx, entry)
@@ -407,7 +439,7 @@ def audit_script_pacing(
                         "All dialogue cuts are uniformly long sentences, causing VOICEVOX listener fatigue."
                     ),
                     remedy=(
-                        "Inject 1-beat emotional micro-reactions (3–12 chars, e.g. 'はぁ！？', '嘘でしょ！？', '正気じゃないのだ！') "
+                        "Inject 1-beat emotional micro-reactions (3–12 chars, e.g. 'ええっ！？', '嘘でしょ！？', '正気じゃないのだ！', 'な、なんだってー！？') "
                         "to create rapid ping-pong comedic contrast and natural breath marks."
                     ),
                 )
@@ -483,11 +515,11 @@ def audit_script_pacing(
             )
         )
 
-    # 13. Check Bare 'ええ' Affirmation Invariant
+    # 13. Check Bare/Unnatural 'ええ' Affirmation & Reaction Invariant
     ee_cuts = []
     for idx, entry in enumerate(dialogue_entries):
         text = str(entry.get("text", "")).strip()
-        if re.match(r"^ええ[、。]", text):
+        if re.match(r"^ええ(?:[、。っ!?！？]|$)", text):
             ee_cuts.append((idx, entry["character"]))
 
     if ee_cuts:
@@ -496,13 +528,20 @@ def audit_script_pacing(
                 rule_name="BARE_EE_AFFIRMATION_VIOLATION",
                 severity="WARNING",
                 character=None,
-                message=f"Detected bare 'ええ、/ええ。' affirmation at {len(ee_cuts)} cut(s): "
-                + ", ".join(f"#{i} ({c})" for i, c in ee_cuts[:4]),
-                remedy=(
-                    "In Japanese VOICEVOX narration, bare 'ええ' sounds repetitive and robotic. "
-                    "Use character-specific affirmations: 'はい、', 'その通りですわ、', '左様でございますわ' for Metan, "
-                    "or 'まさにその通りなのだ！' for Zundamon."
-                ),
+                message=f"Detected unnatural/bare 'ええ' at {len(ee_cuts)} cut(s): " + ", ".join(f"#{i} ({c})" for i, c in ee_cuts[:4]),
+                remedy="Bare 'ええ' sounds flat/robotic in VOICEVOX. Use 'はい、'/'仰る通りですわ、' (Metan), 'まさにその通りなのだ！' or 'えっ！？' (Zundamon).",
+            )
+        )
+
+    # 13b. Check Zero-B-Roll Invariant
+    if len(dialogue_entries) >= 10 and not any(bool(e.get("image")) for e in dialogue_entries):
+        violations.append(
+            PacingRuleViolation(
+                rule_name="ZERO_BROLL_PRESENTATION_VIOLATION",
+                severity="ERROR",
+                character=None,
+                message="Video script has 0 B-roll slides assigned across the entire timeline.",
+                remedy="Retention pacing requires visual stimuli refresh. Assign B-roll slides starting at Cut #3 or after Cold Open hook.",
             )
         )
 
@@ -542,6 +581,148 @@ def audit_script_pacing(
                 ),
             )
         )
+
+    # 15. Check Echo-Parrot Syndrome (Reactor mechanically repeating preceding numbers/phrases)
+    echo_cuts: List[Tuple[int, str, str]] = []
+    for idx in range(1, len(dialogue_entries)):
+        curr_entry = dialogue_entries[idx]
+        prev_entry = dialogue_entries[idx - 1]
+        if curr_entry.get("character") != prev_entry.get("character"):
+            curr_text = str(curr_entry.get("text", "")).strip()
+            prev_text = str(prev_entry.get("text", "")).strip()
+            m = re.match(r"^([^！？!?…]{2,18})[！？!?]", curr_text)
+            if m:
+                cand = m.group(1).strip()
+                cleaned_cand = re.sub(r"[\s、。「」『』・…～〜]", "", cand)
+                cleaned_prev = re.sub(r"[\s、。「」『』・…～〜]", "", prev_text)
+                nums = [n for n in re.findall(r"\d+(?:[億万千兆円ドル%％倍]|[a-zA-Z]+)*", cand) if len(n) >= 2 or any(c in n for c in "億万千兆円ドル%％")]
+                has_num_echo = any(n in cleaned_prev for n in nums)
+                has_str_echo = len(cleaned_cand) >= 4 and cleaned_cand in cleaned_prev
+                if has_num_echo or has_str_echo:
+                    echo_cuts.append((idx, curr_entry["character"], cand))
+
+    if len(echo_cuts) >= 2:
+        violations.append(
+            PacingRuleViolation(
+                rule_name="ECHO_PARROT_VIOLATION",
+                severity="WARNING",
+                character=None,
+                message=(
+                    f"Detected {len(echo_cuts)} echo-parrot cuts where reactor mechanically repeats preceding words/numbers: "
+                    + ", ".join(f"#{i} ({c}: '{cand}')" for i, c, cand in echo_cuts[:3])
+                ),
+                remedy=(
+                    "Top rival channels eliminate robotic echoing. Instead of parroting '1日2000億円！？', "
+                    "have the reactor react with visceral emotions, relatable street-scale analogies (ずんだ餅, 家賃, ガチャ), "
+                    "or skeptical humor."
+                ),
+            )
+        )
+
+    # 16. Check Taigendome Headline Truncation (Spoken dialogue ending in uninflected news verbal nouns)
+    taigendome_pattern = re.compile(
+        r"(?:突破|記録|達成|公開|開始|終了|急増|急減|低下|上昇|下落|推移|発表|導入|締結|露呈|判明|激変|直撃)[。、]?$"
+    )
+    taigendome_cuts: List[Tuple[int, str, str]] = []
+    for idx, entry in enumerate(dialogue_entries):
+        text = str(entry.get("text", "")).strip()
+        if taigendome_pattern.search(text):
+            taigendome_cuts.append((idx, entry["character"], text))
+
+    if taigendome_cuts:
+        violations.append(
+            PacingRuleViolation(
+                rule_name="TAIGENDOME_HEADLINE_VIOLATION",
+                severity="WARNING",
+                character=None,
+                message=(
+                    f"Detected {len(taigendome_cuts)} cut(s) ending in written news-headline taigendome: "
+                    + ", ".join(f"#{i} ({c}: '...{t[-8:]}')" for i, c, t in taigendome_cuts[:3])
+                ),
+                remedy=(
+                    "Spoken VOICEVOX dialogue sounds unnatural when ending in bare uninflected verbal nouns like '〜を突破。'. "
+                    "Append conversational spoken copulas such as '〜を突破していますのよ' or '〜を記録したのだ'."
+                ),
+            )
+        )
+
+    # 17. Check Repetitive Affirmation Cliches & Stiff Keigo
+    seen_affirmations: Dict[str, List[int]] = {}
+    archaic_keigo_cuts: List[Tuple[int, str, str]] = []
+    for idx, entry in enumerate(dialogue_entries):
+        text = str(entry.get("text", "")).strip()
+        char = entry.get("character")
+        for pat in [r"その通りです[わね]?", r"はい[、。]", r"まさにその通り"]:
+            m = re.match(pat, text)
+            if m:
+                key = m.group(0)
+                seen_affirmations.setdefault(key, []).append(idx)
+                break
+        if char == "四国めたん" and re.search(r"左様でございます", text):
+            archaic_keigo_cuts.append((idx, char, text))
+
+    dup_affirmations = {k: v for k, v in seen_affirmations.items() if len(v) >= 2 and "その通り" in k}
+    if dup_affirmations:
+        violations.append(
+            PacingRuleViolation(
+                rule_name="REPETITIVE_AFFIRMATION_CLICHE",
+                severity="WARNING",
+                character=None,
+                message=(
+                    "Detected repetitive identical affirmation openers: "
+                    + ", ".join(f"'{k}' at cuts {v}" for k, v in dup_affirmations.items())
+                ),
+                remedy=(
+                    "Vary conversational responses. Avoid repeating 'その通りですわ'. "
+                    "Use varied natural reactions like '仰る通りですわ', '甘いですわね', '核心を突きましたわね', or '愚問ですわ'."
+                ),
+            )
+        )
+
+    if archaic_keigo_cuts:
+        violations.append(
+            PacingRuleViolation(
+                rule_name="ARCHAIC_KEIGO_DRIFT",
+                severity="WARNING",
+                character="四国めたん",
+                message=(
+                    f"Detected archaic samurai/butler keigo ('左様でございます') at {len(archaic_keigo_cuts)} cut(s): "
+                    + ", ".join(f"#{i} ('{t[:20]}...')" for i, _, t in archaic_keigo_cuts[:3])
+                ),
+                remedy=(
+                    "四国めたん is a smug, sharp aristocratic realist, not a feudal chamberlain. "
+                    "Replace '左様でございますわ' with lively aristocratic phrasing like 'ええ、まさに血で血を洗う修羅場ですわ'."
+                ),
+            )
+        )
+
+    # 18. Check Specialist (Tsumugi) Register Drift (Must maintain cheerful kouhai/gyaru speech)
+    if "春日部つむぎ" in character_stats and character_stats["春日部つむぎ"].cut_count >= 4:
+        tsumugi_cuts = [
+            (idx, str(e.get("text", "")))
+            for idx, e in enumerate(dialogue_entries)
+            if e.get("character") == "春日部つむぎ"
+        ]
+        has_gyaru_marker = any(
+            re.search(r"(?:っす|じゃん|っしょ|しょ|すよ|すね)", text)
+            for _, text in tsumugi_cuts
+        )
+        if not has_gyaru_marker:
+            violations.append(
+                PacingRuleViolation(
+                    rule_name="SPECIALIST_REGISTER_DRIFT",
+                    severity="WARNING",
+                    character="春日部つむぎ",
+                    message=(
+                        f"春日部つむぎ spoken lines ({len(tsumugi_cuts)} cuts) completely lack her characteristic kouhai/gyaru inflection "
+                        "('〜っすよ', '〜じゃないすか', '〜っすね')."
+                    ),
+                    remedy=(
+                        "Restore Tsumugi's authentic energetic voice. Top rival channels depict Tsumugi as an energetic "
+                        "server-room insider using casual kouhai inflection, never sterile corporate narration."
+                    ),
+                )
+            )
 
     # 3. Special rules for 3-character casts
     if num_chars >= 3:

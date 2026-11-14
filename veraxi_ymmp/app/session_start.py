@@ -102,7 +102,9 @@ def build_session_start(root: Path) -> str:
         "- Apply a full-file reply: `veraxi-ymmp apply reply.md "
         "--manifest bundle.md.manifest.json`",
         "- Apply an edit reply: `veraxi-ymmp apply-edit reply.md`",
-        "- Ingest web-generated clips: `veraxi-ymmp ingest-clips "
+        "- NotebookLM -> Web-chat script handoff: `veraxi-ymmp ingest-script "
+        "projects/<slug>/evidence.md --provider manual`",
+        "- (Optional) Ingest web-generated clips: `veraxi-ymmp ingest-clips "
         "<folder> --from-manifest clip-manifest.json`",
         "- Full procedure: `docs/WEB_CHAT_RUNBOOK.md`",
         "",

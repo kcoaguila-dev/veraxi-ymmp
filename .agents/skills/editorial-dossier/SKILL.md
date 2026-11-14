@@ -72,8 +72,11 @@ Strict rules: Output ONLY the Markdown table. Every row must include an exact ve
 > As widely observed on Reddit (r/NotebookLM, r/LocalLLaMA) and creator communities, NotebookLM excels at reading dense filings without hallucination, but defaults to bland corporate PR brochure talk ("AI slop") when asked to write dialogue. It lacks Japanese manzai timing, 0.0s cold open hooks, and character archetypes.
 >
 > **Decoupled Workflow:**
-> 1. **NotebookLM:** Generates the raw Forensic Evidence Extraction Matrix (Tabular Markdown).
+> 1. **NotebookLM (Step 1.5 HITL Gate):** Generates the raw Forensic Evidence Extraction Matrix (Tabular Markdown) grounded in primary source documents.
 > 2. **Antigravity / `veraxi-ymmp`:** Authors the Japanese dialogue using `script-hygiene` rules (0.0s cold open, 50/30/20 ratio, BudouX phrase wrapping <= 38 chars).
+>
+> **Project Source Isolation:**
+> Sources placed in `projects/<project_slug>/sources/` must exclusively reflect the current project's primary materials. Never retain stale files from sibling projects. Both short (~50–80 cuts) and long-form (~180–220 cuts, ~10 minutes) projects are supported.
 
 ---
 

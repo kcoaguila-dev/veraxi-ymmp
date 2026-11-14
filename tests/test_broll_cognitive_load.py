@@ -213,3 +213,21 @@ def test_render_from_manifest_handles_vs_aliases_and_validates(tmp_path: Path):
     # Test rejection of empty overview slide
     with pytest.raises(ValueError, match="has no cards"):
         render_from_manifest([{"type": "overview", "filename": "bad_ov.png", "title": "無効", "cards": []}], tmp_path)
+
+
+def test_render_clash_slide_legibility_and_positioning(tmp_path: Path):
+    """Ensures clash slide renders with generous vertical breathing room and readable subtext."""
+    from veraxi_ymmp.graphics.broll import render_clash_slide
+    out_file = tmp_path / "test_clash.png"
+    render_clash_slide(
+        out_path=out_file,
+        title="2026年Q3 設備投資額",
+        step_tag="",
+        hero_metric="3ヶ月 約1166億ドル (約18.4兆円)",
+        left_entity={"name": "Amazon AWS", "metric": "約773億ドル", "sub": "自社半導体で原価50%削減へ投資"},
+        right_entity={"name": "Microsoft", "metric": "約394億ドル", "sub": "外注GPU依存・巨額リース債務"},
+        impact_tag="",
+        impact_text="3ヶ月で18.4兆円が消える消耗戦",
+    )
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0

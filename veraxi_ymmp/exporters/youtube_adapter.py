@@ -116,6 +116,8 @@ class YouTubeAdapter:
         self._youtube = youtube_service
         self._analytics = analytics_service
         self._media_file_upload_cls = media_file_upload_cls
+        from veraxi_ymmp.exporters.youtube_auth import configure_ipv4_socket
+        configure_ipv4_socket()
 
     def _get_media_file_upload_cls(self) -> Any:
         """Get MediaFileUpload class lazily or raise informative ImportError."""

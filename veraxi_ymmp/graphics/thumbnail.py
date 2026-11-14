@@ -26,46 +26,11 @@ FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
 
 # Theme Palettes
 THEMES: Dict[str, Dict[str, Tuple[int, int, int]]] = {
-    "gold": {
-        "badge_bg": (245, 158, 11),       # Amber 500
-        "badge_text": (15, 23, 42),       # Slate 900
-        "highlight": (255, 225, 0),       # Canary Gold
-        "sub_border": (56, 189, 248),     # Sky 400
-        "sub_bg": (30, 41, 59),           # Slate 800
-        "sub_text": (248, 250, 252),      # Slate 50
-    },
-    "red": {
-        "badge_bg": (239, 68, 68),        # Red 500
-        "badge_text": (255, 255, 255),    # White
-        "highlight": (255, 75, 75),       # Vivid Crimson
-        "sub_border": (248, 113, 113),    # Red 400
-        "sub_bg": (30, 41, 59),           # Slate 800
-        "sub_text": (248, 250, 252),
-    },
-    "cyan": {
-        "badge_bg": (14, 165, 233),       # Sky 500
-        "badge_text": (15, 23, 42),
-        "highlight": (56, 189, 248),      # Cyan
-        "sub_border": (167, 139, 250),    # Violet 400
-        "sub_bg": (30, 41, 59),
-        "sub_text": (248, 250, 252),
-    },
-    "emerald": {
-        "badge_bg": (16, 185, 129),       # Emerald 500
-        "badge_text": (15, 23, 42),
-        "highlight": (52, 211, 153),      # Emerald 400
-        "sub_border": (52, 211, 153),
-        "sub_bg": (30, 41, 59),
-        "sub_text": (248, 250, 252),
-    },
-    "violet": {
-        "badge_bg": (168, 85, 247),       # Purple 500
-        "badge_text": (255, 255, 255),
-        "highlight": (192, 132, 252),     # Purple 400
-        "sub_border": (251, 191, 36),     # Amber 400
-        "sub_bg": (30, 41, 59),
-        "sub_text": (248, 250, 252),
-    },
+    "gold": {"badge_bg": (245, 158, 11), "badge_text": (15, 23, 42), "highlight": (255, 225, 0), "sub_border": (56, 189, 248), "sub_bg": (30, 41, 59), "sub_text": (248, 250, 252)},
+    "red": {"badge_bg": (239, 68, 68), "badge_text": (255, 255, 255), "highlight": (255, 75, 75), "sub_border": (248, 113, 113), "sub_bg": (30, 41, 59), "sub_text": (248, 250, 252)},
+    "cyan": {"badge_bg": (14, 165, 233), "badge_text": (15, 23, 42), "highlight": (56, 189, 248), "sub_border": (167, 139, 250), "sub_bg": (30, 41, 59), "sub_text": (248, 250, 252)},
+    "emerald": {"badge_bg": (16, 185, 129), "badge_text": (15, 23, 42), "highlight": (52, 211, 153), "sub_border": (52, 211, 153), "sub_bg": (30, 41, 59), "sub_text": (248, 250, 252)},
+    "violet": {"badge_bg": (168, 85, 247), "badge_text": (255, 255, 255), "highlight": (192, 132, 252), "sub_border": (251, 191, 36), "sub_bg": (30, 41, 59), "sub_text": (248, 250, 252)},
 }
 
 TOPIC_PRESETS: List[Dict[str, Any]] = [
@@ -306,25 +271,41 @@ def draw_fukuro_text(
     )
 
 
+EMOTION_ALIASES: Dict[str, str] = {
+    "scared": "sad", "desperate": "sad", "panic": "sad", "despair": "sad", "fear": "sad", "crying": "sad",
+    "shock": "surprised", "shocked": "surprised", "confused": "surprised",
+    "joy": "happy", "smile": "happy", "excited": "happy", "smug": "happy", "confident": "happy",
+    "rage": "angry", "furious": "angry", "mad": "angry",
+}
+
+
 def resolve_character_face(character: str, emotion: str, mouth_open: bool = True) -> Optional[Path]:
-    """Finds the best matching character image file in assets/faces/."""
+    """Finds the best matching character image file in assets/faces/ with semantic alias mapping."""
+    emo_clean = emotion.lower().strip()
+    target_emo = EMOTION_ALIASES.get(emo_clean, emo_clean)
     mouth_suffix = "open" if mouth_open else "closed"
     primary_dir = Path("assets/faces") / character
     if primary_dir.exists():
-        direct = primary_dir / f"{emotion}_{mouth_suffix}.png"
+        direct = primary_dir / f"{target_emo}_{mouth_suffix}.png"
         if direct.exists():
             return direct
         # Fallback to opposite mouth
         alt_mouth = "closed" if mouth_open else "open"
-        if (primary_dir / f"{emotion}_{alt_mouth}.png").exists():
-            return primary_dir / f"{emotion}_{alt_mouth}.png"
+        if (primary_dir / f"{target_emo}_{alt_mouth}.png").exists():
+            return primary_dir / f"{target_emo}_{alt_mouth}.png"
+        # If original emotion was different, try it directly
+        if target_emo != emo_clean:
+            if (primary_dir / f"{emo_clean}_{mouth_suffix}.png").exists():
+                return primary_dir / f"{emo_clean}_{mouth_suffix}.png"
+            if (primary_dir / f"{emo_clean}_{alt_mouth}.png").exists():
+                return primary_dir / f"{emo_clean}_{alt_mouth}.png"
         # Fallback to neutral
         if (primary_dir / f"neutral_{mouth_suffix}.png").exists():
             return primary_dir / f"neutral_{mouth_suffix}.png"
 
     # Fallback to root assets/faces
     root_faces = Path("assets/faces")
-    cand = root_faces / f"{emotion}_{mouth_suffix}.png"
+    cand = root_faces / f"{target_emo}_{mouth_suffix}.png"
     if cand.exists():
         return cand
     cand_neutral = root_faces / f"neutral_{mouth_suffix}.png"

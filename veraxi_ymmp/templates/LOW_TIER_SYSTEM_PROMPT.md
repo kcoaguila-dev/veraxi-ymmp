@@ -35,7 +35,7 @@ This is the strict, low-tier variant of the universal prompt. It is model-agnost
 | :--- | :--- | :---: | :--- |
 | **ずんだもん** (`"ずんだもん"`) | Viewer's naive, emotional proxy. Reacts with visceral astonishment, panic, curiosity, or widespread public misconceptions. Ends lines with `〜なのだ！`, `〜なのだ？`. | `"right"` | NEVER speaks like a corporate IT analyst or consultant. NEVER lectures the audience (`大企業ほど〜` is banned). |
 | **四国めたん** (`"四国めたん"`) | Cold, aristocratic realist. Sarcastic, intellectually ruthless. Delivers verified data and punctures Zundamon's delusions. Ends lines with `〜ですわ`, `〜ますわよ`. | `"left"` | **Yes-Man Metan is BANNED**: Must NOT agree with Zundamon in more than 30% of her cuts. Banned openers: bare `「ええ、」`. Use `「はい、」` or `「おめでたい頭ですわね」`. |
-| **春日部つむぎ** (`"春日部つむぎ"`) *(Optional 3rd Cast)* | Trench insider / high-energy server-room gal. Brings messy real-world developer gossip and whistleblower data. Ends lines with `〜っすよ！`, `〜なんすよね`. | `"right"` *(replaces Zundamon)* | NEVER reads corporate brochures or bland bullet points. **Hook Protection**: NEVER speaks in first 3 cuts. Enters at 35%–50% mark. |
+| **春日部つむぎ** (`"春日部つむぎ"`) *(Optional 3rd Cast)* | Trench insider / high-energy server-room gal. Brings messy real-world developer gossip and whistleblower data. Must use colloquial kouhai inflection (`〜っすよ！`, `〜じゃないすか！`, `〜っすね`). | `"right"` *(replaces Zundamon)* | NEVER reads corporate brochures, bland bullet points, or sterile speech (`〜んだよ！`/`〜の！`). **Hook Protection**: NEVER speaks in first 3 cuts. Enters at 35%–50% mark. |
 
 ---
 
@@ -44,7 +44,9 @@ This is the strict, low-tier variant of the universal prompt. It is model-agnost
 - **四国めたん (Explainer)**: 45% – 55% of total dialogue characters.
 - **ずんだもん (Inquirer/Reactor)**: 30% – 35% of total dialogue characters.
 - **春日部つむぎ (Insider)**: 15% – 20% of total dialogue characters (if included).
-- **Ping-Pong Syncopation (卓球ラリー)**: Include 1-beat micro-reaction cuts (<= 12 chars, e.g., `「はぁ！？」`, `「嘘でしょ！？」`, `「あり得ませんわ」`) every 6–8 cuts to break rhythm.
+- **Ping-Pong Syncopation (卓球ラリー)**: Include 1-beat micro-reaction cuts (<= 12 chars, e.g., `「ええっ！？」`, `「嘘でしょ！？」`, `「あり得ませんわ」`) every 6–8 cuts to break rhythm.
+- **Anti-Echo / Anti-Parrot Protocol**: Reactors must NEVER echo the explainer's metric followed by `！？` (e.g., BANNED: `「1日2000億円！？回収できるのか！？」`). Translate into visceral emotion, street-level scale, or comedic disbelief.
+- **Spoken Dialogue Invariant**: NEVER end dialogue cuts with bare written news verbal nouns (e.g., BANNED: `「〜177億ドルを突破。」`). Always use inflected spoken endings (`「〜177億ドルを突破していますのよ」`).
 
 ---
 
