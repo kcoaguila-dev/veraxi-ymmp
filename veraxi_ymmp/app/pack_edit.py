@@ -38,6 +38,7 @@ whose guards are reused rather than duplicated):
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -300,6 +301,53 @@ def _stage_edits(
     return staged, problems
 
 
+_PROJECT_TRACKED_FILES = frozenset({
+    "script.json", "broll_manifest.json", "thumbnail_config.json", "claims.json", "evidence.md",
+})
+
+
+def detect_touched_projects(staged: Dict[str, str], root: Path) -> List[Path]:
+    """Return unique project directories under projects/<slug> touched by *staged*."""
+    seen: set[Path] = set()
+    projects: List[Path] = []
+    for rel_path in staged:
+        parts = Path(rel_path.replace("\\", "/")).parts
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] in _PROJECT_TRACKED_FILES:
+            proj_dir = root / parts[0] / parts[1]
+            if (proj_dir / "script.json").is_file() or f"projects/{parts[1]}/script.json" in staged:
+                if proj_dir not in seen:
+                    seen.add(proj_dir)
+                    projects.append(proj_dir)
+    return projects
+
+
+def validate_staged_projects(staged: Dict[str, str], root: Path) -> List[str]:
+    """Run project gates on touched projects and stage reconciled claims.json."""
+    touched = detect_touched_projects(staged, root)
+    if not touched:
+        return []
+    from veraxi_ymmp.app.script_provider import validate_and_reconcile_staged_project
+
+    for proj_dir in touched:
+        reconciled_claims_json, proj_errors = validate_and_reconcile_staged_project(
+            proj_dir, staged, root=root
+        )
+        if proj_errors:
+            return proj_errors
+        claims_rel = f"projects/{proj_dir.name}/claims.json"
+        if reconciled_claims_json is not None and claims_rel not in staged:
+            claims_path = proj_dir / "claims.json"
+            changed = not claims_path.is_file()
+            if not changed:
+                try:
+                    changed = json.loads(claims_path.read_text(encoding="utf-8")) != json.loads(reconciled_claims_json)
+                except Exception:
+                    changed = True
+            if changed:
+                staged[claims_rel] = reconciled_claims_json
+    return []
+
+
 def format_edit_reprompt(problems: List[str]) -> str:
     """Re-prompt block for edit replies rejected before any write."""
     lines = [
@@ -327,12 +375,13 @@ def apply_edit_reply(
     branch_name: Optional[str] = None,
     check_runner: CheckRunner = pa.run_check_commands,
     output_fn: OutputFn = print,
+    in_place: bool = False,
 ) -> int:
-    """Apply an edit reply on a new branch and run the checks.
+    """Apply an edit reply on a new branch (or in-place) and run the checks.
 
     Returns 0 on success, 1 otherwise. A rejected reply (malformed,
-    unsafe path, failed anchor, elision hit) modifies no files and
-    creates no branch.
+    unsafe path, failed anchor, elision hit, or project gate failure)
+    modifies no files and creates no branch.
     """
     parsed = parse_edit_reply(reply_text)
     if not parsed.complete or not parsed.blocks:
@@ -356,20 +405,30 @@ def apply_edit_reply(
     if problems:
         output_fn(format_edit_reprompt(problems))
         return 1
-
-    branch = branch_name or f"agent-edit-{datetime.now():%Y%m%d-%H%M%S}"
-    proc = pa._git(root, "checkout", "-b", branch)
-    if proc.returncode != 0:
-        output_fn(
-            f"Error: could not create branch {branch}: "
-            f"{proc.stderr.strip()}"
-        )
+    proj_problems = validate_staged_projects(staged, root)
+    if proj_problems:
+        output_fn(format_edit_reprompt(proj_problems))
         return 1
+
+    if in_place:
+        branch = "working-tree"
+    else:
+        branch = branch_name or f"agent-edit-{datetime.now():%Y%m%d-%H%M%S}"
+        proc = pa._git(root, "checkout", "-b", branch)
+        if proc.returncode != 0:
+            output_fn(
+                f"Error: could not create branch {branch}: "
+                f"{proc.stderr.strip()}"
+            )
+            return 1
     for rel_path, new_text in staged.items():
-        (root / rel_path).write_bytes(new_text.encode("utf-8"))
+        target = root / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(new_text.encode("utf-8"))
+    loc_label = "in-place (working tree)" if in_place else f"on branch {branch}"
     output_fn(
         f"Applied {len(parsed.blocks)} edit block(s) to "
-        f"{len(staged)} file(s) on branch {branch}:"
+        f"{len(staged)} file(s) {loc_label}:"
     )
     for rel_path in staged:
         output_fn(f"  - {rel_path}")
@@ -383,6 +442,53 @@ def apply_edit_reply(
         return 1
     output_fn("All checks passed (ruff, mypy, targeted pytest).")
     return 0
+
+
+_PROJECT_FILENAMES = frozenset({"script.json", "broll_manifest.json", "thumbnail_config.json"})
+
+
+def build_project_pack_rules(rel_files: Sequence[str]) -> str:
+    """Return fail-closed video project editing rules when packing project files."""
+    is_project = any(
+        p.replace("\\", "/").lstrip("./").startswith("projects/")
+        or Path(p).name in _PROJECT_FILENAMES
+        for p in rel_files
+    )
+    if not is_project:
+        return ""
+    return (
+        "## Video Project Editing Rules (Enforced Fail-Closed by apply-edit / apply)\n\n"
+        "- **`script.json` Director Entry Schema:** 7 required keys (`character`, `text`, "
+        "`emotion`, `motion`, `bgm`, `sfx`, `image`) and 5 optional keys "
+        "(`character_position`, `subtitle_position`, `subtitle_style`, `bg`, `clip_id`).\n"
+        "- **Allowed Enum Values:**\n"
+        '  - `character`: `"四国めたん"`, `"ずんだもん"`, `"春日部つむぎ"`\n'
+        '  - `emotion`: `"normal"`, `"neutral"`, `"happy"`, `"angry"`, `"sad"`, `"surprised"`, '
+        '`"confused"`, `"scared"`, `"excited"`, `"disgusted"`, `"smug"`, `"crying"`, `"blushing"`\n'
+        '  - `motion`: `"none"`, `"jump"`, `"nod"`\n'
+        '  - `character_position`: `"left"`, `"center"`, `"right"`\n'
+        '  - `subtitle_position`: `"top_center"`, `"center"`, `"bottom_center"`\n'
+        '  - `subtitle_style`: `"default"`, `"outlined"`\n'
+        "- **Typography & Phonetics Gate:**\n"
+        "  - `<= 40` visible characters per cut (`{Kanji|ruby}` counts as `Kanji` length).\n"
+        "  - Zero raw ASCII letters (`A-Z`, `a-z`) in dialogue `text` — use katakana "
+        "(`アマゾン`, `クロード`, `エーアイ`), full-width acronyms (`ＩＰＯ`, `ＡＩ`), or `{漢字|ルビ}`. "
+        "Never use `【...】` brackets.\n"
+        "- **Retention Pacing Gate (`>= 80/100`):**\n"
+        '  - Cuts `0..2`: `image` must be `null`, and `"春日部つむぎ"` must not speak in Cuts `0..2` '
+        '(`"春日部つむぎ"` enters between 30%–50% of the script).\n'
+        "  - Cast balance: ~50% `四国めたん`, ~30% `ずんだもん`, ~20% `春日部つむぎ`; "
+        "include `>= 5%` micro-reaction cuts (`<= 12` chars).\n"
+        "- **B-Roll Manifest (`broll_manifest.json`) & Asset Gate:**\n"
+        '  - Every non-null `image` in `script.json` must match a `filename` in `broll_manifest.json` '
+        '(e.g. `"broll/slide_01.png"`) or exist on disk.\n'
+        "  - Supported slide `type` schemas and total character ceilings: `metric` (`<= 100`), "
+        "`vs` (`<= 100`), `overview` (`<= 100`), `official_data` (`<= 100`), `clash` (`<= 125`), "
+        "`domino` (`<= 140`), `architecture` (`<= 180`), `matrix` (`<= 200`). Max 6–20 elements per slide.\n"
+        "- **Epistemic & Scale Gate:**\n"
+        "  - Every quantitative figure in `script.json`, `broll_manifest.json`, or `thumbnail_config.json` "
+        "must match `evidence.md` or existing verified cuts (`$1B = 10億ドル`; never introduce ungrounded numbers)."
+    )
 
 
 def cmd_apply_edit(argv: Sequence[str]) -> None:
@@ -399,6 +505,10 @@ def cmd_apply_edit(argv: Sequence[str]) -> None:
     parser.add_argument("--branch", default=None,
                         help="Branch name to create "
                              "(default: agent-edit-<timestamp>)")
+    parser.add_argument("--in-place", "--no-branch", dest="in_place",
+                        action="store_true",
+                        help="Apply directly to the current working tree "
+                             "without creating a new git branch")
     args = parser.parse_args(list(argv))
 
     reply_path = Path(args.reply)
@@ -411,5 +521,6 @@ def cmd_apply_edit(argv: Sequence[str]) -> None:
         allow_tests=args.allow_tests,
         test_path=args.test,
         branch_name=args.branch,
+        in_place=args.in_place,
     )
     sys.exit(code)

@@ -23,8 +23,23 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
+from veraxi_ymmp.app.project_gate import (
+    PayloadValidator as PayloadValidator,
+    _asset_exists as _asset_exists,
+    _backup_project_state as _backup_project_state,
+    _collect_slide_texts as _collect_slide_texts,
+    _load_json_dict as _load_json_dict,
+    _lookup_staged_text as _lookup_staged_text,
+    _pacing_errors as _pacing_errors,
+    _parse_staged_json as _parse_staged_json,
+    _run_fact_gate_check as _run_fact_gate_check,
+    _validate_cross_file_and_evidence_scale_parity as _validate_cross_file_and_evidence_scale_parity,
+    _validate_cuts_and_broll as _validate_cuts_and_broll,
+    build_project_gate_validator as build_project_gate_validator,
+    validate_and_reconcile_staged_project as validate_and_reconcile_staged_project,
+)
 from veraxi_ymmp.core.constants import DEFAULT_SPEAKER_MAP
 from veraxi_ymmp.core.schema import get_director_script_schema
 from veraxi_ymmp.core.script import DirectorScriptEntry, validate_director_script
@@ -33,7 +48,6 @@ PASTE_TERMINATOR = "---END---"
 
 OutputFn = Callable[[str], None]
 PasteFn = Callable[[], str]
-PayloadValidator = Callable[[Dict[str, Any]], List[str]]
 
 _EXTRA_VALIDATOR_CTX: contextvars.ContextVar[Optional[PayloadValidator]] = (
     contextvars.ContextVar("veraxi_extra_validator", default=None)
@@ -253,267 +267,6 @@ def _extract_thumbnail_config(raw: str) -> Optional[Dict[str, Any]]:
     if isinstance(data, dict) and isinstance(data.get("thumbnail_config"), dict):
         return dict(data["thumbnail_config"])
     return None
-
-
-def _collect_slide_texts(spec: Dict[str, Any]) -> List[str]:
-    """Collect visible text elements from a broll_manifest entry for load checks."""
-    skip_keys = {
-        "type", "filename", "theme_color", "color", "is_vertical",
-        "image_path", "image", "asset", "layout", "show_caption",
-        "show_header", "show_citation",
-    }
-    color_tokens = {"blue", "emerald", "amber", "purple", "rose", "red", "green"}
-    texts: List[str] = []
-    for k, v in spec.items():
-        if k in skip_keys or v is None:
-            continue
-        if isinstance(v, str) and v.strip():
-            texts.append(v.strip())
-        elif isinstance(v, list):
-            for item in v:
-                if isinstance(item, str) and item.strip().lower() not in color_tokens:
-                    texts.append(item.strip())
-                elif isinstance(item, (list, tuple)):
-                    for sub in item:
-                        if isinstance(sub, str) and sub.strip().lower() not in color_tokens:
-                            texts.append(sub.strip())
-                elif isinstance(item, dict):
-                    for sub_v in item.values():
-                        if isinstance(sub_v, str) and sub_v.strip().lower() not in color_tokens:
-                            texts.append(sub_v.strip())
-    return texts
-
-
-def _validate_cuts_and_broll(
-    payload: Dict[str, Any], project_dir: Path
-) -> List[str]:
-    """Validate visible cut lengths, unmapped ASCII tokens, and slide load."""
-    from veraxi_ymmp.audio.phonetics import find_unmapped_ascii_tokens, strip_phonetic_ruby
-    from veraxi_ymmp.graphics.broll import MAX_SLIDE_CHARS, MAX_SLIDE_ELEMENTS, check_cognitive_load
-
-    errors: List[str] = []
-    for idx, entry in enumerate(payload.get("script", [])):
-        if not isinstance(entry, dict):
-            continue
-        text = str(entry.get("text", ""))
-        char = str(entry.get("character", "unknown"))
-        vis_len = len(strip_phonetic_ruby(text))
-        if vis_len > 40:
-            errors.append(f"Cut #{idx} ({char}): Exceeds 40 characters ({vis_len} chars).")
-        unmapped = find_unmapped_ascii_tokens(text, project_dir=project_dir)
-        if unmapped:
-            errors.append(
-                f"Cut #{idx} ({char}): Unmapped ASCII token(s) {unmapped}; "
-                "use katakana or inline ruby '{Word|よみ}'."
-            )
-
-    for s_idx, spec in enumerate(payload.get("broll_manifest", [])):
-        if not isinstance(spec, dict):
-            errors.append(f"broll_manifest[{s_idx}] must be an object.")
-            continue
-        title = str(spec.get("title") or spec.get("filename") or f"slide_{s_idx}")
-        try:
-            check_cognitive_load(
-                title,
-                _collect_slide_texts(spec),
-                max_chars=MAX_SLIDE_CHARS,
-                max_elements=MAX_SLIDE_ELEMENTS + 6,
-            )
-        except ValueError as exc:
-            errors.append(f"[BROLL] {exc}")
-    return errors
-
-
-def _run_fact_gate_check(
-    resolved_dir: Path,
-    payload: Dict[str, Any],
-    script_entries: Sequence[Any],
-    evidence_markdown: Optional[str],
-    manifest_data: Optional[Dict[str, Any]],
-) -> List[str]:
-    """Build claims from NotebookLM evidence when present and run audit_project_facts."""
-    from veraxi_ymmp.editorial.script_ingest import (
-        ingest_notebooklm_markdown_to_claims,
-        parse_markdown_evidence_table,
-    )
-    from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
-    from veraxi_ymmp.epistemic.facts import claims_to_json
-
-    ev_text = evidence_markdown
-    if ev_text is None and (resolved_dir / "evidence.md").is_file():
-        ev_text = (resolved_dir / "evidence.md").read_text(encoding="utf-8")
-
-    claims_path = resolved_dir / "claims.json"
-    sources_dir = resolved_dir / "sources"
-    manifest_path = sources_dir / "manifest.json"
-    sources_dir_existed = sources_dir.is_dir()
-    pre_source_files = set(sources_dir.iterdir()) if sources_dir_existed else set()
-
-    tmp_script = resolved_dir / ".candidate_script.tmp.json"
-    backups: List[Tuple[Path, Optional[str]]] = []
-    try:
-        if ev_text is not None and parse_markdown_evidence_table(ev_text):
-            mf = manifest_data
-            if mf is None and manifest_path.is_file():
-                try:
-                    mf = json.loads(manifest_path.read_text(encoding="utf-8"))
-                except Exception:
-                    mf = None
-            backups.append(
-                (claims_path, claims_path.read_text(encoding="utf-8") if claims_path.is_file() else None)
-            )
-            backups.append(
-                (manifest_path, manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None)
-            )
-            for item in pre_source_files:
-                if item.is_file() and item.suffix.lower() == ".md":
-                    backups.append((item, item.read_text(encoding="utf-8")))
-            claims = ingest_notebooklm_markdown_to_claims(
-                script_entries, ev_text, manifest=mf, sources_dir=sources_dir
-            )
-            claims_path.write_text(claims_to_json(claims), encoding="utf-8")
-
-        if not claims_path.is_file():
-            return []
-
-        tmp_script.write_text(
-            json.dumps(list(script_entries), indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        for fname, key in (("broll_manifest.json", "broll_manifest"), ("thumbnail_config.json", "thumbnail_config")):
-            val = payload.get(key)
-            if val:
-                fpath = resolved_dir / fname
-                backups.append((fpath, fpath.read_text(encoding="utf-8") if fpath.is_file() else None))
-                fpath.write_text(json.dumps(val, indent=2, ensure_ascii=False), encoding="utf-8")
-        outcome = audit_project_facts(tmp_script)
-        return [
-            f"[FACTS] {r.claim.id} (cut {r.claim.cut_index}) {r.verdict.value}: {r.reason}"
-            for r in outcome.blockers
-        ]
-    finally:
-        tmp_script.unlink(missing_ok=True)
-        for fpath, prev in reversed(backups):
-            if prev is None:
-                fpath.unlink(missing_ok=True)
-            else:
-                fpath.parent.mkdir(parents=True, exist_ok=True)
-                fpath.write_text(prev, encoding="utf-8")
-        if sources_dir.is_dir():
-            for item in list(sources_dir.iterdir()):
-                if item not in pre_source_files and item.is_file():
-                    item.unlink(missing_ok=True)
-            if not sources_dir_existed and not any(sources_dir.iterdir()):
-                sources_dir.rmdir()
-
-
-def _validate_cross_file_and_evidence_scale_parity(
-    payload: Dict[str, Any],
-    evidence_markdown: Optional[str],
-) -> List[str]:
-    """Verify cross-file macro figure parity and 10x billion/億 scale conversions."""
-    from veraxi_ymmp.epistemic.epistemic_units import (
-        extract_scaled_magnitudes,
-        extract_token_magnitudes,
-    )
-
-    errors: List[str] = []
-    script_entries = payload.get("script", [])
-    script_mags: List[float] = []
-    for entry in script_entries:
-        if isinstance(entry, dict):
-            script_mags.extend(extract_scaled_magnitudes(str(entry.get("text", ""))))
-    ev_mags = extract_scaled_magnitudes(evidence_markdown) if evidence_markdown else []
-    anchor_mags = script_mags + ev_mags
-
-    if ev_mags:
-        for idx, entry in enumerate(script_entries):
-            if not isinstance(entry, dict):
-                continue
-            for tok, vals in extract_token_magnitudes(str(entry.get("text", ""))).items():
-                m_vals = [v for v in vals if v >= 1e6]
-                if not m_vals or any(
-                    abs(mv - em) / max(mv, em, 1.0) < 0.05 for mv in m_vals for em in ev_mags
-                ):
-                    continue
-                off = next(
-                    (
-                        em for mv in m_vals for em in ev_mags
-                        if em >= 1e6 and (
-                            abs(mv * 10.0 - em) / max(em, 1.0) < 0.05
-                            or abs(mv / 10.0 - em) / max(em, 1.0) < 0.05
-                        )
-                    ),
-                    None,
-                )
-                if off is not None:
-                    errors.append(
-                        f"[SCALE] Cut #{idx}: Figure '{tok}' ({m_vals[0]:g}) is 10x off from "
-                        f"evidence ({off:g}) — check billion/億 conversion ($1B = 10億ドル)."
-                    )
-
-    if anchor_mags:
-        targets: List[Tuple[str, str]] = [
-            (f"broll_manifest[{s_idx}]", " ".join(_collect_slide_texts(spec)))
-            for s_idx, spec in enumerate(payload.get("broll_manifest", []))
-            if isinstance(spec, dict)
-        ]
-        thumb = payload.get("thumbnail_config")
-        if isinstance(thumb, dict):
-            targets.append(("thumbnail_config", json.dumps(thumb, ensure_ascii=False)))
-        for label, txt in targets:
-            for tok, vals in extract_token_magnitudes(txt).items():
-                m_vals = [v for v in vals if v >= 1e8]
-                if m_vals and not any(
-                    abs(mv - am) / max(mv, am, 1.0) < 0.05 for mv in m_vals for am in anchor_mags
-                ):
-                    errors.append(
-                        f"[SCALE] {label} macro figure '{tok}' ({m_vals[0]:g}) "
-                        "does not match any figure in script or evidence.md."
-                    )
-    return errors
-
-
-def build_project_gate_validator(
-    project_dir: Path,
-    audit_pacing: bool = True,
-    audit_facts: bool = True,
-    evidence_markdown: Optional[str] = None,
-    manifest_data: Optional[Dict[str, Any]] = None,
-) -> PayloadValidator:
-    """Build a validator enforcing retention pacing, slide load, and fact gates."""
-    resolved_dir = project_dir.resolve()
-
-    def _validate(payload: Dict[str, Any]) -> List[str]:
-        errors = _validate_cuts_and_broll(payload, resolved_dir)
-        script_entries = payload.get("script", [])
-        ev_text = evidence_markdown
-        if ev_text is None and (resolved_dir / "evidence.md").is_file():
-            ev_text = (resolved_dir / "evidence.md").read_text(encoding="utf-8")
-        errors.extend(_validate_cross_file_and_evidence_scale_parity(payload, ev_text))
-
-        if audit_pacing:
-            from veraxi_ymmp.editorial.pacing import audit_script_pacing
-            report = audit_script_pacing(list(script_entries))
-            if report.retention_score < 80:
-                pacing_msgs = [
-                    f"[PACING {v.rule_name}] {v.message} (Remedy: {v.remedy})"
-                    for v in report.violations
-                    if v.severity in {"ERROR", "WARNING"}
-                ]
-                errors.extend(
-                    pacing_msgs
-                    or [f"[PACING] Retention score {report.retention_score}/100 is below 80."]
-                )
-
-        if audit_facts:
-            errors.extend(
-                _run_fact_gate_check(
-                    resolved_dir, payload, script_entries, evidence_markdown, manifest_data
-                )
-            )
-        return errors
-
-    return _validate
 
 
 class ManualHandoffProvider:

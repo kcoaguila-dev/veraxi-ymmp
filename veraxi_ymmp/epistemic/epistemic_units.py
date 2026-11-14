@@ -195,6 +195,56 @@ def eval_safe_arithmetic(expr: str) -> float | None:
         return None
 
 
+def _extract_word_and_kanji_magnitudes(norm: str, token_mags: Dict[str, List[float]]) -> None:
+    """Populate *token_mags* with Kanji numerals, English number words, months, and multipliers."""
+    for m in re.finditer(r"(\d{1,2})\s*(?:ヶ月|か月|カ月|月)", norm):
+        val_i = int(m.group(1))
+        if 1 <= val_i <= 12:
+            token_mags.setdefault(m.group(1), []).append(float(val_i))
+    _en_words = {
+        "one": 1.0, "two": 2.0, "three": 3.0, "four": 4.0, "five": 5.0, "six": 6.0,
+        "seven": 7.0, "eight": 8.0, "nine": 9.0, "ten": 10.0, "eleven": 11.0, "twelve": 12.0,
+        "january": 1.0, "february": 2.0, "march": 3.0, "april": 4.0, "may": 5.0, "june": 6.0,
+        "july": 7.0, "august": 8.0, "september": 9.0, "october": 10.0, "november": 11.0, "december": 12.0,
+    }
+    for m in re.finditer(r"\b(" + "|".join(_en_words) + r")\b", norm):
+        token_mags.setdefault(m.group(1), []).append(_en_words[m.group(1)])
+    for m in re.finditer(r"\b(?:a|an|one)\s+(thousand|million|billion|trillion)\b", norm):
+        token_mags.setdefault("1", []).append(MULTIPLIERS_EN[m.group(1)])
+    if re.search(r"\b(?:a\s+)?single\s+(?:share|stock|class|unit|user)\b", norm):
+        token_mags.setdefault("1", []).append(1.0)
+    try:
+        from kanjize import kanji2number
+
+        for m in re.finditer(
+            r"(?<![一二三四五六七八九十百千万億兆\d])("
+            r"[一二三四五六七八九十百千]+[万億兆](?:[一二三四五六七八九十百千]+[億万千]?)?"
+            r"|[二三四五六七八九][十百千]+|[十百千][一二三四五六七八九十百千]+)",
+            norm,
+        ):
+            try:
+                token_mags.setdefault(m.group(1), []).append(float(kanji2number(m.group(1))))
+            except Exception:
+                pass
+    except ImportError:
+        pass
+    try:
+        from word2number import w2n
+
+        _en_tok = (
+            r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+            r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+            r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|trillion)"
+        )
+        for m in re.finditer(rf"\b({_en_tok}(?:[-\s]+{_en_tok})+)\b", norm):
+            try:
+                token_mags.setdefault(m.group(1), []).append(float(w2n.word_to_num(m.group(1).replace("-", " "))))
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
+
 def extract_token_magnitudes(text: str, table_scale: float = 1.0) -> Dict[str, List[float]]:
     """Map raw numeric string tokens to their scaled values based on following unit or fractions."""
     norm = unicodedata.normalize("NFKC", text).lower()
@@ -208,8 +258,16 @@ def extract_token_magnitudes(text: str, table_scale: float = 1.0) -> Dict[str, L
         scale = MULTIPLIERS_JP[m.group(2)]
         token_mags.setdefault(val_str, []).append(float(val_str) * scale)
 
-    # English scale multipliers
-    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(k|thousand|mn?|million|bn?|billion|tn?|trillion)\b", norm):
+    # Compound Japanese scale pairs (e.g. 8億2500万, 12億6000万, 1兆4750億)
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*([兆億万])\s*(\d+(?:\.\d+)?)\s*([億万千])", norm):
+        n1, u1, n2, u2 = m.group(1), m.group(2), m.group(3), m.group(4)
+        if MULTIPLIERS_JP[u1] > MULTIPLIERS_JP[u2]:
+            combined = float(n1) * MULTIPLIERS_JP[u1] + float(n2) * MULTIPLIERS_JP[u2]
+            token_mags.setdefault(n1, []).append(combined)
+            token_mags.setdefault(n2, []).append(combined)
+
+    # English scale multipliers (allow accounting parens like $(1,260) million)
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*\)?\s*(k|thousand|mn?|million|bn?|billion|tn?|trillion)\b", norm):
         val_str = m.group(1)
         scale = MULTIPLIERS_EN[m.group(2)]
         token_mags.setdefault(val_str, []).append(float(val_str) * scale)
@@ -248,8 +306,25 @@ def extract_token_magnitudes(text: str, table_scale: float = 1.0) -> Dict[str, L
         token_mags.setdefault(tok, []).append(float(tok))
 
     # Standard counts and quantities
-    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:人|名|社|台|件|回|点|個|本|shares?|users?|people|jobs?)", norm):
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:人|名|社|台|件|回|点|個|本|(?:shares?|users?|people|jobs?)\b)", norm):
         token_mags.setdefault(m.group(1), []).append(float(m.group(1)))
+
+    # Multipliers (e.g. 31倍, 30.77x)
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:倍|x\b)", norm):
+        token_mags.setdefault(m.group(1), []).append(float(m.group(1)))
+
+    # Japanese 割 (e.g. 3割 -> 30% and 0.3) and N回にM回 (e.g. 10回に1回 -> 0.1 and 10%)
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*割", norm):
+        val_f = float(m.group(1))
+        token_mags.setdefault(m.group(1), []).extend([val_f * 10.0, val_f * 0.1])
+    for m in re.finditer(r"(\d+)\s*回に\s*(\d+)\s*回", norm):
+        denom, numer = float(m.group(1)), float(m.group(2))
+        if denom > 0:
+            ratio = numer / denom
+            token_mags.setdefault(m.group(1), []).extend([ratio, ratio * 100.0])
+            token_mags.setdefault(m.group(2), []).extend([ratio, ratio * 100.0])
+
+    _extract_word_and_kanji_magnitudes(norm, token_mags)
 
     # Scoped table scale (e.g. in millions)
     effective_scale = 1e6 if ("in millions" in norm or "(in millions)" in norm) else table_scale
@@ -269,6 +344,36 @@ def extract_scaled_magnitudes(text: str, table_scale: float = 1.0) -> List[float
     """Extract canonical numerical magnitudes."""
     tm = extract_token_magnitudes(text, table_scale=table_scale)
     return [mag for mags in tm.values() for mag in mags]
+
+
+def has_scoped_polarity_conflict(
+    norm_claim: str, norm_ctx: str, c_mags: Sequence[float],
+    claim_nums: Sequence[str], all_tokens: Sequence[str],
+    active_aliases: Dict[str, Tuple[str, ...]],
+    polarity_pairs: Sequence[Tuple[Any, Any]], table_scale: float = 1.0,
+) -> bool:
+    """Check *polarity_pairs* scoped to clauses in *norm_ctx* relevant to *norm_claim*."""
+    clauses = [cl.strip() for cl in re.split(r"[。！？\n.;]+|,\s+", norm_ctx) if cl.strip()]
+    tok_set = set(all_tokens)
+    relevant = [
+        cl for cl in clauses
+        if any(cn in cl for cn in claim_nums)
+        or (c_mags and any(abs(cm - qm) / max(cm, qm, 1.0) < 0.05 for cm in c_mags for qm in extract_scaled_magnitudes(cl, table_scale=table_scale)))
+        or (tok_set & set(extract_content_lemmas(cl)))
+        or any(a_k in norm_claim and any(av in cl for av in a_vals) for a_k, a_vals in active_aliases.items())
+    ]
+    p_ctx = " ".join(relevant) if relevant else norm_ctx
+    pos_cash_exempt = (
+        bool(c_mags) and ("provided by" in p_ctx or "positive" in p_ctx)
+        and not re.search(r"(?:-\s*\d|\(\s*\$?\s*\d)", p_ctx)
+        and any(abs(cm - qm) / max(cm, qm, 1.0) < 0.05 for cm in c_mags for qm in extract_scaled_magnitudes(p_ctx, table_scale=table_scale))
+    )
+    for pos_set, neg_set in polarity_pairs:
+        c_pos, c_neg_p = any(p in norm_claim for p in pos_set), any(n in norm_claim for n in neg_set)
+        q_pos, q_neg_p = any(p in p_ctx for p in pos_set), any(n in p_ctx for n in neg_set)
+        if (c_pos and not c_neg_p and q_neg_p and not q_pos and not pos_cash_exempt) or (c_neg_p and not c_pos and q_pos and not q_neg_p):
+            return True
+    return False
 
 
 # Regex detecting salient, domain-checkable assertions:
@@ -375,7 +480,9 @@ def extract_dominant_unit(text: str) -> Optional[Any]:
 
 
 _JP_AFFIRMATIVE_IDIOMS = re.compile(
-    r"(?:少なくない|悪くない|珍しくない|間違いない|違いない|せざるを得ない|ほかない|しかない|問題ない|疑いない)"
+    r"(?:少なくない|悪くない|珍しくない|間違いない|違いない|せざるを得ない|ほかない|しかない|問題ない|疑いない"
+    r"|信じられない|ありえない|あり得ない|とんでもない|半端ない|たまらない|目が離せない|見逃せない"
+    r"|侮れない|笑えない|考えられない|計り知れない|避けられない|欠かせない|無視できない|止められない|否定できない)"
 )
 _EN_AFFIRMATIVE_IDIOMS = re.compile(
     r"\b(?:not\s+only|no\s+less\s+than|no\s+fewer\s+than|nothing\s+short\s+of)\b",

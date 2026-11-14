@@ -57,7 +57,7 @@ Unless the user explicitly provides custom asset filenames, **ONLY** use `null` 
 `veraxi-ymmp` procedurally renders 1920x1080 dark-slate slides from JSON text.
 **Strict Cognitive Limit**: Total characters across ALL text fields in any slide MUST be $\le 100$ characters. Keep labels short, punchy, and impactful. Supported theme colors: `"blue"`, `"emerald"`, `"amber"`, `"purple"`, `"rose"`.
 
-Use one of the 3 exact schemas:
+Use one of the 8 supported schemas:
 
 ### Type 1: `"metric"` (1 Huge Number/Phrase + 1 Key Impact Takeaway)
 ```json
@@ -123,6 +123,79 @@ Use whenever citing technical specs (CVE/RFC), academic benchmarks, court filing
   "verification_badge": "公式セキュリティ勧告",
   "impact_tag": "緊急警告",
   "impact_text": "遠隔コード実行による完全掌握リスク",
+  "theme_color": "red"
+}
+```
+
+### Type 5: `"clash"` (Dual-Entity Metric Battle Board)
+```json
+{
+  "type": "clash",
+  "filename": "slide_05.png",
+  "title": "四半期設備投資額の直接対決",
+  "hero_metric": "合計 約1166億ドル",
+  "left": {"name": "Amazon", "metric": "約773億ドル", "sub": "自社ASIC配備", "color": "amber"},
+  "right": {"name": "Microsoft", "metric": "約394億ドル", "sub": "外注GPU依存", "color": "blue"},
+  "impact_tag": "警告",
+  "impact_text": "巨額投資が粗利益率を継続圧迫",
+  "theme_color": "amber"
+}
+```
+
+### Type 6: `"architecture"` (Two-Route Supply-Chain / Stack Flow)
+```json
+{
+  "type": "architecture",
+  "filename": "slide_06.png",
+  "title": "AIインフラ調達フロー比較",
+  "routes": [
+    {
+      "name": "Microsoft",
+      "color": "blue",
+      "takeaway": "外注で粗利圧迫",
+      "steps": [{"node": "GPU調達", "sub": "高額外注"}, {"node": "Azure", "sub": "単一依存"}]
+    },
+    {
+      "name": "Amazon",
+      "color": "amber",
+      "takeaway": "自社チップ優位",
+      "steps": [{"node": "Trainium2", "sub": "自社設計"}, {"node": "AWS", "sub": "垂直統合"}]
+    }
+  ],
+  "bottom_text": "自社半導体による原価優位が決定的",
+  "theme_color": "amber"
+}
+```
+
+### Type 7: `"matrix"` (Multi-Dimension Enterprise Comparison Table)
+```json
+{
+  "type": "matrix",
+  "filename": "slide_07.png",
+  "title": "法人向けAI 徹底比較",
+  "columns": ["項目", "左社", "右社"],
+  "rows": [
+    {"label": "価格体系", "left": "月額30ドル", "right": "従量課金", "advantage": "right"},
+    {"label": "モデル", "left": "単一限定", "right": "複数選択可", "advantage": "right"}
+  ],
+  "bottom_text": "選択肢の広さで右社が優勢",
+  "theme_color": "green"
+}
+```
+
+### Type 8: `"domino"` (4-Stage Causal Chain Reaction)
+```json
+{
+  "type": "domino",
+  "filename": "slide_08.png",
+  "title": "巨額投資の因果連鎖",
+  "stages": [
+    {"num": "01", "title": "巨額投資", "sub": "設備費が急増", "color": "amber"},
+    {"num": "02", "title": "固定費化", "sub": "償却費が膨張", "color": "amber"},
+    {"num": "03", "title": "利益侵食", "sub": "粗利率が低下", "color": "red"},
+    {"num": "04", "title": "回収遅延", "sub": "株価が急落", "color": "red"}
+  ],
+  "bottom_text": "投資を止められない消耗戦へ",
   "theme_color": "red"
 }
 ```

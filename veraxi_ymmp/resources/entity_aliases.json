@@ -217,5 +217,101 @@
     "copyright",
     "fair use",
     "intellectual property"
+  ],
+  "転換社債": [
+    "convertible notes",
+    "convertible"
+  ],
+  "評価損": [
+    "fair value",
+    "loss",
+    "mark"
+  ],
+  "評価替え": [
+    "fair value",
+    "change in fair value"
+  ],
+  "従量課金": [
+    "consumption-based",
+    "token revenue"
+  ],
+  "サブスクリプション": [
+    "subscription",
+    "subscription revenue"
+  ],
+  "サブスク": [
+    "subscription",
+    "subscription revenue"
+  ],
+  "営業キャッシュフロー": [
+    "operating activities",
+    "cash provided by operating"
+  ],
+  "売出規模": [
+    "aggregate offering",
+    "shares"
+  ],
+  "仮条件": [
+    "initial public offering price",
+    "midpoint"
+  ],
+  "中央値": [
+    "midpoint",
+    "median",
+    "between"
+  ],
+  "取締役": [
+    "director",
+    "directors",
+    "board of directors"
+  ],
+  "創業者": [
+    "founder",
+    "founders",
+    "co-founder"
+  ],
+  "議決権": [
+    "voting power",
+    "voting rights",
+    "votes"
+  ],
+  "株式": [
+    "stock",
+    "common stock",
+    "shares"
+  ],
+  "発行株": [
+    "outstanding shares",
+    "shares"
+  ],
+  "過半数": [
+    "majority",
+    "50.1%"
+  ],
+  "プレミアム": [
+    "premium",
+    "valuation"
+  ],
+  "本質的価値": [
+    "intrinsic value",
+    "value"
+  ],
+  "購入コミットメント": [
+    "purchase commitments",
+    "commitments"
+  ],
+  "リース": [
+    "lease",
+    "lease agreements"
+  ],
+  "訴訟": [
+    "lawsuit",
+    "litigation",
+    "derivative lawsuit"
+  ],
+  "無期限": [
+    "indefinite",
+    "perpetual",
+    "in perpetuity"
   ]
 }

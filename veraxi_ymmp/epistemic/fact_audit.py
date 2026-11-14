@@ -8,7 +8,7 @@ import hashlib
 import html
 import json
 import re
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import urllib.request
 import urllib.error
 from bs4 import BeautifulSoup
@@ -32,8 +32,28 @@ from veraxi_ymmp.epistemic.facts import (
     enforce_source_tier,
     gate_failures,
     load_claims,
+    primary_authority_key,
     verdict_for,
     verify_quote_in_source,
+)
+from veraxi_ymmp.epistemic.parity_audit import (
+    ManualChecker as ManualChecker,
+    _CONCRETE_NUM_PATT as _CONCRETE_NUM_PATT,
+    _DECLARATIVE_EN_END as _DECLARATIVE_EN_END,
+    _DECLARATIVE_JP_END as _DECLARATIVE_JP_END,
+    _FACT_SIGNAL as _FACT_SIGNAL,
+    _MAX_REACTION_LEN as _MAX_REACTION_LEN,
+    _PAGE as _PAGE,
+    _PASSAGES as _PASSAGES,
+    _REACTION_END as _REACTION_END,
+    _ROW as _ROW,
+    _UNITS_PATTERN as _UNITS_PATTERN,
+    _URL as _URL,
+    audit_visual_and_metadata_parity as audit_visual_and_metadata_parity,
+    classify_text as classify_text,
+    evaluate_grounding_safe as evaluate_grounding_safe,
+    extract_draft_claims as extract_draft_claims,
+    parse_proof_card as parse_proof_card,
 )
 
 CLAIMS_FILENAME = "claims.json"
@@ -355,6 +375,12 @@ def audit_project_facts(
             except Exception:
                 pass
 
+    distinct_tier1_authorities = {
+        primary_authority_key(Evidence(url=src.url, quote="", tier=1, source_id=sid))
+        for sid, src in sources.items()
+        if src.url and enforce_source_tier(src.url, 1, profile=active_profile, extra_primary_domains=extra_domains) == 1
+    }
+
     results: List[ClaimResult] = []
     for c in claims:
         quote_errors: List[str] = []
@@ -429,22 +455,25 @@ def audit_project_facts(
         if not quote_errors and c.evidence:
             conf_quotes = [e.quote for e in c.evidence if e.stance is Stance.CONFIRMS and e.quote.strip()]
             if conf_quotes:
-                ctx_parts = list(conf_quotes)
-                for e in c.evidence:
-                    if e.source_id and e.source_id in sources:
-                        ctx_parts.append(sources[e.source_id].text[:400])
-                merged_ctx = " ".join(ctx_parts)
                 c_txt = c.text + (" " + c.derivation if c.derived and c.derivation else "")
-                grounding_score = compute_deterministic_grounding(c_txt, merged_ctx, extra_aliases=extra_aliases)
-                if grounding_score == 0.0 and script_data and 0 <= c.cut_index < len(script_data):
-                    win_start = max(0, c.cut_index - 4)
-                    discourse_cuts = [
-                        str(entry.get("text", "")).strip()
-                        for entry in script_data[win_start : c.cut_index + 1]
-                        if isinstance(entry, dict) and "character" in entry
-                    ]
-                    discourse_text = " ".join(discourse_cuts)
-                    grounding_score = compute_deterministic_grounding(discourse_text, merged_ctx, extra_aliases=extra_aliases)
+                grounding_score = compute_deterministic_grounding(c_txt, " ".join(conf_quotes), extra_aliases=extra_aliases)
+                if grounding_score == 0.0:
+                    ctx_parts = list(conf_quotes)
+                    for e in c.evidence:
+                        if e.source_id and e.source_id in sources:
+                            ctx_parts.append(sources[e.source_id].text[:400])
+                    merged_ctx = " ".join(ctx_parts)
+                    if len(ctx_parts) > len(conf_quotes):
+                        grounding_score = compute_deterministic_grounding(c_txt, merged_ctx, extra_aliases=extra_aliases)
+                    if grounding_score == 0.0 and script_data and 0 <= c.cut_index < len(script_data):
+                        win_start = max(0, c.cut_index - 4)
+                        discourse_cuts = [
+                            str(entry.get("text", "")).strip()
+                            for entry in script_data[win_start : c.cut_index + 1]
+                            if isinstance(entry, dict) and "character" in entry
+                        ]
+                        discourse_text = " ".join(discourse_cuts)
+                        grounding_score = compute_deterministic_grounding(discourse_text, merged_ctx, extra_aliases=extra_aliases)
 
                 from veraxi_ymmp.epistemic.facts import NON_CHECKABLE_KINDS
                 if grounding_score == 0.0 and c.kind not in NON_CHECKABLE_KINDS and not getattr(c, "axiom", False):
@@ -480,7 +509,7 @@ def audit_project_facts(
             profile=active_profile,
             source_texts=conf_src_texts,
             extra_primary_domains=extra_domains,
-            single_primary_ok=has_nlm_primary,
+            single_primary_ok=has_nlm_primary or len(distinct_tier1_authorities) == 1,
         )
         if grounding_score is not None:
             res.grounding_score = grounding_score
@@ -613,7 +642,9 @@ def audit_project_facts(
                             )
                         )
 
-    parity_blockers = audit_visual_and_metadata_parity(project_dir, claims, sources, results=results)
+    parity_blockers = audit_visual_and_metadata_parity(
+        project_dir, claims, sources, results=results, profile=active_profile, extra_primary_domains=extra_domains
+    )
     results.extend(parity_blockers)
 
     dialectical_outcome = audit_dialectical_balance(claims, results, adversarial_mode=adversarial)
@@ -667,228 +698,3 @@ def draft_project_claims(
     merged = extract_draft_claims(script, existing, extract_qualitative=extract_qualitative)
     claims_path.write_text(claims_to_json(merged), encoding="utf-8")
     return claims_path, len(merged) - len(existing)
-
-
-def audit_visual_and_metadata_parity(
-    project_dir: Path,
-    claims: Sequence[Claim],
-    sources: Dict[str, StoredSource],
-    results: Optional[Sequence[ClaimResult]] = None,
-) -> List[ClaimResult]:
-    """Verify that financial figures in broll_manifest, thumbnail_config, and youtube_metadata match claims.json."""
-    from veraxi_ymmp.epistemic.facts import extract_token_magnitudes, extract_scaled_magnitudes, Claim, ClaimKind, ClaimWeight, Verdict, ClaimResult, eval_safe_arithmetic
-
-    if results is not None:
-        supported_claim_ids = {r.claim.id for r in results if r.verdict is Verdict.SUPPORTED and not r.quote_errors}
-    else:
-        from veraxi_ymmp.epistemic.facts import verdict_for
-        supported_claim_ids = {
-            c.id for c in claims
-            if verdict_for(
-                c,
-                single_primary_ok=any(
-                    e.stance is Stance.CONFIRMS
-                    and e.source_id
-                    and e.source_id in sources
-                    and getattr(sources[e.source_id], "provenance", "") == "notebooklm_evidence"
-                    for e in c.evidence
-                ),
-            ).verdict is Verdict.SUPPORTED
-        }
-
-    approved_mags = []
-    for c in claims:
-        if c.id not in supported_claim_ids:
-            continue
-        c_text = c.text + (" " + c.derivation if c.derived and c.derivation else "")
-        approved_mags.extend(extract_scaled_magnitudes(c_text))
-        for e in c.evidence:
-            if e.quote:
-                approved_mags.extend(extract_scaled_magnitudes(e.quote))
-        if c.derived and c.derivation:
-            import re
-            parts = re.split(r"\s*(?:=|≈|~|->|→|=>)\s*", c.derivation.strip(), maxsplit=1)
-            lhs_val = eval_safe_arithmetic(parts[0])
-            if lhs_val is not None:
-                approved_mags.append(lhs_val)
-            for sub_expr in re.findall(r"\([^)]+\)", c.derivation):
-                sub_val = eval_safe_arithmetic(sub_expr)
-                if sub_val is not None:
-                    approved_mags.append(sub_val)
-
-    blockers: List[ClaimResult] = []
-
-    # 1. B-roll manifest
-    broll_p = project_dir / "broll_manifest.json"
-    if broll_p.is_file():
-        try:
-            broll_data = json.loads(broll_p.read_text(encoding="utf-8"))
-            broll_text = json.dumps(broll_data, ensure_ascii=False)
-            tok_mags = extract_token_magnitudes(broll_text)
-            for tok, vals in tok_mags.items():
-                for v in vals:
-                    if v >= 1e8: # Only enforce major financial/macro figures (>= 1億 / $1M)
-                        if not any(abs(v - av) / max(v, av, 1.0) < 0.05 for av in approved_mags):
-                            cl = Claim(id="parity_broll_mismatch", cut_index=0, text=f"B-roll figure '{tok}' ({v:g})", kind=ClaimKind.NUMBER, weight=ClaimWeight.MINOR)
-                            blockers.append(ClaimResult(claim=cl, verdict=Verdict.UNVERIFIED, reason=f"broll_manifest.json contains quantitative figure '{tok}' ({v:g}) which contradicts verified claims in claims.json"))
-        except Exception:
-            pass
-
-    # 2. Thumbnail config
-    thumb_p = project_dir / "thumbnail_config.json"
-    if thumb_p.is_file():
-        try:
-            thumb_data = json.loads(thumb_p.read_text(encoding="utf-8"))
-            thumb_text = json.dumps(thumb_data, ensure_ascii=False)
-            tok_mags = extract_token_magnitudes(thumb_text)
-            for tok, vals in tok_mags.items():
-                for v in vals:
-                    if v >= 1e8:
-                        if not any(abs(v - av) / max(v, av, 1.0) < 0.05 for av in approved_mags):
-                            cl = Claim(id="parity_thumbnail_mismatch", cut_index=0, text=f"Thumbnail figure '{tok}' ({v:g})", kind=ClaimKind.NUMBER, weight=ClaimWeight.MINOR)
-                            blockers.append(ClaimResult(claim=cl, verdict=Verdict.UNVERIFIED, reason=f"thumbnail_config.json contains quantitative figure '{tok}' ({v:g}) which contradicts verified claims in claims.json"))
-        except Exception:
-            pass
-
-    # 3. YouTube metadata
-    for meta_name in ("youtube_metadata.json", "youtube_metadata.txt"):
-        meta_p = project_dir / meta_name
-        if meta_p.is_file():
-            try:
-                m_text = meta_p.read_text(encoding="utf-8", errors="replace")
-                tok_mags = extract_token_magnitudes(m_text)
-                for tok, vals in tok_mags.items():
-                    for v in vals:
-                        if v >= 1e8:
-                            if not any(abs(v - av) / max(v, av, 1.0) < 0.05 for av in approved_mags):
-                                cl = Claim(id=f"parity_{meta_name}_mismatch", cut_index=0, text=f"YouTube metadata figure '{tok}' ({v:g})", kind=ClaimKind.NUMBER, weight=ClaimWeight.MINOR)
-                                blockers.append(ClaimResult(claim=cl, verdict=Verdict.UNVERIFIED, reason=f"{meta_name} contains quantitative figure '{tok}' ({v:g}) which contradicts verified claims in claims.json"))
-            except Exception:
-                pass
-
-    return blockers
-
-
-# --- Check-worthiness classification & claim drafting ---
-
-_UNITS_PATTERN = r"\b(?:gw|mw|kw|tw|w|tb|gb|mb|kb|pb|nm|um|mm|km|ghz|mhz|khz|hz|kg|mg|ug|kcal|fps|bps|billion|million|trillion|thousand)\b"
-_FACT_SIGNAL = re.compile(
-    rf"[0-9０-９]|[億兆万]|[%％]|[$¥€£]|ドル|円|ユーロ|ポンド|年間|四半期|決算|シェア|倍|半額|半分|倍増|半減|\d+\s*分の\s*\d+|ギガワット|メガワット|テラバイト|ギガバイト|ナノメートル|{_UNITS_PATTERN}",
-    re.I,
-)
-_REACTION_END = re.compile(r"[！？!?…]+$")
-_MAX_REACTION_LEN = 12
-_CONCRETE_NUM_PATT = re.compile(
-    rf"[0-9０-９]+(?:\.[0-9０-９]+)?\s*(?:[億兆万%％倍$¥€£ドル円]|{_UNITS_PATTERN})|\d+\s*分の\s*\d+|半額|半分|倍増|半減",
-    re.I,
-)
-_DECLARATIVE_JP_END = re.compile(r"(?:です|だ|である|ました|だった|となる|となった|と言われています|とされています)[。.]?$")
-_DECLARATIVE_EN_END = re.compile(r"[a-zA-Z0-9)]\.$")
-
-
-def classify_text(
-    text: str,
-    extract_qualitative: bool = False,
-    strict_numbers: bool = False,
-) -> ClaimKind | None:
-    """Return the claim kind, or None when the cut contains nothing to fact-check."""
-    stripped = text.strip()
-    if not stripped:
-        return None
-    if len(stripped) <= _MAX_REACTION_LEN and _REACTION_END.search(stripped):
-        return ClaimKind.COMMENTARY
-    if strict_numbers:
-        if _CONCRETE_NUM_PATT.search(stripped):
-            return ClaimKind.NUMBER
-        return None
-    if _FACT_SIGNAL.search(stripped):
-        return ClaimKind.NUMBER
-    if extract_qualitative and len(stripped) >= 10:
-        if _DECLARATIVE_JP_END.search(stripped) or _DECLARATIVE_EN_END.search(stripped):
-            return ClaimKind.FACT
-    return None
-
-
-def extract_draft_claims(
-    script: Sequence[Dict[str, Any]],
-    existing: Sequence[Claim] = (),
-    extract_qualitative: bool = False,
-    strict_numbers: bool = False,
-) -> List[Claim]:
-    """Draft claims for factual dialogue cuts, keeping any existing human-curated claims."""
-    known = {(c.cut_index, c.text) for c in existing}
-    next_id = len(existing) + 1
-    drafts: List[Claim] = []
-    for idx, entry in enumerate(script):
-        text = entry.get("text")
-        if not isinstance(text, str) or ("type" in entry and "character" not in entry):
-            continue
-        kind = classify_text(text, extract_qualitative=extract_qualitative, strict_numbers=strict_numbers)
-        if kind not in (ClaimKind.NUMBER, ClaimKind.FACT) or (idx, text) in known:
-            continue
-        drafts.append(Claim(f"d{next_id:02d}", idx, text, kind, ClaimWeight.MINOR))
-        next_id += 1
-    return list(existing) + drafts
-
-# --- Veraxi Proof Card & Grounding Helpers ---
-
-_PASSAGES = re.compile(r"\((\d+)\s+passages?\s+retrieved\)")
-_ROW = re.compile(r"^\|\s*(\d+)\s*\|(?P<doc>[^|]*)\|(?P<loc>[^|]*)\|(?P<quote>.*)\|\s*$")
-_PAGE = re.compile(r"(?:p\.?|page)\s*(\d+)", re.IGNORECASE)
-_URL = re.compile(r"https?://[^\s)\]>]+")
-
-
-def parse_proof_card(card: str, tier: int = 2, retrieved_at: str = "") -> List[Evidence]:
-    """Parse a proof card into confirming Evidence; returns [] for vacuous/empty cards."""
-    m = _PASSAGES.search(card)
-    if not m or int(m.group(1)) == 0:
-        return []
-    out: List[Evidence] = []
-    for line in card.splitlines():
-        row = _ROW.match(line.strip())
-        if not row:
-            continue
-        quote = row.group("quote").strip().strip('*_"“”')
-        if not quote:
-            continue
-        doc, loc = row.group("doc").strip(), row.group("loc").strip()
-        url = _URL.search(doc) or _URL.search(loc)
-        page = _PAGE.search(loc)
-        out.append(
-            Evidence(
-                url=url.group(0) if url else doc,
-                quote=quote,
-                stance=Stance.CONFIRMS,
-                tier=tier,
-                page=int(page.group(1)) if page else None,
-                retrieved_at=retrieved_at,
-            )
-        )
-    return out
-
-
-class ManualChecker:
-    """FactChecker backed by a pre-collected evidence ledger (CI / reruns)."""
-
-    def check(self, claim: Claim) -> List[Evidence]:
-        return list(claim.evidence)
-
-
-def evaluate_grounding_safe(
-    claim_text: str,
-    context_text: str,
-    mcp_client: Any = None,
-) -> float:
-    """Safely evaluate grounding with Veraxi MCP if available, falling back to deterministic."""
-    if mcp_client is not None:
-        try:
-            if hasattr(mcp_client, "evaluate_grounding"):
-                res = mcp_client.evaluate_grounding(
-                    context_text=context_text,
-                    response_text=claim_text,
-                )
-                if isinstance(res, (int, float)):
-                    return float(res)
-        except Exception:
-            pass
-    return compute_deterministic_grounding(claim_text, context_text)

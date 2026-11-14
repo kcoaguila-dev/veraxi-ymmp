@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-DEFAULT_BUDGET = 60_000
+DEFAULT_BUDGET = 150_000
 END_MARKER = "===END OF REPLY==="
 CONTINUATION_MARKER = "===CONTINUATION REQUIRED==="
 
@@ -515,6 +515,7 @@ def apply_reply(
     force_stale: bool = False,
     allow_shrink: bool = False,
     allow_elision: bool = False,
+    in_place: bool = False,
 ) -> int:
     """Apply a parsed reply on a new git branch and run the checks.
 
@@ -547,16 +548,26 @@ def apply_reply(
     if guard_problems:
         output_fn(format_guard_reprompt(guard_problems))
         return 1
+    from veraxi_ymmp.app.pack_edit import validate_staged_projects
 
-    branch = branch_name or f"agent-apply-{datetime.now():%Y%m%d-%H%M%S}"
-    proc = _git(root, "checkout", "-b", branch)
-    if proc.returncode != 0:
-        output_fn(f"Error: could not create branch {branch}: {proc.stderr.strip()}")
+    staged_map = dict(parsed.blocks)
+    proj_problems = validate_staged_projects(staged_map, root)
+    if proj_problems:
+        output_fn(format_guard_reprompt(proj_problems))
         return 1
+
+    if in_place:
+        branch = "working-tree"
+    else:
+        branch = branch_name or f"agent-apply-{datetime.now():%Y%m%d-%H%M%S}"
+        proc = _git(root, "checkout", "-b", branch)
+        if proc.returncode != 0:
+            output_fn(f"Error: could not create branch {branch}: {proc.stderr.strip()}")
+            return 1
 
     changed: List[str] = []
     new_files: List[Tuple[str, int]] = []
-    for rel_path, content in parsed.blocks:
+    for rel_path, content in staged_map.items():
         target = root / rel_path
         existed = target.is_file()
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -747,6 +758,11 @@ def cmd_pack(argv: Sequence[str]) -> None:
             agents_md = agents_path.read_text(encoding="utf-8")
         else:
             agents_md = "(no AGENTS_WEB.md or AGENTS.md found at repo root)"
+        from veraxi_ymmp.app import pack_edit as pe
+
+        extra_rules = pe.build_project_pack_rules(args.files)
+        if extra_rules:
+            agents_md = f"{agents_md.rstrip()}\n\n{extra_rules}"
     if args.mode == "full":
         for rel, content in file_contents:
             line_count = len(content.splitlines())
@@ -809,6 +825,10 @@ def cmd_apply(argv: Sequence[str]) -> None:
     parser.add_argument("--allow-elision", action="store_true",
                         help="Skip the elision detector (for legitimate new "
                              "lines containing words like 'omitted')")
+    parser.add_argument("--in-place", "--no-branch", dest="in_place",
+                        action="store_true",
+                        help="Apply directly to the current working tree "
+                             "without creating a new git branch")
     args = parser.parse_args(list(argv))
 
     reply_path = Path(args.reply)
@@ -837,5 +857,6 @@ def cmd_apply(argv: Sequence[str]) -> None:
         force_stale=args.force_stale,
         allow_shrink=args.allow_shrink,
         allow_elision=args.allow_elision,
+        in_place=args.in_place,
     )
     sys.exit(code)

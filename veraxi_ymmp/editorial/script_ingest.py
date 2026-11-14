@@ -706,3 +706,11 @@ def ingest_notebooklm_markdown_to_claims(
 
     out.sort(key=lambda c: c.cut_index)
     return out
+
+
+from veraxi_ymmp.editorial.claim_reconcile import (  # noqa: E402
+    _claims_match_numeric as _claims_match_numeric,
+    _norm_cut_text as _norm_cut_text,
+    _reconcile_unmatched_numeric_cuts as _reconcile_unmatched_numeric_cuts,
+    reconcile_claims_for_edited_script as reconcile_claims_for_edited_script,
+)

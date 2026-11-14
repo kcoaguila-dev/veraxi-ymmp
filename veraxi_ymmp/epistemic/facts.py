@@ -37,6 +37,7 @@ from veraxi_ymmp.epistemic.epistemic_units import (
     extract_salient_figures,
     extract_scaled_magnitudes,
     extract_token_magnitudes,
+    has_scoped_polarity_conflict,
 )
 
 __all__ = [
@@ -296,8 +297,10 @@ def has_grammatical_negation(text: str, target_tokens: Sequence[str] = ()) -> bo
 _POLARITY_CONFLICT_PAIRS = (
     (frozenset({"増加", "急増", "上昇", "拡大", "プラス", "grew", "growth", "rose", "increase", "surged", "higher"}),
      frozenset({"減少", "急減", "低下", "縮小", "マイナス", "fell", "declined", "drop", "decrease", "slump", "lower"})),
-    (frozenset({"真実", "事実", "成功", "確実", "承認", "黒字", "true", "accurate", "proven", "approved", "profit"}),
-     frozenset({"誤り", "虚偽", "うそ", "嘘", "失敗", "否定", "却下", "赤字", "false", "inaccurate", "debunked", "rejected", "loss"})),
+    (frozenset({"真実", "成功", "承認", "true", "accurate", "proven", "approved"}),
+     frozenset({"誤り", "虚偽", "うそ", "嘘", "失敗", "否定", "却下", "false", "inaccurate", "debunked", "rejected"})),
+    (frozenset({"黒字", "純利益", "profit", "profitable", "net income"}),
+     frozenset({"赤字", "損失", "純損失", "営業損失", "loss", "net loss", "operating loss"})),
     (frozenset({"安全", "有効", "safe", "effective", "efficacy"}),
      frozenset({"危険", "有害", "無効", "hazardous", "harmful", "ineffective"})),
 )
@@ -405,12 +408,12 @@ def compute_deterministic_grounding(
             if c_neg != q_neg:
                 return 0.0
 
-    # Polarity clash check
-    for pos_set, neg_set in _POLARITY_CONFLICT_PAIRS:
-        c_pos, c_neg_p = any(p in norm_claim for p in pos_set), any(n in norm_claim for n in neg_set)
-        q_pos, q_neg_p = any(p in norm_ctx for p in pos_set), any(n in norm_ctx for n in neg_set)
-        if (c_pos and not c_neg_p and q_neg_p and not q_pos) or (c_neg_p and not c_pos and q_pos and not q_neg_p):
-            return 0.0
+    # Polarity clash check (scoped to relevant clauses)
+    if has_scoped_polarity_conflict(
+        norm_claim, norm_ctx, c_mags, claim_nums, all_tokens, active_aliases,
+        _POLARITY_CONFLICT_PAIRS, table_scale=table_scale,
+    ):
+        return 0.0
 
     if not all_tokens:
         return 1.0 if norm_claim in norm_ctx else 0.5
@@ -435,6 +438,15 @@ def compute_deterministic_grounding(
         if alias_key in norm_claim and any(exp in norm_ctx for exp in expansions):
             if not any(t in norm_ctx for t in all_tokens if t in alias_key):
                 matched += 1
+
+    if matched == 0 and claim_token_mags and quote_mags:
+        if any(
+            abs(cm - qm) / max(cm, qm, 1.0) < 0.05
+            for cm_list in claim_token_mags.values()
+            for cm in cm_list
+            for qm in quote_mags
+        ):
+            matched = 1
 
     return min(1.0, round(matched / len(all_tokens), 2))
 
@@ -645,6 +657,11 @@ def check_claim_numbers(claim: Claim, quotes: Sequence[str], source_texts: Seque
 
     missing: List[str] = []
     for n in nums:
+        if n == "1" and (
+            re.search(r"\bper\s+(?:user|month|share|person|customer|day|year|annum|unit|employee)\b", merged_quotes, re.I)
+            or re.search(r"(?:1人あたり|一人当たり|1日あたり|一日当たり|1ヶ月あたり|1年あたり)", claim.text)
+        ):
+            continue
         if n in claim_token_mags:
             matched_mag = False
             for cm in claim_token_mags[n]:
@@ -659,11 +676,6 @@ def check_claim_numbers(claim: Claim, quotes: Sequence[str], source_texts: Seque
         else:
             pattern = rf"(?<![\d.]){re.escape(n)}(?!\.?\d)"
             if re.search(pattern, merged_quotes):
-                continue
-            if n == "1" and (
-                re.search(r"\bper\s+(?:user|month|share|person|customer|day|year|annum|unit|employee)\b", merged_quotes, re.I)
-                or re.search(r"(?:1人あたり|一人当たり|1日あたり|一日当たり|1ヶ月あたり|1年あたり)", claim.text)
-            ):
                 continue
             missing.append(n)
 

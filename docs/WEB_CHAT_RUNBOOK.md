@@ -187,6 +187,38 @@ veraxi-ymmp ingest-clips downloads/ --from-manifest clip-manifest.json
 
 Manifest ingest is all-or-nothing: missing or unmatched files are reported by name, and if any declared clip then fails to read or normalize, the whole ingest aborts and writes nothing. Fix what the messages name and re-run; do not hand-edit `clips/manifest.json`. (Without `--from-manifest`, `ingest-clips` probes every video in the folder with ffprobe.)
 
+### 3.5 Fixing / Editing an Existing Video Project (e.g. Video 10 & Video 11)
+
+You can retroactively edit any existing project under `projects/<slug>/` (`script.json`, `broll_manifest.json`, `thumbnail_config.json`) via `pack --mode edit` + `apply-edit --in-place`. When packing files under `projects/<slug>/`, `veraxi-ymmp pack --mode edit` automatically embeds the **Video Project Editing Rules** (`emotion`/`motion` enums, `<=40` char limit, zero-ASCII rule, 8 slide schemas) and fits 80–170+ cut projects within the default `150,000`-character bundle budget. Before writing any file, `apply-edit` automatically enforces schema enums, `<=40` char cuts, phonetics/ASCII rules, asset cross-references, slide cognitive load, `>=80` retention pacing, and (when `claims.json` or `evidence.md` exists) re-anchors `claims.json` `cut_index` values and runs `audit_project_facts`:
+
+```powershell
+# 1. Pack a project's script + slides (and evidence.md for reference) in edit mode
+#    Video 10 example:
+veraxi-ymmp pack --mode edit `
+  --task "In cuts 0-5, sharpen the hook and update slide_01_illusion.png text" `
+  --files projects/10_msft_vs_amzn_remake_2026/script.json `
+          projects/10_msft_vs_amzn_remake_2026/broll_manifest.json `
+          projects/10_msft_vs_amzn_remake_2026/evidence.md `
+  -o edit-video10.md
+
+#    Video 11 example (176 cuts, fits default 150k budget automatically):
+veraxi-ymmp pack --mode edit `
+  --task "Sharpen the cold open hook in cuts 0-5" `
+  --files projects/11_anthropic_ipo_2026/script.json `
+          projects/11_anthropic_ipo_2026/broll_manifest.json `
+          projects/11_anthropic_ipo_2026/evidence.md `
+  -o edit-video11.md
+
+# 2. Paste the generated bundle into Web AI, save reply to reply-edit.md, and apply in-place
+#    (Validates schema, <=40 chars, ruby, assets, pacing >=80,
+#     re-anchors claims.json, and audits facts before writing!)
+veraxi-ymmp apply-edit reply-edit.md --in-place
+
+# 3. Re-compile .ymmp / MP4 and run QA
+veraxi-ymmp run projects/11_anthropic_ipo_2026/ --render-video --normalize-loudness
+veraxi-ymmp qa projects/11_anthropic_ipo_2026/
+```
+
 ## 4. When something else goes wrong
 
 | Symptom | Action |

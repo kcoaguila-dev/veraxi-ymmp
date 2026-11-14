@@ -58,27 +58,10 @@ _THUMB_TEXT_KEYS = (
     "metric_highlight", "speech_bubble", "text",
 )
 _VERDICT_ALIASES: Dict[str, str] = {
-    "SUPPORTED": "SUPPORTED",
-    "PASS": "SUPPORTED",
-    "CONFIRMED": "SUPPORTED",
-    "OK": "SUPPORTED",
-    "VALID": "SUPPORTED",
-    "DRIFTED": "DRIFTED",
-    "DRIFT": "DRIFTED",
-    "SCOPE_DRIFT": "DRIFTED",
-    "PARTIAL": "DRIFTED",
-    "INACCURATE": "DRIFTED",
-    "REFUTED": "REFUTED",
-    "CONTRADICTED": "REFUTED",
-    "CONTRADICTS": "REFUTED",
-    "FALSE": "REFUTED",
-    "FAIL": "REFUTED",
-    "REJECTED": "REFUTED",
-    "UNVERIFIED": "UNVERIFIED",
-    "MISSING": "UNVERIFIED",
-    "NO_EVIDENCE": "UNVERIFIED",
-    "NOT_FOUND": "UNVERIFIED",
-    "UNKNOWN": "UNVERIFIED",
+    "SUPPORTED": "SUPPORTED", "PASS": "SUPPORTED", "CONFIRMED": "SUPPORTED", "OK": "SUPPORTED", "VALID": "SUPPORTED",
+    "DRIFTED": "DRIFTED", "DRIFT": "DRIFTED", "SCOPE_DRIFT": "DRIFTED", "PARTIAL": "DRIFTED", "INACCURATE": "DRIFTED",
+    "REFUTED": "REFUTED", "CONTRADICTED": "REFUTED", "CONTRADICTS": "REFUTED", "FALSE": "REFUTED", "FAIL": "REFUTED", "REJECTED": "REFUTED",
+    "UNVERIFIED": "UNVERIFIED", "MISSING": "UNVERIFIED", "NO_EVIDENCE": "UNVERIFIED", "NOT_FOUND": "UNVERIFIED", "UNKNOWN": "UNVERIFIED",
 }
 
 
@@ -123,31 +106,22 @@ def _load_json_safe(path: Path) -> Any:
 
 def _collect_slide_visible_texts(spec: Dict[str, Any]) -> List[str]:
     texts: List[str] = []
-    for key, val in spec.items():
-        if key in _SLIDE_SKIP_KEYS or val is None:
-            continue
+
+    def _walk(val: Any) -> None:
         if isinstance(val, str):
             s = _strip_ruby(val)
             if s and s.lower() not in _COLOR_TOKENS:
                 texts.append(s)
-        elif isinstance(val, list):
+        elif isinstance(val, (list, tuple)):
             for item in val:
-                if isinstance(item, str):
-                    s = _strip_ruby(item)
-                    if s and s.lower() not in _COLOR_TOKENS:
-                        texts.append(s)
-                elif isinstance(item, (list, tuple)):
-                    for sub in item:
-                        if isinstance(sub, str):
-                            s = _strip_ruby(sub)
-                            if s and s.lower() not in _COLOR_TOKENS:
-                                texts.append(s)
-                elif isinstance(item, dict):
-                    for sub_v in item.values():
-                        if isinstance(sub_v, str):
-                            s = _strip_ruby(sub_v)
-                            if s and s.lower() not in _COLOR_TOKENS:
-                                texts.append(s)
+                _walk(item)
+        elif isinstance(val, dict):
+            for sub_v in val.values():
+                _walk(sub_v)
+
+    for key, val in spec.items():
+        if key not in _SLIDE_SKIP_KEYS and val is not None:
+            _walk(val)
     return texts
 
 
@@ -629,3 +603,13 @@ def reconcile_notebooklm_audit(
         updated_claims=claims,
         reprompt_block=_format_reprompt_block(flagged_rows),
     )
+
+
+from veraxi_ymmp.editorial.claim_reconcile import (  # noqa: E402
+    _DERIV_UNIT_SUFFIX_RE as _DERIV_UNIT_SUFFIX_RE,
+    _extract_unit_operands as _extract_unit_operands,
+    _merge_confirming_evidence as _merge_confirming_evidence,
+    _synthesize_derived_claim_from_pool as _synthesize_derived_claim_from_pool,
+    match_unmatched_cut_to_existing_claims as match_unmatched_cut_to_existing_claims,
+    promote_hook_and_thumbnail_central_claims as promote_hook_and_thumbnail_central_claims,
+)
