@@ -476,10 +476,22 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                         )
                         res = dataclasses.asdict(res_obj)
                         with _pipeline_lock:
-                            _pipeline_status[project_name] = {
-                                "status": "complete",
-                                "result": res
-                            }
+                            if res.get("success") is False:
+                                # The pipeline returns a failed result (e.g. the
+                                # fact-check gate blocked the run) instead of
+                                # raising; surface it as an error so the UI can
+                                # show the reason instead of a silent no-op.
+                                _pipeline_status[project_name] = {
+                                    "status": "error",
+                                    "error": " ".join(res.get("errors") or [])
+                                    or "Pipeline failed",
+                                    "result": res,
+                                }
+                            else:
+                                _pipeline_status[project_name] = {
+                                    "status": "complete",
+                                    "result": res
+                                }
                     except Exception as e:
                         logger.error(f"Pipeline error: {e}", exc_info=True)
                         with _pipeline_lock:

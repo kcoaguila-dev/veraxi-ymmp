@@ -112,6 +112,8 @@ export const VideoPreview: React.FC = () => {
             <span className="text-[12px] font-semibold text-[#F59E0B] animate-pulse">
               ⚡ 生成中 ({Math.round(pipelineStatus.progress || 0)}%)
             </span>
+          ) : pipelineStatus.status === 'error' ? (
+            <span className="text-[12px] font-semibold text-[#F87171]">✗ 生成失敗</span>
           ) : videoSrc ? (
             <span className="text-[12px] font-semibold text-[#34D399]">
               ✓ 生成完了 (qa_test.mp4)
@@ -188,6 +190,16 @@ export const VideoPreview: React.FC = () => {
               </div>
               <div className="text-[11px] text-[#64748B]">
                 長編動画（約8分）のため、音声合成・レンダリング完了まで少々お待ちください
+              </div>
+            </div>
+          ) : pipelineStatus.status === 'error' ? (
+            <div className="flex flex-col items-center justify-center w-full h-full text-center gap-3 p-6">
+              <div className="text-sm font-bold text-[#F87171]">✗ 動画生成がブロックされました</div>
+              <div className="text-xs text-[#FCA5A5] max-w-[520px] break-words">
+                {pipelineStatus.error || 'パイプラインがエラーを返しました'}
+              </div>
+              <div className="text-[11px] text-[#64748B]">
+                台本・監査パネルで問題を解消してから、再度「動画を生成」を実行してください
               </div>
             </div>
           ) : videoSrc ? (
