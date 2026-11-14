@@ -574,7 +574,7 @@ def audit_script_pacing(
                 severity="WARNING",
                 character=None,
                 message=f"B-roll slide held unchanged for >5 cuts at {len(stagnant_slides)} section(s): "
-                + ", ".join(f"Cut #{start+1} ({Path(path).name}, {streak} cuts)" for start, path, streak in stagnant_slides[:3]),
+                + ", ".join(f"Cut #{start} ({Path(path).name}, {streak} cuts)" for start, path, streak in stagnant_slides[:3]),
                 remedy=(
                     "Top rivals refresh visual stimuli every 3–4 cuts (10–15s). "
                     "Split long slides into multi-phase progressive reveals, data sub-views, or switch to character close-up reactions."

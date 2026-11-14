@@ -4,7 +4,7 @@ import { api, apiUrl } from '../../shared/api';
 import { LoudnessResult, QaResult } from '../../shared/types';
 
 export const VideoPreview: React.FC = () => {
-  const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus } = useStudioStore();
+  const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus, lastValidation } = useStudioStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -14,17 +14,43 @@ export const VideoPreview: React.FC = () => {
   const [qaResult, setQaResult] = useState<QaResult | null>(null);
   const [isRunningQa, setIsRunningQa] = useState(false);
 
+  const activeProjectRef = useRef(activeProjectName);
+  useEffect(() => {
+    activeProjectRef.current = activeProjectName;
+    // QA/loudness results belong to the project (and media revision) they
+    // were produced for; never carry them across a project switch.
+    setQaResult(null);
+    setLoudness(null);
+  }, [activeProjectName]);
+
   const handleQa = async () => {
     if (!activeProjectName) return;
+    const projectAtStart = activeProjectName;
     setIsRunningQa(true);
     try {
-      const res = await api.runProjectQa(activeProjectName);
+      const res = await api.runProjectQa(projectAtStart);
+      if (activeProjectRef.current !== projectAtStart) return;
       setQaResult(res);
     } catch (e) {
+      if (activeProjectRef.current !== projectAtStart) return;
       console.error(e);
       alert('QA 検査に失敗しました (QA audit failed)');
     }
     setIsRunningQa(false);
+  };
+
+  const handleGenerate = () => {
+    if (lastValidation && !lastValidation.passed) {
+      const confirmed = window.confirm(
+        `⚠ 監査ゲート警告: Retention ${lastValidation.retention_score}/100` +
+        (lastValidation.fact_summary.unsupported > 0
+          ? ` / UNSUPPORTED ${lastValidation.fact_summary.unsupported}件`
+          : '') +
+        '\n監査を通過していませんが、動画生成を続行しますか？'
+      );
+      if (!confirmed) return;
+    }
+    runPipeline(true);
   };
 
   useEffect(() => {
@@ -166,6 +192,12 @@ export const VideoPreview: React.FC = () => {
         </button>
       </div>
 
+      {pipelineStatus.status === 'error' && videoSrc && (
+        <div className="mx-5 mt-3 bg-[#4C0519] border border-[#F43F5E]/40 text-[#FECDD3] text-[11.5px] font-semibold rounded-[8px] px-3 py-2 break-words">
+          ✗ 前回の生成は失敗しました（前回のプレビューはそのまま残しています）: {pipelineStatus.error || 'パイプラインがエラーを返しました'}
+        </div>
+      )}
+
       {/* 16:9 Video Canvas (Matches SVG lines 228-260) */}
       <div className="px-5 pt-3.5 pb-2.5">
         <div className="relative w-full aspect-video rounded-[10px] bg-gradient-to-b from-[#1E293B] to-[#090D16] border-[1.5px] border-[#334155] overflow-hidden shadow-inner">
@@ -192,7 +224,7 @@ export const VideoPreview: React.FC = () => {
                 長編動画（約8分）のため、音声合成・レンダリング完了まで少々お待ちください
               </div>
             </div>
-          ) : pipelineStatus.status === 'error' ? (
+          ) : pipelineStatus.status === 'error' && !videoSrc ? (
             <div className="flex flex-col items-center justify-center w-full h-full text-center gap-3 p-6">
               <div className="text-sm font-bold text-[#F87171]">✗ 動画生成がブロックされました</div>
               <div className="text-xs text-[#FCA5A5] max-w-[520px] break-words">
@@ -226,7 +258,7 @@ export const VideoPreview: React.FC = () => {
                 上の「⚡ 動画を生成 (プレビュー)」をクリックすると音声・立ち絵・字幕を自動合成します
               </div>
               <button
-                onClick={() => runPipeline(true)}
+                onClick={handleGenerate}
                 className="mt-1 bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white font-extrabold px-4 py-2 rounded-[8px] text-xs shadow"
               >
                 ⚡ 動画を生成 (プレビュー)

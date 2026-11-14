@@ -158,12 +158,14 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     newScript[index] = entry;
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const addScriptEntry = (entry: DirectorScriptEntry) => {
     if (!projectData) return;
     setProjectData({ ...projectData, script: [...projectData.script, entry] });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const deleteScriptEntry = (index: number) => {
@@ -172,6 +174,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     newScript.splice(index, 1);
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const moveScriptEntry = (index: number, direction: 'up' | 'down') => {
@@ -184,6 +187,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     [newScript[index], newScript[target]] = [newScript[target], newScript[index]];
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const splitScriptCuts = async () => {
@@ -192,6 +196,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const res = await api.splitScript(activeProjectName, projectData.script, 40);
       setProjectData({ ...projectData, script: res.script });
       setIsDirty(true);
+      setLastValidation(null);
     } catch (e) {
       console.error('Failed to split script', e);
     }
@@ -201,6 +206,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (!projectData) return;
     setProjectData({ ...projectData, script });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const saveScript = async () => {

@@ -46,21 +46,49 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
   const [isIngesting, setIsIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
 
+  const sourcesRequestRef = useRef(0);
   const reloadSources = useCallback(async () => {
     if (!activeProjectName) {
       setSources(null);
       return;
     }
+    const requestId = ++sourcesRequestRef.current;
     try {
-      setSources(await api.getSources(activeProjectName));
+      const res = await api.getSources(activeProjectName);
+      // A slower response for a previously selected project must not
+      // overwrite the current project's source list.
+      if (sourcesRequestRef.current === requestId) setSources(res);
     } catch {
-      setSources(null);
+      if (sourcesRequestRef.current === requestId) setSources(null);
     }
   }, [activeProjectName]);
 
   useEffect(() => {
     reloadSources();
   }, [reloadSources]);
+
+  // Evidence/dialogue drafts are per-project: stash them under the previous
+  // project's name on switch and restore the newly selected project's drafts,
+  // so text pasted for project A never leaks into project B.
+  const draftsRef = useRef<Record<string, { evidence: string; dialogue: string }>>({});
+  const prevProjectRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevProjectRef.current;
+    if (prev !== activeProjectName) {
+      if (prev) {
+        draftsRef.current[prev] = { evidence: evidenceMd, dialogue: dialogueMd };
+      }
+      if (activeProjectName) {
+        const stash = draftsRef.current[activeProjectName];
+        setEvidenceMd(stash?.evidence ?? '');
+        setDialogueMd(stash?.dialogue ?? '');
+      } else {
+        setEvidenceMd('');
+        setDialogueMd('');
+      }
+      prevProjectRef.current = activeProjectName;
+    }
+  }, [activeProjectName, evidenceMd, dialogueMd]);
 
   const handleGenerateDossier = async () => {
     if (!topic.trim()) return;
@@ -206,11 +234,20 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
           ) : (
             <>
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="ソースファイルをアップロード"
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); uploadFiles(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-[1.5px] border-dashed rounded-[10px] p-4 text-center text-[12px] cursor-pointer transition-colors ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                className={`border-[1.5px] border-dashed rounded-[10px] p-4 text-center text-[12px] cursor-pointer transition-colors focus:outline-none focus:border-[#10B981] ${
                   isDragging ? 'border-[#10B981] bg-[#064E3B]/40 text-[#A7F3D0]' : 'border-[#334155] text-[#94A3B8] hover:border-[#475569]'
                 }`}
               >

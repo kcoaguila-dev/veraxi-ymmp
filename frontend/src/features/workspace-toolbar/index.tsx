@@ -18,6 +18,12 @@ export const WorkspaceToolbar: React.FC = () => {
   }, [backendReady]);
 
   const handleChangeWorkspace = async () => {
+    if (isDirty) {
+      const confirmed = window.confirm(
+        '未保存の台本編集があります。ワークスペースを切り替えると変更が破棄されますがよろしいですか？'
+      );
+      if (!confirmed) return;
+    }
     try {
       let selected: string | null = null;
       if (isTauriRuntime()) {

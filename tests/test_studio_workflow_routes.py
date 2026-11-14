@@ -126,7 +126,7 @@ def test_sources_file_upload_lists_sha256(api_server: str, workspace: Path) -> N
     assert payload["success"] is True
     entry = next(s for s in payload["sources"] if s["name"] == "filing.txt")
     assert entry["sha256"] == hashlib.sha256(content.encode("utf-8")).hexdigest()
-    assert payload["sources_manifest"]["filing"]["filename"] == "filing.txt"
+    assert payload["sources_manifest"]["filing.txt"]["filename"] == "filing.txt"
 
     res = requests.get(f"{api_server}/api/projects/{slug}/sources")
     assert res.status_code == 200
@@ -296,3 +296,116 @@ def test_qa_maps_frames_to_media_urls(api_server: str, workspace: Path) -> None:
     )
     check_names = {c["name"] for c in data["checks"]}
     assert check_names == {"tts_coverage", "speaker_coverage", "thumbnail", "keyframes"}
+
+
+# ------------------------------------------------------- CodeRabbit fixes ---
+
+def test_ideate_conflicting_topic_returns_409(api_server: str) -> None:
+    first = _ideate(api_server)
+    assert first.status_code == 200
+    slug = first.json()["project_name"]
+    res = _ideate(api_server, topic="A Completely Different Topic", project_name=slug)
+    assert res.status_code == 409
+    # Re-ideating the same topic stays idempotent.
+    again = _ideate(api_server, project_name=slug)
+    assert again.status_code == 200
+
+
+def test_ingest_unparseable_dialogue_rejected_script_unchanged(
+    api_server: str, workspace: Path
+) -> None:
+    slug = _ideate(api_server).json()["project_name"]
+    ok = requests.post(
+        f"{api_server}/api/projects/{slug}/ingest",
+        json={"dialogue_markdown": EVIDENCE_DIALOGUE_MD},
+    )
+    assert ok.status_code == 200
+    before = (workspace / "projects" / slug / "script.json").read_text(encoding="utf-8")
+    res = requests.post(
+        f"{api_server}/api/projects/{slug}/ingest",
+        json={"dialogue_markdown": "ただのメモです。会話形式ではありません。"},
+    )
+    assert res.status_code == 400
+    after = (workspace / "projects" / slug / "script.json").read_text(encoding="utf-8")
+    assert after == before
+
+
+def test_ingest_evidence_before_dialogue_rebuilds_claims(
+    api_server: str, workspace: Path
+) -> None:
+    slug = _ideate(api_server).json()["project_name"]
+    res = requests.post(
+        f"{api_server}/api/projects/{slug}/ingest",
+        json={"evidence_markdown": EVIDENCE_MD},
+    )
+    assert res.status_code == 200
+    assert res.json()["claim_count"] == 0
+    res = requests.post(
+        f"{api_server}/api/projects/{slug}/ingest",
+        json={"dialogue_markdown": EVIDENCE_DIALOGUE_MD},
+    )
+    assert res.status_code == 200
+    assert res.json()["claim_count"] >= 1
+    claims = json.loads(
+        (workspace / "projects" / slug / "claims.json").read_text(encoding="utf-8")
+    )
+    assert len(claims) >= 1
+
+
+def test_sources_same_stem_files_keep_distinct_manifest_entries(
+    api_server: str, workspace: Path
+) -> None:
+    slug = _ideate(api_server).json()["project_name"]
+    for filename, content in (("report.txt", "text body"), ("report.md", "# md body")):
+        res = requests.post(
+            f"{api_server}/api/projects/{slug}/sources",
+            json={"filename": filename, "content": content},
+        )
+        assert res.status_code == 200
+    manifest = json.loads(
+        (workspace / "projects" / slug / "sources" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["report.txt"]["filename"] == "report.txt"
+    assert manifest["report.md"]["filename"] == "report.md"
+
+
+def test_project_symlink_escape_rejected(api_server: str, workspace: Path) -> None:
+    outside = workspace / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("outside", encoding="utf-8")
+    (workspace / "projects").mkdir(exist_ok=True)
+    link = workspace / "projects" / "linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted on this platform")
+    res = requests.get(f"{api_server}/api/projects/linked/sources")
+    assert res.status_code == 400
+
+
+def test_qa_passed_requires_keyframes_check(api_server: str) -> None:
+    slug = _ideate(api_server).json()["project_name"]
+    fake_report = {
+        "success": True,
+        "video_path": "x.mp4",
+        "video_duration_sec": 5.0,
+        "total_cuts": 1,
+        "missing_audio": [],
+        "coverage_issues": [],
+        "thumbnail_issues": [],
+        "thumbnail_path": None,
+        "frames": {},
+    }
+    with patch(
+        "veraxi_ymmp.app.studio_workflow_routes.run_project_qa",
+        return_value=fake_report,
+    ):
+        res = requests.post(f"{api_server}/api/projects/{slug}/qa", json={})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert data["passed"] is False
+    keyframes = [c for c in data["checks"] if c["name"] == "keyframes"][0]
+    assert keyframes["passed"] is False

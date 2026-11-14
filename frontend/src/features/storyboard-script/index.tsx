@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl } from '../../shared/api';
 import { auditionManager, AuditionState } from '../../shared/audio-manager';
@@ -200,11 +200,17 @@ export const StoryboardScript: React.FC = () => {
     });
   };
 
+  const activeProjectRef = useRef(activeProjectName);
+  useEffect(() => {
+    activeProjectRef.current = activeProjectName;
+  }, [activeProjectName]);
+
   const handleValidate = async () => {
     if (!activeProjectName) return;
+    const projectAtStart = activeProjectName;
     if (isDirty) {
       const saved = await saveScript();
-      if (saved && saved.success === false) {
+      if (!saved || saved.success !== true) {
         setAuditError('監査前に台本を保存できませんでした。保存エラーを確認してください。');
         return;
       }
@@ -212,10 +218,14 @@ export const StoryboardScript: React.FC = () => {
     setIsValidating(true);
     setAuditError(null);
     try {
-      const res = await api.validateProject(activeProjectName);
+      const res = await api.validateProject(projectAtStart);
+      // The user may have switched projects while the audit ran; a stale
+      // result must not land on the newly selected project.
+      if (activeProjectRef.current !== projectAtStart) return;
       setLastValidation(res);
       setShowAuditDetails(true);
     } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
       setAuditError(e?.data?.error || e?.message || '監査実行に失敗しました');
     }
     setIsValidating(false);

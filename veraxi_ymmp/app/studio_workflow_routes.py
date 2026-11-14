@@ -64,10 +64,27 @@ _FRAME_LABELS = {
 
 
 def _project_dir(project_name: str) -> Path:
-    """Resolve ``projects/<name>`` inside the workspace, rejecting traversal."""
+    """Resolve ``projects/<name>`` inside the workspace, rejecting traversal.
+
+    The name check alone is not enough: ``projects/<name>`` itself could be a
+    symlink or junction pointing outside the workspace, so the resolved path
+    must stay inside the resolved projects root.
+    """
     if ".." in project_name or "/" in project_name or "\\" in project_name:
         raise ValueError("Invalid project name")
-    return get_workspace_root() / "projects" / project_name
+    projects_root = (get_workspace_root() / "projects").resolve()
+    proj_dir = (projects_root / project_name).resolve()
+    if proj_dir.parent != projects_root:
+        raise ValueError("Invalid project name")
+    return proj_dir
+
+
+def _contained_target(directory: Path, filename: str) -> Path:
+    """Join ``filename`` onto ``directory``, rejecting symlink escapes."""
+    target = (directory / filename).resolve()
+    if target.parent != directory.resolve():
+        raise ValueError(f"Path escapes its directory: {filename}")
+    return target
 
 
 def _load_json_file(path: Path, default: Any) -> Any:
@@ -131,6 +148,15 @@ def handle_ideate(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         proj_dir = _project_dir(slug)
     except ValueError:
         return 400, {"success": False, "error": "Invalid project name"}
+    existing_manifest = _load_manifest(proj_dir)
+    if existing_manifest.get("topic") and existing_manifest["topic"] != topic:
+        return 409, {
+            "success": False,
+            "error": (
+                f"Project '{slug}' already exists for a different topic "
+                f"('{existing_manifest['topic']}'); choose another project_name"
+            ),
+        }
     (proj_dir / "sources").mkdir(parents=True, exist_ok=True)
 
     dossier = generate_dossier_markdown(topic, archetype)
@@ -215,10 +241,13 @@ def _store_file_source(
 
     sources_dir = proj_dir / "sources"
     sources_dir.mkdir(parents=True, exist_ok=True)
-    target = sources_dir / filename
+    try:
+        target = _contained_target(sources_dir, filename)
+    except ValueError:
+        return 400, {"success": False, "error": "Source path escapes the sources directory"}
     target.write_bytes(data)
     manifest = _load_manifest(proj_dir)
-    manifest[target.stem] = {
+    manifest[target.name] = {
         "title": filename,
         "filename": filename,
         "sha256": compute_file_sha256(target),
@@ -273,9 +302,16 @@ def handle_ingest(
         }
 
     script: List[Dict[str, Any]] = _load_script(proj_dir)
+    dialogue_ingested = False
     if isinstance(dialogue_md, str) and dialogue_md.strip():
         entries = parse_markdown_dialogue(dialogue_md)
+        if not entries:
+            return 400, {
+                "success": False,
+                "error": "dialogue_markdown contained no recognizable dialogue lines; script left unchanged",
+            }
         script = [dict(e) for e in entries]
+        dialogue_ingested = True
         backup_project_script(proj_dir, reason="studio_ingest")
         (proj_dir / "dialogue_raw.md").write_text(dialogue_md, encoding="utf-8")
         (proj_dir / "script.json").write_text(
@@ -287,11 +323,23 @@ def handle_ingest(
     if claims_path.is_file():
         existing = _load_json_file(claims_path, [])
         claim_count = len(existing) if isinstance(existing, list) else 0
+    effective_evidence: Optional[str] = None
     if isinstance(evidence_md, str) and evidence_md.strip():
+        effective_evidence = evidence_md
         (proj_dir / "evidence.md").write_text(evidence_md, encoding="utf-8")
+    elif dialogue_ingested:
+        # Evidence may have been ingested before any dialogue existed; its
+        # claims were built against an empty script. Rebuild them now that
+        # the script is known instead of leaving the stale empty ledger.
+        stored_evidence = proj_dir / "evidence.md"
+        if stored_evidence.is_file():
+            stored_text = stored_evidence.read_text(encoding="utf-8")
+            if stored_text.strip():
+                effective_evidence = stored_text
+    if effective_evidence is not None:
         claims = ingest_notebooklm_markdown_to_claims(
             script,
-            evidence_md,
+            effective_evidence,
             manifest=_load_manifest(proj_dir) or None,
             sources_dir=proj_dir / "sources",
         )
@@ -468,7 +516,8 @@ def handle_qa(project_name: str) -> Tuple[int, Dict[str, Any]]:
     ]
     return 200, {
         "success": bool(report.get("success")),
-        "passed": bool(report.get("success")),
+        "passed": bool(report.get("success"))
+        and all(check["passed"] for check in checks),
         "checks": checks,
         "frames": frames,
         "missing_audio": missing_audio,

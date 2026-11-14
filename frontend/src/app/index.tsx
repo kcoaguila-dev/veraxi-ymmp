@@ -89,11 +89,12 @@ export const App: React.FC = () => {
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(480px,46%)_1fr] gap-5 p-4 lg:p-5 overflow-hidden">
           {/* LEFT WORKSPACE: Step 1-2 RESEARCH PANEL or STORYBOARD & WEB-AI COPY-PASTE BRIDGE */}
           <section className="h-full overflow-hidden rounded-[14px] bg-[#111827] border border-[#1E293B] shadow-[0_6px_20px_rgba(0,0,0,0.4)] flex flex-col">
-            {activeStep === 0 ? (
+            {/* ResearchDossier stays mounted (hidden) on other steps so
+                un-ingested evidence/dialogue drafts survive step changes. */}
+            <div className={activeStep === 0 ? 'h-full' : 'hidden'}>
               <ResearchDossier onIngestDone={() => setActiveStep(1)} />
-            ) : (
-              <StoryboardScript />
-            )}
+            </div>
+            {activeStep !== 0 && <StoryboardScript />}
           </section>
 
           {/* RIGHT WORKSPACE: 2. PREVIEW PLAYER + 3. YOUTUBE UPLOAD CARD */}
