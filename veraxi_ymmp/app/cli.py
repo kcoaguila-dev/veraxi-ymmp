@@ -468,6 +468,15 @@ def _cmd_ingest_script(argv: list[str]) -> None:
 
     content = md_path.read_text(encoding="utf-8")
     table_rows = parse_markdown_evidence_table(content)
+    manifest_path = Path(args.manifest) if args.manifest else out_path.parent / "sources" / "manifest.json"
+    if not manifest_path.is_file() and not args.manifest:
+        manifest_path = md_path.parent / "sources" / "manifest.json"
+    manifest_data = None
+    if manifest_path.is_file():
+        try:
+            manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
 
     if args.provider:
         from veraxi_ymmp.app.script_provider import (
@@ -481,7 +490,13 @@ def _cmd_ingest_script(argv: list[str]) -> None:
                 topic_name = str(json.loads(seed_path.read_text(encoding="utf-8")).get("topic") or topic_name)
             except Exception:
                 pass
-        validator = build_project_gate_validator(out_path.parent, audit_pacing=True, audit_facts=True)
+        validator = build_project_gate_validator(
+            out_path.parent,
+            audit_pacing=True,
+            audit_facts=True,
+            evidence_markdown=content if table_rows else None,
+            manifest_data=manifest_data,
+        )
         script_entries = generate_script_file(
             args.provider, topic_name, content, out_path,
             out_path.parent / "script_prompt.md", extra_validator=validator,
@@ -493,15 +508,15 @@ def _cmd_ingest_script(argv: list[str]) -> None:
 
     # If evidence table is present or --claims-out specified, ingest claims.json
     if table_rows or args.claims_out:
-        manifest_path = Path(args.manifest) if args.manifest else md_path.parent / "sources" / "manifest.json"
-        manifest_data = None
         if manifest_path.is_file():
             try:
                 manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        claims = ingest_notebooklm_markdown_to_claims(script_entries, content, manifest=manifest_data)
-        claims_path = Path(args.claims_out) if args.claims_out else md_path.parent / "claims.json"
+        claims = ingest_notebooklm_markdown_to_claims(
+            script_entries, content, manifest=manifest_data, sources_dir=out_path.parent / "sources"
+        )
+        claims_path = Path(args.claims_out) if args.claims_out else out_path.parent / "claims.json"
         claims_path.write_text(claims_to_json(claims), encoding="utf-8")
         sys.stdout.write(f"Successfully generated {len(claims)} claims -> {claims_path}\n")
 

@@ -774,7 +774,7 @@ def render_from_manifest(
 
     for spec in specs:
         stype = spec.get("type", "metric")
-        fname = spec.get("filename", "slide.png")
+        fname = str(spec.get("filename", "slide.png")).replace("\\", "/").removeprefix("broll/")
         dest = out_dir / fname
         theme_color = resolve_color(spec.get("theme_color", spec.get("color", "blue")))
         spec_vertical = bool(spec.get("is_vertical", resolved_vertical))

@@ -23,7 +23,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from veraxi_ymmp.core.constants import DEFAULT_SPEAKER_MAP
 from veraxi_ymmp.core.schema import get_director_script_schema
@@ -324,10 +324,73 @@ def _validate_cuts_and_broll(
     return errors
 
 
+def _run_fact_gate_check(
+    resolved_dir: Path,
+    payload: Dict[str, Any],
+    script_entries: Sequence[Any],
+    evidence_markdown: Optional[str],
+    manifest_data: Optional[Dict[str, Any]],
+) -> List[str]:
+    """Build claims from NotebookLM evidence when present and run audit_project_facts."""
+    from veraxi_ymmp.editorial.script_ingest import (
+        ingest_notebooklm_markdown_to_claims,
+        parse_markdown_evidence_table,
+    )
+    from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
+    from veraxi_ymmp.epistemic.facts import claims_to_json
+
+    ev_text = evidence_markdown
+    if ev_text is None and (resolved_dir / "evidence.md").is_file():
+        ev_text = (resolved_dir / "evidence.md").read_text(encoding="utf-8")
+
+    claims_path = resolved_dir / "claims.json"
+    if ev_text is not None and parse_markdown_evidence_table(ev_text):
+        mf = manifest_data
+        if mf is None and (resolved_dir / "sources" / "manifest.json").is_file():
+            try:
+                mf = json.loads((resolved_dir / "sources" / "manifest.json").read_text(encoding="utf-8"))
+            except Exception:
+                mf = None
+        claims = ingest_notebooklm_markdown_to_claims(
+            script_entries, ev_text, manifest=mf, sources_dir=resolved_dir / "sources"
+        )
+        claims_path.write_text(claims_to_json(claims), encoding="utf-8")
+
+    if not claims_path.is_file():
+        return []
+
+    tmp_script = resolved_dir / ".candidate_script.tmp.json"
+    backups: List[Tuple[Path, Optional[str]]] = []
+    try:
+        tmp_script.write_text(
+            json.dumps(list(script_entries), indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        for fname, key in (("broll_manifest.json", "broll_manifest"), ("thumbnail_config.json", "thumbnail_config")):
+            val = payload.get(key)
+            if val:
+                fpath = resolved_dir / fname
+                backups.append((fpath, fpath.read_text(encoding="utf-8") if fpath.is_file() else None))
+                fpath.write_text(json.dumps(val, indent=2, ensure_ascii=False), encoding="utf-8")
+        outcome = audit_project_facts(tmp_script)
+        return [
+            f"[FACTS] {r.claim.id} (cut {r.claim.cut_index}) {r.verdict.value}: {r.reason}"
+            for r in outcome.blockers
+        ]
+    finally:
+        tmp_script.unlink(missing_ok=True)
+        for fpath, prev in backups:
+            if prev is None:
+                fpath.unlink(missing_ok=True)
+            else:
+                fpath.write_text(prev, encoding="utf-8")
+
+
 def build_project_gate_validator(
     project_dir: Path,
     audit_pacing: bool = True,
     audit_facts: bool = True,
+    evidence_markdown: Optional[str] = None,
+    manifest_data: Optional[Dict[str, Any]] = None,
 ) -> PayloadValidator:
     """Build a validator enforcing retention pacing, slide load, and fact gates."""
     resolved_dir = project_dir.resolve()
@@ -350,23 +413,12 @@ def build_project_gate_validator(
                     or [f"[PACING] Retention score {report.retention_score}/100 is below 80."]
                 )
 
-        claims_path = resolved_dir / "claims.json"
-        if audit_facts and claims_path.is_file():
-            from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
-            tmp_script = resolved_dir / ".candidate_script.tmp.json"
-            try:
-                tmp_script.write_text(
-                    json.dumps(script_entries, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
+        if audit_facts:
+            errors.extend(
+                _run_fact_gate_check(
+                    resolved_dir, payload, script_entries, evidence_markdown, manifest_data
                 )
-                outcome = audit_project_facts(tmp_script)
-                for r in outcome.blockers:
-                    errors.append(
-                        f"[FACTS] {r.claim.id} (cut {r.claim.cut_index}) "
-                        f"{r.verdict.value}: {r.reason}"
-                    )
-            finally:
-                tmp_script.unlink(missing_ok=True)
+            )
         return errors
 
     return _validate
@@ -427,13 +479,19 @@ class ManualHandoffProvider:
                 raise ValueError("Manual handoff aborted: pasted reply was empty.")
             try:
                 payload = validate_pasted_payload(raw)
+                thumb_cfg = _extract_thumbnail_config(raw)
                 if self._extra_validator is not None:
-                    extra_errors = self._extra_validator(payload)
+                    val_payload = (
+                        {**payload, "thumbnail_config": thumb_cfg}
+                        if thumb_cfg is not None
+                        else payload
+                    )
+                    extra_errors = self._extra_validator(val_payload)
                     if extra_errors:
                         raise _MultiValidationError(extra_errors)
                 self.last_payload = payload
                 self.last_broll_manifest = payload["broll_manifest"]
-                self.last_thumbnail_config = _extract_thumbnail_config(raw)
+                self.last_thumbnail_config = thumb_cfg
                 entries: List[DirectorScriptEntry] = payload["script"]
                 return entries
             except ValueError as exc:

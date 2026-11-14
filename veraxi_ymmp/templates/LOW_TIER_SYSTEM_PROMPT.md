@@ -67,7 +67,7 @@ Place slide definition objects in the top-level `"broll_manifest"` array of the 
 ```json
 {
   "type": "vs",
-  "filename": "broll/slide_01.png",
+  "filename": "slide_01.png",
   "title": "世間の誤解 vs 技術の実態",
   "hero_title": "表面的な楽観 vs 物理的な制約",
   "left_box": ["一般的なイメージ", "設定変更だけで完全回避", "amber"],
@@ -81,7 +81,7 @@ Place slide definition objects in the top-level `"broll_manifest"` array of the 
 ```json
 {
   "type": "metric",
-  "filename": "broll/slide_02.png",
+  "filename": "slide_02.png",
   "title": "公式セキュリティ評価",
   "hero_metric": "CVSS 9.8 Critical",
   "status_pill": "NVD公式公表値",
@@ -95,7 +95,7 @@ Place slide definition objects in the top-level `"broll_manifest"` array of the 
 ```json
 {
   "type": "overview",
-  "filename": "broll/slide_03.png",
+  "filename": "slide_03.png",
   "title": "現場が直ちに実行すべき3つの防衛策",
   "cards": [
     ["01", "公式ベンダーパッチの即時適用", "emerald"],
@@ -180,7 +180,7 @@ Place slide definition objects in the top-level `"broll_manifest"` array of the 
   "broll_manifest": [
     {
       "type": "vs",
-      "filename": "broll/slide_01.png",
+      "filename": "slide_01.png",
       "title": "世間の誤解 vs 技術の実態",
       "hero_title": "絶対の信頼 vs 一行の欠陥",
       "left_box": [

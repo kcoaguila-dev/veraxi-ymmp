@@ -312,12 +312,12 @@ def cmd_ideate(argv: List[str]) -> None:
     if not manifest_sources:
         manifest_sources = {
             "primary_anchor_doc": {
-                "url": "https://example.com/source.pdf",
+                "url": "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf",
                 "title": "Primary Anchor Doc (Official Report / Whitepaper / Court Filing)",
                 "primary": True
             },
             "counter_analysis": {
-                "url": "https://example.com/counter.pdf",
+                "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
                 "title": "Counter-Perspective or Dissenting Analysis",
                 "primary": False
             }

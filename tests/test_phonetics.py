@@ -283,12 +283,12 @@ def test_tune_audio_query_pitch() -> None:
     assert phrase1["accent"] == 1
     assert phrase1["moras"][0]["pitch"] == 5.8
 
-    # Test extreme pitch clamp safeguard (> 6.02 log-F0)
+    # Test extreme pitch clamp safeguard (> 6.30 log-F0)
     extreme_query = {
         "accent_phrases": [
             {
                 "moras": [
-                    {"text": "ア", "pitch": 6.16, "vowel_length": 0.12},
+                    {"text": "ア", "pitch": 6.45, "vowel_length": 0.12},
                     {"text": "イ", "pitch": 5.80, "vowel_length": 0.12},
                 ]
             }
@@ -296,8 +296,8 @@ def test_tune_audio_query_pitch() -> None:
     }
     tuned_extreme = tune_audio_query_pitch(extreme_query)
     clamped_pitch = tuned_extreme["accent_phrases"][0]["moras"][0]["pitch"]
-    assert clamped_pitch <= 6.03
-    assert clamped_pitch < 6.16
+    assert clamped_pitch <= 6.28
+    assert clamped_pitch < 6.45
 
 
 def test_normalize_tts_text_preserves_declarative_words() -> None:

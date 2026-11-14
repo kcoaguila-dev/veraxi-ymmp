@@ -470,7 +470,7 @@ def run_check_commands(
         )
     for kind, cmd in commands:
         proc = subprocess.run(
-            cmd, cwd=root, capture_output=True, text=True, timeout=900
+            cmd, cwd=root, capture_output=True, text=True, timeout=900, stdin=subprocess.DEVNULL
         )
         if proc.returncode != 0:
             output = (proc.stdout + proc.stderr).strip()
@@ -480,7 +480,7 @@ def run_check_commands(
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60
+        ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL
     )
 
 

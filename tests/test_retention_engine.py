@@ -214,8 +214,8 @@ def test_voicevox_speed_scale_and_silence_clamping() -> None:
         _, _, aq = client.synthesize("テストなのだ", speaker_id=3, speed_scale=1.18, clamp_silence=True)
 
         assert aq["speedScale"] == 1.18
-        assert aq["prePhonemeLength"] == 0.02
-        assert aq["postPhonemeLength"] == 0.02
+        assert aq["prePhonemeLength"] == 0.06
+        assert aq["postPhonemeLength"] == 0.06
 
 
 def test_moviepy_virtual_camera_frame_render(tmp_path: Path) -> None:

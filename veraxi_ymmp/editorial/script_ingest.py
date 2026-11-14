@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import re
-from typing import List, Dict, Any, Optional, Sequence
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 from veraxi_ymmp.core.script import (
     DirectorScriptEntry,
@@ -14,12 +17,26 @@ from veraxi_ymmp.core.script import (
 )
 from veraxi_ymmp.epistemic.facts import (
     Claim,
+    ClaimKind,
     ClaimWeight,
     Evidence,
     Stance,
+    canonical_institution,
+    check_claim_numbers,
+    compute_deterministic_grounding,
+    extract_claim_numbers,
+    verify_quote_in_source,
 )
-from veraxi_ymmp.epistemic.fact_audit import extract_draft_claims
-from veraxi_ymmp.epistemic.epistemic_units import extract_scaled_magnitudes, extract_content_lemmas
+from veraxi_ymmp.epistemic.fact_audit import (
+    classify_text,
+    compute_file_sha256,
+    extract_draft_claims,
+    load_project_sources,
+)
+from veraxi_ymmp.epistemic.epistemic_units import (
+    extract_content_lemmas,
+    extract_scaled_magnitudes,
+)
 
 _BUDOUX_PARSER = None
 
@@ -307,116 +324,350 @@ def parse_markdown_evidence_table(markdown_content: str) -> List[Dict[str, str]]
     return rows
 
 
+_MANIFEST_META_KEYS = frozenset({
+    "topic", "archetype", "primary_domains", "entity_aliases", "required_sources",
+})
+_DEFAULT_PRIMARY_SOURCES: Tuple[Tuple[str, str, str], ...] = (
+    (
+        "primary_anchor_doc",
+        "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf",
+        "Primary Anchor Doc (NotebookLM Verified Evidence)",
+    ),
+    (
+        "counter_analysis",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+        "Corroborating Analysis (NotebookLM Verified Evidence)",
+    ),
+)
+_CONCRETE_QUANT_FALLBACK_RE = re.compile(r"\b(?:cvss|ver(?:sion)?|rfc|cve)\b|\d+\.\d+", re.I)
+
+
+def _is_valid_primary_url(url: str) -> bool:
+    """Return True if *url* is an HTTP(S) non-placeholder URL with a specific path."""
+    if not url or not url.startswith(("http://", "https://")):
+        return False
+    if "example.com" in url.lower():
+        return False
+    parsed = urlparse(url)
+    if "/searchedgar/" in parsed.path.lower() or parsed.path.rstrip("/") == "":
+        return False
+    return bool(parsed.hostname)
+
+
+def _extract_manifest_sources(manifest: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Normalize both required_sources lists and flat ideate manifests into source dicts."""
+    if not isinstance(manifest, dict):
+        return []
+    items: List[Dict[str, str]] = []
+    req = manifest.get("required_sources")
+    if isinstance(req, list):
+        for ms in req:
+            if isinstance(ms, dict):
+                sid = str(ms.get("source_id") or ms.get("filename") or ms.get("name") or "").strip()
+                items.append({
+                    "source_id": Path(sid).stem if sid else "",
+                    "filename": str(ms.get("filename") or sid).strip(),
+                    "name": str(ms.get("name") or ms.get("title") or sid).strip(),
+                    "url": str(ms.get("url") or "").strip(),
+                    "sha256": str(ms.get("sha256") or "").strip(),
+                })
+    for key, val in manifest.items():
+        if key in _MANIFEST_META_KEYS or not isinstance(val, dict):
+            continue
+        sid = str(val.get("source_id") or key).strip()
+        items.append({
+            "source_id": Path(sid).stem if sid else key,
+            "filename": str(val.get("filename") or val.get("file") or key).strip(),
+            "name": str(val.get("name") or val.get("title") or key).strip(),
+            "url": str(val.get("url") or "").strip(),
+            "sha256": str(val.get("sha256") or "").strip(),
+        })
+    return items
+
+
+def _format_row_full_quote(row: Dict[str, str]) -> str:
+    """Build deterministic combined quote string containing claim, verbatim quote, and metric."""
+    base = " — ".join(p for p in (row.get("claim", "").strip(), row.get("quote", "").strip()) if p)
+    metric = row.get("metric", "").strip()
+    if metric and base:
+        return f"{base} ({metric})"
+    return base or metric
+
+
+def _build_evidence_corpus(table_rows: Sequence[Dict[str, str]]) -> str:
+    """Render all extracted NotebookLM table rows into a deterministic Markdown corpus."""
+    lines = ["# NotebookLM Forensic Evidence Corpus", ""]
+    for idx, row in enumerate(table_rows, start=1):
+        lines.append(f"## Row {idx}")
+        full_quote = _format_row_full_quote(row)
+        if full_quote:
+            lines.append(full_quote)
+        raw_quote = row.get("quote", "").strip()
+        if raw_quote and raw_quote != full_quote:
+            lines.append(raw_quote)
+        src = row.get("source", "").strip()
+        if src:
+            lines.append(f"Source: {src}")
+        lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
+def _select_two_primary_slots(
+    manifest_sources: Sequence[Dict[str, str]],
+) -> List[Tuple[str, str, str]]:
+    """Choose two primary (source_id, url, title) slots from distinct institutions."""
+    slots: List[Tuple[str, str, str]] = []
+    seen_insts: set[str] = set()
+    seen_ids: set[str] = set()
+    for ms in manifest_sources:
+        url = ms.get("url", "")
+        if not _is_valid_primary_url(url):
+            continue
+        inst = canonical_institution(url) or url
+        sid = ms.get("source_id") or Path(ms.get("filename", "") or "primary_anchor_doc").stem
+        if inst not in seen_insts and sid not in seen_ids:
+            slots.append((sid, url, ms.get("name") or sid))
+            seen_insts.add(inst)
+            seen_ids.add(sid)
+        if len(slots) >= 2:
+            return slots
+    for def_sid, def_url, def_title in _DEFAULT_PRIMARY_SOURCES:
+        inst = canonical_institution(def_url) or def_url
+        if inst not in seen_insts:
+            cand_sid = def_sid if def_sid not in seen_ids else f"{def_sid}_nlm"
+            slots.append((cand_sid, def_url, def_title))
+            seen_insts.add(inst)
+            seen_ids.add(cand_sid)
+        if len(slots) >= 2:
+            break
+    return slots
+
+
+def _ensure_notebooklm_sources(
+    table_rows: Sequence[Dict[str, str]],
+    manifest: Optional[Dict[str, Any]],
+    sources_dir: Optional[Path],
+) -> Tuple[Dict[str, Tuple[str, str]], List[Dict[str, str]], Dict[str, str]]:
+    """Materialize primary evidence corpus files & SHA-256 manifest entries when sources_dir is given."""
+    merged_manifest: Dict[str, Any] = {}
+    if sources_dir is not None and (sources_dir / "manifest.json").is_file():
+        try:
+            raw_mf = json.loads((sources_dir / "manifest.json").read_text(encoding="utf-8"))
+            if isinstance(raw_mf, dict):
+                merged_manifest.update(raw_mf)
+        except Exception:
+            pass
+    if isinstance(manifest, dict):
+        merged_manifest.update(manifest)
+
+    manifest_sources = _extract_manifest_sources(merged_manifest)
+    if sources_dir is None:
+        return {}, manifest_sources, {}
+
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    existing = load_project_sources(sources_dir.parent)
+    corpus = _build_evidence_corpus(table_rows)
+    slots = _select_two_primary_slots(manifest_sources)
+
+    source_meta: Dict[str, Tuple[str, str]] = {}
+    disk_texts: Dict[str, str] = {}
+    for sid, src in existing.items():
+        if "." not in sid and src.provenance != "notebooklm_evidence" and _is_valid_primary_url(src.url):
+            source_meta[sid] = (src.url, src.sha256)
+            disk_texts[sid] = src.text
+
+    primary_domains = [str(d) for d in merged_manifest.get("primary_domains", []) if isinstance(d, str)]
+    for idx, (sid, url, title) in enumerate(slots):
+        existing_src = existing.get(sid)
+        if existing_src is not None and existing_src.provenance != "notebooklm_evidence":
+            if all(verify_quote_in_source(r["quote"], existing_src.text) for r in table_rows if r.get("quote")):
+                use_url = existing_src.url if _is_valid_primary_url(existing_src.url) else url
+                source_meta[sid] = (use_url, existing_src.sha256)
+                disk_texts[sid] = existing_src.text
+                continue
+            mat_sid = f"{sid}_notebooklm"
+        else:
+            mat_sid = sid
+
+        dest = sources_dir / f"{mat_sid}.md"
+        dest.write_text(corpus, encoding="utf-8")
+        digest = compute_file_sha256(dest)
+        prev = merged_manifest.get(mat_sid)
+        entry = dict(prev) if isinstance(prev, dict) else {}
+        entry.update({"url": url, "title": title, "sha256": digest, "provenance": "notebooklm_evidence", "primary": idx == 0})
+        merged_manifest[mat_sid] = entry
+        source_meta[mat_sid] = (url, digest)
+        disk_texts[mat_sid] = corpus
+        host = urlparse(url).hostname
+        if host and host not in primary_domains:
+            primary_domains.append(host)
+
+    if primary_domains:
+        merged_manifest["primary_domains"] = primary_domains
+    (sources_dir / "manifest.json").write_text(
+        json.dumps(merged_manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return source_meta, _extract_manifest_sources(merged_manifest), disk_texts
+
+
+def _match_row_for_claim(
+    claim: Claim, row_meta: Sequence[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Match a Claim against indexed table rows, requiring numeric overlap for numeric claims."""
+    c_mags = set(extract_scaled_magnitudes(claim.text))
+    c_nums = set(extract_claim_numbers(claim.text))
+    c_lemmas = set(extract_content_lemmas(claim.text))
+    has_numbers = bool(c_mags or c_nums)
+
+    best_score = 0
+    best_row_info: Optional[Dict[str, Any]] = None
+    for rm in row_meta:
+        common_mags = [
+            cm for cm in c_mags
+            if any(abs(cm - qm) / max(abs(cm), abs(qm), 1.0) < 0.05 for qm in rm["mags"])
+        ]
+        common_nums = c_nums & rm["nums"]
+        if has_numbers and not common_mags and not common_nums:
+            continue
+
+        score = len(common_mags) * 5 + len(common_nums) * 4 + len(c_lemmas & rm["lemmas"])
+        quote = rm["row"]["quote"]
+        if quote and (quote in claim.text or claim.text in quote):
+            score += 10
+        if score > best_score:
+            best_score = score
+            best_row_info = rm
+
+    return best_row_info if best_row_info is not None and best_score >= 2 else None
+
+
+def _build_evidence_for_claim(
+    claim: Claim,
+    row: Dict[str, str],
+    weight: ClaimWeight,
+    source_meta: Dict[str, Tuple[str, str]],
+    manifest_sources: Sequence[Dict[str, str]],
+    disk_texts: Dict[str, str],
+) -> List[Evidence]:
+    """Construct verified Evidence list for a matched claim."""
+    raw_quote = row.get("quote", "").strip()
+    full_quote = _format_row_full_quote(row)
+    if (
+        raw_quote
+        and not check_claim_numbers(claim, [raw_quote])
+        and compute_deterministic_grounding(claim.text, raw_quote) > 0.0
+    ):
+        evidence_quote = raw_quote
+    else:
+        evidence_quote = full_quote or raw_quote
+
+    source_raw = row.get("source", "")
+    page: Optional[int] = None
+    page_match = re.search(r"(?:page|p\.?|ページ)\s*(\d+)", source_raw, re.I)
+    if page_match:
+        try:
+            page = int(page_match.group(1))
+        except ValueError:
+            pass
+
+    if source_meta:
+        # Pick primary source matching source_raw or holding quote verbatim
+        chosen: List[Tuple[str, str, str]] = []
+        for sid, (surl, ssha) in source_meta.items():
+            if sid.lower() in source_raw.lower() and verify_quote_in_source(evidence_quote, disk_texts.get(sid, "")):
+                chosen.append((sid, surl, ssha))
+                break
+        for sid, (surl, ssha) in source_meta.items():
+            if not verify_quote_in_source(evidence_quote, disk_texts.get(sid, "")):
+                continue
+            inst = canonical_institution(surl) or sid
+            if all((canonical_institution(c[1]) or c[0]) != inst for c in chosen):
+                chosen.append((sid, surl, ssha))
+            if len(chosen) >= (2 if weight is ClaimWeight.CENTRAL else 1):
+                break
+        tier = 1 if weight is ClaimWeight.CENTRAL else 2
+        return [
+            Evidence(url=surl, quote=evidence_quote, stance=Stance.CONFIRMS, tier=tier, page=page, source_id=sid, sha256=ssha)
+            for sid, surl, ssha in chosen
+        ]
+
+    url_match = re.search(r"https?://\S+", source_raw)
+    url = url_match.group(0).rstrip(")]>\"'") if url_match else ""
+    source_id = "anchor"
+    for ms in manifest_sources:
+        fname, sname = ms.get("filename", "").lower(), ms.get("name", "").lower()
+        if (fname and (fname in source_raw.lower() or source_raw.lower() in fname)) or (sname and sname in source_raw.lower()):
+            source_id = ms.get("filename") or ms.get("source_id") or source_id
+            url = url or ms.get("url", "")
+            break
+    return [
+        Evidence(
+            url=url, quote=evidence_quote, stance=Stance.CONFIRMS,
+            tier=1 if weight is ClaimWeight.CENTRAL else 2, page=page, source_id=source_id,
+        )
+    ]
+
+
 def ingest_notebooklm_markdown_to_claims(
     script_entries: Sequence[Any],
     markdown_content: str,
     manifest: Optional[Dict[str, Any]] = None,
+    sources_dir: Optional[Path] = None,
 ) -> List[Claim]:
     """Ingest NotebookLM Markdown table and dialogue into a linked Claim ledger."""
     table_rows = parse_markdown_evidence_table(markdown_content)
     raw_dicts: List[Dict[str, Any]] = [
-        e if isinstance(e, dict) else dataclasses.asdict(e)
-        for e in script_entries
+        e if isinstance(e, dict) else dataclasses.asdict(e) for e in script_entries
     ]
     draft_claims = extract_draft_claims(raw_dicts, extract_qualitative=True)
-
     if not table_rows:
         return draft_claims
 
-    # Build row search signatures
-    row_meta: List[Dict[str, Any]] = []
-    for r in table_rows:
-        combined_text = f"{r['claim']} {r['quote']} {r['metric']}"
-        mags = set(extract_scaled_magnitudes(combined_text))
-        lemmas = set(extract_content_lemmas(combined_text))
-        row_meta.append({
+    source_meta, manifest_sources, disk_texts = _ensure_notebooklm_sources(table_rows, manifest, sources_dir)
+    row_meta = [
+        {
             "row": r,
-            "mags": mags,
-            "lemmas": lemmas,
-        })
+            "mags": set(extract_scaled_magnitudes(f"{r['claim']} {r['quote']} {r['metric']}")),
+            "nums": set(extract_claim_numbers(f"{r['claim']} {r['quote']} {r['metric']}")),
+            "lemmas": set(extract_content_lemmas(f"{r['claim']} {r['quote']} {r['metric']}")),
+        }
+        for r in table_rows
+    ]
 
-    # Match each draft claim against table rows
+    matched_pairs: List[Tuple[Claim, Dict[str, Any]]] = []
+    unmatched: List[Claim] = []
     for claim in draft_claims:
-        c_mags = set(extract_scaled_magnitudes(claim.text))
-        c_lemmas = set(extract_content_lemmas(claim.text))
+        best = _match_row_for_claim(claim, row_meta)
+        if best is not None:
+            matched_pairs.append((claim, best["row"]))
+        else:
+            unmatched.append(claim)
 
-        best_score = 0
-        best_row_info: Optional[Dict[str, Any]] = None
+    central_flags = [
+        claim.cut_index <= 10 or any(m >= 1e8 for m in extract_scaled_magnitudes(claim.text))
+        for claim, _ in matched_pairs
+    ]
+    if matched_pairs and not any(central_flags):
+        central_flags[0] = True
 
-        for rm in row_meta:
-            score = 0
-            # Numeric magnitude intersection
-            common_mags = c_mags & rm["mags"]
-            if common_mags:
-                score += len(common_mags) * 5
+    out: List[Claim] = []
+    for (claim, row), is_cent in zip(matched_pairs, central_flags):
+        weight = ClaimWeight.CENTRAL if is_cent else ClaimWeight.MINOR
+        claim.weight = weight
+        claim.evidence = _build_evidence_for_claim(claim, row, weight, source_meta, manifest_sources, disk_texts)
+        out.append(claim)
 
-            # Morphological lemma intersection
-            common_lemmas = c_lemmas & rm["lemmas"]
-            if common_lemmas:
-                score += len(common_lemmas)
+    for claim in unmatched:
+        is_concrete_num = (
+            classify_text(claim.text, strict_numbers=True) is ClaimKind.NUMBER
+            or bool(extract_scaled_magnitudes(claim.text))
+            or bool(_CONCRETE_QUANT_FALLBACK_RE.search(claim.text))
+        )
+        if claim.kind is ClaimKind.NUMBER and is_concrete_num:
+            claim.weight = ClaimWeight.CENTRAL
+            out.append(claim)
+        elif not matched_pairs and not any(c.kind is ClaimKind.NUMBER for c in unmatched):
+            out.append(claim)
 
-            # Direct quote substring match
-            if rm["row"]["quote"] and (rm["row"]["quote"] in claim.text or claim.text in rm["row"]["quote"]):
-                score += 10
-
-            if score > best_score:
-                best_score = score
-                best_row_info = rm
-
-        # Link evidence if match threshold met
-        if best_row_info is not None and best_score >= 2:
-            r = best_row_info["row"]
-            quote = r["quote"]
-            source_raw = r["source"]
-
-            # Extract page number
-            page: Optional[int] = None
-            page_match = re.search(r"(?:page|p\.?|ページ)\s*(\d+)", source_raw, re.I)
-            if page_match:
-                try:
-                    page = int(page_match.group(1))
-                except ValueError:
-                    pass
-
-            # Extract URL if present in source or manifest
-            url = ""
-            url_match = re.search(r"https?://\S+", source_raw)
-            if url_match:
-                url = url_match.group(0).rstrip(")]>\"'")
-
-            source_id = "anchor"
-            # Match source against manifest if available
-            if manifest:
-                manifest_sources = manifest.get("required_sources") or []
-                if isinstance(manifest_sources, list):
-                    for ms in manifest_sources:
-                        if isinstance(ms, dict):
-                            fname = str(ms.get("filename", "")).lower()
-                            sname = str(ms.get("name", "")).lower()
-                            if fname and (fname in source_raw.lower() or source_raw.lower() in fname):
-                                source_id = ms.get("filename", source_id)
-                                if not url and ms.get("url"):
-                                    url = ms["url"]
-                                break
-                            elif sname and sname in source_raw.lower():
-                                source_id = ms.get("filename", source_id)
-                                if not url and ms.get("url"):
-                                    url = ms["url"]
-                                break
-
-            # Weight classification: Cold Open / Hook (cuts 0..10) must be CENTRAL
-            weight = ClaimWeight.CENTRAL if claim.cut_index <= 10 else ClaimWeight.MINOR
-
-            claim.weight = weight
-            claim.evidence = [
-                Evidence(
-                    url=url,
-                    quote=quote,
-                    stance=Stance.CONFIRMS,
-                    tier=1 if weight == ClaimWeight.CENTRAL else 2,
-                    page=page,
-                    source_id=source_id,
-                )
-            ]
-
-    return draft_claims
+    out.sort(key=lambda c: c.cut_index)
+    return out

@@ -385,3 +385,134 @@ def test_ingest_script_pure_notebooklm_table_with_provider(tmp_path, monkeypatch
     assert (tmp_path / "broll_manifest.json").is_file()
     claims = json.loads((tmp_path / "claims.json").read_text(encoding="utf-8"))
     assert isinstance(claims, list)
+
+
+def test_handoff_validator_rejects_hallucinated_number_not_in_evidence(tmp_path):
+    md = tmp_path / "evidence.md"
+    md.write_text(
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        "Amazon capex reached $85 billion in FY2026. | primary_anchor_doc p.12 | "
+        "$85B (850億ドル) |\n",
+        encoding="utf-8",
+    )
+    validator = sp.build_project_gate_validator(tmp_path, audit_pacing=False, audit_facts=True)
+
+    bad_script = [
+        {"character": "ずんだもん", "text": "投資額は9999億ドルに達したのだ", "emotion": "surprised", "motion": "none", "image": None},
+    ]
+    bad_errors = validator({"script": bad_script, "broll_manifest": []})
+    assert any(err.startswith("[FACTS]") for err in bad_errors)
+
+    good_script = [
+        {"character": "四国めたん", "text": "投資額は850億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+    ]
+    good_errors = validator({"script": good_script, "broll_manifest": []})
+    assert good_errors == []
+
+
+def test_e2e_notebooklm_webchat_to_fact_audit_and_broll(tmp_path, monkeypatch):
+    from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
+    from veraxi_ymmp.graphics.broll import render_from_manifest
+
+    proj = tmp_path / "capex_reality"
+    cmd_ideate(["AI Capex Reality", "--archetype", "post_mortem", "--output", str(proj)])
+
+    md = proj / "evidence.md"
+    md.write_text(
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        "Amazon capex reached $85 billion in FY2026. | primary_anchor_doc p.12 | "
+        "$85B (850億ドル) |\n"
+        "| 2 | 深刻度は9.8の重大欠陥 | 2026 | "
+        "Critical score 9.8 remote failure risk. | counter_analysis p.2 | "
+        "Score 9.8 |\n",
+        encoding="utf-8",
+    )
+
+    def _c(char, text, emo="normal", img=None):
+        pos = "left" if char == "四国めたん" else "right"
+        return {
+            "character": char,
+            "character_position": pos,
+            "text": text,
+            "emotion": emo,
+            "motion": "none",
+            "bgm": None,
+            "sfx": None,
+            "image": img,
+        }
+
+    e2e_script = [
+        _c("ずんだもん", "巨額投資があれば必ず儲かるのだ！", "excited", None),
+        _c("四国めたん", "甘い幻想ですわ。設備投資は850億ドルですわ。", "smug", None),
+        _c("ずんだもん", "えっ！？", "surprised", None),
+        _c("四国めたん", "この巨額出費が利益を圧迫する現実ですわ。", "normal", "broll/slide_01.png"),
+        _c("ずんだもん", "850億ドルって一体どれほどの負担なのだ？", "confused", "broll/slide_01.png"),
+        _c("四国めたん", "償却費が雪だるま式に膨らみ続けますわ。", "normal", "broll/slide_01.png"),
+        _c("春日部つむぎ", "現場のインフラでも危険度9.8の障害が出たっす！", "angry", None),
+        _c("ずんだもん", "マジで！？", "surprised", None),
+        _c("四国めたん", "しかも境界設計の欠陥まで放置されていましたわ。", "angry", "broll/slide_02.png"),
+        _c("春日部つむぎ", "運用コストが現場を直撃してるっすよ。", "sad", "broll/slide_02.png"),
+        _c("四国めたん", "投資を急ぐあまり検証が追いつきませんの。", "normal", "broll/slide_02.png"),
+        _c("ずんだもん", "技術も予算も限界スレスレだったのだ…", "sad", None),
+        _c("四国めたん", "一次資料を直視しない企業から脱落しますわ。", "smug", None),
+        _c("春日部つむぎ", "現場の負荷を見落とすと取り返しがつかないっす。", "normal", None),
+        _c("四国めたん", "結局は資金規律を保てるかどうかの勝負ですわ。", "normal", None),
+        _c("ずんだもん", "財務の現実から目を背けちゃダメなのだ。", "normal", None),
+    ]
+    broll_specs = [
+        {
+            "type": "vs",
+            "filename": "broll/slide_01.png",
+            "title": "投資規模の比較",
+            "hero_title": "楽観予測 vs 実測数値",
+            "left_box": ["市場の期待", "コストは即回収可能", "amber"],
+            "right_box": ["一次資料の現実", "年間投資850億ドル", "rose"],
+            "bottom_text": "償却負担が利益を直撃",
+            "theme_color": "blue",
+        },
+        {
+            "type": "metric",
+            "filename": "slide_02.png",
+            "title": "公式評価指標",
+            "hero_metric": "Score 9.8",
+            "status_pill": "公式報告書",
+            "impact_tag": "重大",
+            "impact_text": "境界設計の欠陥が直撃する",
+            "theme_color": "rose",
+        },
+    ]
+    thumb_cfg = {
+        "badge": "一次資料検証",
+        "title_line1": "850億ドルの重圧",
+        "title_line2": "決算書が暴く現実",
+        "sub_hook": "投資回収の壁",
+    }
+    reply_obj = json.dumps(
+        {"script": e2e_script, "broll_manifest": broll_specs, "thumbnail_config": thumb_cfg},
+        ensure_ascii=False,
+    )
+    monkeypatch.setattr(sp, "_read_paste_from_stdin", lambda: reply_obj)
+
+    _cmd_ingest_script([str(md), "--provider", "manual"])
+
+    assert (proj / "script.json").is_file()
+    assert (proj / "claims.json").is_file()
+    assert (proj / "broll_manifest.json").is_file()
+    assert (proj / "thumbnail_config.json").is_file()
+
+    outcome = audit_project_facts(proj / "script.json")
+    assert not outcome.blocked, f"Unexpected fact blockers: {outcome.blockers}"
+
+    rendered = render_from_manifest(proj / "broll_manifest.json", proj / "broll")
+    assert len(rendered) == 2
+    assert (proj / "broll" / "slide_01.png").is_file()
+    assert (proj / "broll" / "slide_02.png").is_file()
+    assert not (proj / "broll" / "broll").exists()
