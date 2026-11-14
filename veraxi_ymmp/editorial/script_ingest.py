@@ -340,6 +340,9 @@ _DEFAULT_PRIMARY_SOURCES: Tuple[Tuple[str, str, str], ...] = (
         "Corroborating Analysis (NotebookLM Verified Evidence)",
     ),
 )
+_DEFAULT_PLACEHOLDER_URLS: frozenset[str] = frozenset(
+    url for _, url, _ in _DEFAULT_PRIMARY_SOURCES
+)
 _CONCRETE_QUANT_FALLBACK_RE = re.compile(r"\b(?:cvss|ver(?:sion)?|rfc|cve)\b|\d+\.\d+", re.I)
 
 
@@ -347,7 +350,13 @@ def _is_valid_primary_url(url: str) -> bool:
     """Return True if *url* is an HTTP(S) non-placeholder URL with a specific path."""
     if not url or not url.startswith(("http://", "https://")):
         return False
-    if "example.com" in url.lower():
+    low = url.lower()
+    if (
+        url in _DEFAULT_PLACEHOLDER_URLS
+        or "example.com" in low
+        or "0000000000" in url
+        or "cve-2026-0001" in low
+    ):
         return False
     parsed = urlparse(url)
     if "/searchedgar/" in parsed.path.lower() or parsed.path.rstrip("/") == "":

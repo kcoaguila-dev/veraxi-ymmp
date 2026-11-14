@@ -77,7 +77,7 @@ def _make_source_clip(path: Path) -> None:
          "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
          "-shortest", str(path)],
-        check=True, capture_output=True,
+        check=True, stdin=subprocess.DEVNULL, capture_output=True,
     )
 
 

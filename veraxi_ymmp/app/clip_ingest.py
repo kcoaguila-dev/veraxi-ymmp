@@ -63,7 +63,7 @@ def probe_video(path: Path) -> Optional[Dict[str, Any]]:
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-show_streams", "-show_format",
          "-of", "json", str(path)],
-        capture_output=True, text=True, timeout=60,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60,
     )
     if proc.returncode != 0:
         return None
@@ -111,7 +111,9 @@ def _normalize(
     cmd += ["-map", "0:v:0", "-map", "0:a:0" if probe["has_audio"] else "1:a:0",
             "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest", str(dst)]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    proc = subprocess.run(
+        cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=1800
+    )
     if proc.returncode != 0 or not dst.is_file():
         raise RuntimeError(f"ffmpeg failed for {src.name}: {proc.stderr.strip()[-500:]}")
 

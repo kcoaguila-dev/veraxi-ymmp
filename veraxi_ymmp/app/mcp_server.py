@@ -307,7 +307,7 @@ def normalize_project_audio(project_dir: str, platform: str = "youtube") -> Dict
             "-af", "loudnorm=I=-14:print_format=json",
             "-f", "null", "-"
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         # Parse the JSON from stderr
         output_str = res.stderr
         import json as _json

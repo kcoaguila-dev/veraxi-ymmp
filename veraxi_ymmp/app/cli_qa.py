@@ -18,7 +18,7 @@ def _get_video_duration(video_path: Path, ffmpeg_exe: str) -> float:
     """Measure exact video duration in seconds via FFmpeg."""
     try:
         cmd = [ffmpeg_exe, "-i", str(video_path)]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         for line in res.stderr.splitlines():
             if "Duration:" in line:
                 part = line.split("Duration:")[1].split(",")[0].strip()

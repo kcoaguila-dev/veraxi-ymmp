@@ -342,3 +342,89 @@ def cmd_ideate(argv: List[str]) -> None:
         generate_script_file(args.provider, topic, dossier_content,
                              proj_dir / "script.json", proj_dir / "script_prompt.md")
         sys.stdout.write(f"  - Validated Script:       {proj_dir / 'script.json'}\n")
+
+
+def _read_audit_paste_stdin() -> str:
+    """Read NotebookLM audit markdown from stdin until '---END---' or EOF."""
+    from veraxi_ymmp.app.script_provider import PASTE_TERMINATOR
+
+    lines: List[str] = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        if line.strip() == PASTE_TERMINATOR:
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def cmd_verify_notebooklm(argv: List[str]) -> None:
+    """Handle 'veraxi-ymmp verify-notebooklm' subcommand."""
+    from veraxi_ymmp.editorial.notebooklm_verify import (
+        build_post_script_audit_prompt,
+        reconcile_notebooklm_audit,
+    )
+    from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp verify-notebooklm",
+        description="Generate and reconcile Post-Script NotebookLM adversarial fact-check audit.",
+    )
+    parser.add_argument("project_dir", help="Path to project directory (or script.json inside it)")
+    parser.add_argument("--reply", "-r", default=None, help="Path to Markdown file containing NotebookLM's audit reply")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Paste NotebookLM's audit reply interactively (end with ---END---)")
+    parser.add_argument("--output", "-o", default=None, help="Output path for notebooklm_audit_prompt.md")
+    args = parser.parse_args(argv)
+
+    target = Path(args.project_dir)
+    proj_dir = target.parent if target.is_file() else target
+    script_path = proj_dir / "script.json"
+    if not script_path.is_file():
+        sys.stderr.write(f"Error: script.json not found in {proj_dir}\n")
+        sys.exit(1)
+
+    prompt_path = Path(args.output) if args.output else proj_dir / "notebooklm_audit_prompt.md"
+    prompt_path.write_text(build_post_script_audit_prompt(proj_dir), encoding="utf-8")
+    sys.stdout.write(f"Wrote Post-Script NotebookLM audit prompt -> {prompt_path}\n")
+
+    audit_md: Optional[str] = None
+    if args.reply:
+        reply_path = Path(args.reply)
+        if not reply_path.is_file():
+            sys.stderr.write(f"Error: reply file not found: {reply_path}\n")
+            sys.exit(1)
+        audit_md = reply_path.read_text(encoding="utf-8")
+    elif args.interactive:
+        sys.stdout.write("Paste NotebookLM's 7-column Markdown Audit Table below (end with '---END---'):\n")
+        sys.stdout.flush()
+        audit_md = _read_audit_paste_stdin()
+
+    if audit_md is None:
+        sys.stdout.write(
+            f"Next: Paste {prompt_path} into your Gemini NotebookLM notebook, then run:\n"
+            f"  veraxi-ymmp verify-notebooklm {proj_dir} --interactive\n"
+        )
+        return
+
+    try:
+        res = reconcile_notebooklm_audit(proj_dir, audit_md)
+    except ValueError as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        sys.exit(1)
+
+    outcome = audit_project_facts(script_path)
+    if not res.passed or outcome.blockers:
+        if res.reprompt_block:
+            sys.stdout.write(res.reprompt_block + "\n")
+        if outcome.blockers:
+            sys.stderr.write(f"FAIL: Epistemic audit failed with {len(outcome.blockers)} blocker(s):\n")
+            for fail in outcome.blockers:
+                sys.stderr.write(f"  - [{fail.verdict.value.upper()}] {fail.claim.id}: {fail.reason}\n")
+        sys.exit(1)
+
+    sys.stdout.write(
+        f"PASS: All {res.supported_count} NotebookLM audit items verified and fact gate passed "
+        f"({proj_dir / 'claims.json'}).\n"
+    )

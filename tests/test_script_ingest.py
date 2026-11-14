@@ -93,3 +93,64 @@ def test_ingest_notebooklm_harvests_primary_urls_from_source_column(tmp_path: Pa
     assert fed_url in evidence_urls
     assert "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf" not in evidence_urls
     assert "https://nvd.nist.gov/vuln/detail/CVE-2026-0001" not in evidence_urls
+
+
+def test_ingest_notebooklm_table_urls_override_ideate_placeholder_manifest(tmp_path: Path) -> None:
+    sec_url = "https://www.sec.gov/Archives/edgar/data/0001018724/amzn-20260930.htm"
+    fed_url = "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260918.htm"
+    placeholder_sec = "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf"
+    placeholder_cve = "https://nvd.nist.gov/vuln/detail/CVE-2026-0001"
+
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    placeholder_manifest = {
+        "topic": "Test Topic",
+        "archetype": "post_mortem",
+        "primary_anchor_doc": {
+            "url": placeholder_sec,
+            "title": "Primary Anchor Doc (Official Report / Whitepaper / Court Filing)",
+            "primary": True,
+        },
+        "counter_analysis": {
+            "url": placeholder_cve,
+            "title": "Counter-Perspective or Dissenting Analysis",
+            "primary": False,
+        },
+    }
+    (sources_dir / "manifest.json").write_text(
+        json.dumps(placeholder_manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    evidence_md = (
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        f"| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        f"Amazon capex reached $85 billion in FY2026. | {sec_url} p.12 | $85B (850億ドル) |\n"
+        f"| 2 | 政策金利は4.25%に維持された | 2026-Q3 | "
+        f"Policy rate held steady at 4.25 percent in September 2026. | {fed_url} p.4 | 4.25% |\n"
+    )
+    script_entries = [
+        {"character": "四国めたん", "text": "設備投資は850億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+        {"character": "ずんだもん", "text": "政策金利は4.25%に維持されたのだ", "emotion": "normal", "motion": "none", "image": None},
+    ]
+
+    claims = ingest_notebooklm_markdown_to_claims(
+        script_entries, evidence_md, manifest=placeholder_manifest, sources_dir=sources_dir
+    )
+
+    manifest = json.loads((sources_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest_urls = {
+        v.get("url") for v in manifest.values() if isinstance(v, dict) and v.get("url")
+    }
+    assert sec_url in manifest_urls
+    assert fed_url in manifest_urls
+    assert placeholder_sec not in manifest_urls
+    assert placeholder_cve not in manifest_urls
+
+    evidence_urls = {ev.url for c in claims for ev in c.evidence}
+    assert sec_url in evidence_urls
+    assert fed_url in evidence_urls
+    assert placeholder_sec not in evidence_urls
+    assert placeholder_cve not in evidence_urls

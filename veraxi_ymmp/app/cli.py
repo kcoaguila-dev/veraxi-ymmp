@@ -523,7 +523,7 @@ def _cmd_ingest_script(argv: list[str]) -> None:
 
 def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
     """Dispatch an argv[1] subcommand; return True when it was handled."""
-    from veraxi_ymmp.app.cli_ideate import cmd_ideate
+    from veraxi_ymmp.app.cli_ideate import cmd_ideate, cmd_verify_notebooklm
     from veraxi_ymmp.app.cli_qa import cmd_qa
     from veraxi_ymmp.app.clip_ingest import cmd_ingest_clips
     from veraxi_ymmp.app.pack_apply import cmd_apply, cmd_pack
@@ -543,6 +543,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
         "capture": _cmd_capture,
         "capture-sec": _cmd_capture_sec,
         "ideate": cmd_ideate,
+        "verify-notebooklm": cmd_verify_notebooklm,
         "ingest-script": _cmd_ingest_script,
         "qa": cmd_qa,
         "pack": cmd_pack,

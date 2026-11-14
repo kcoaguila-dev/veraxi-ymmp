@@ -102,7 +102,7 @@ def _make_source_clip(path: Path) -> None:
          "-f", "lavfi", "-i", "color=c=red:s=320x240:r=30:d=1",
          "-f", "lavfi", "-i", "sine=frequency=440:d=1",
          "-shortest", str(path)],
-        check=True, capture_output=True,
+        check=True, stdin=subprocess.DEVNULL, capture_output=True,
     )
 
 

@@ -148,6 +148,18 @@ Older reply shapes (a bare array, or an array with appended b-roll entries) are 
 
 During handoff, the CLI automatically runs **cut-length, unmapped ASCII/ruby, B-roll cognitive load, retention pacing (>= 80), and fact-parity** checks. If anything fails, it prints an `LLM RE-PROMPT BLOCK` to paste back into the web chat without writing broken files. Once valid, it automatically writes `script.json`, `broll_manifest.json`, `thumbnail_config.json` (if provided), and `claims.json`.
 
+### 3.2.5 Post-Script NotebookLM Fact-Check (Recommended)
+
+Close the epistemic loop after scripting by auditing every cut, B-roll slide, and thumbnail headline against the full primary PDFs inside your **Gemini NotebookLM** notebook (catching segment/denominator swaps, invented causal bridges, or conditional-to-realized flips):
+
+```powershell
+veraxi-ymmp verify-notebooklm projects/<slug>/ --interactive
+```
+
+1. The CLI writes `projects/<slug>/notebooklm_audit_prompt.md` and waits for your paste.
+2. Copy `notebooklm_audit_prompt.md` into your **Gemini NotebookLM** notebook (which holds the primary source filings), paste NotebookLM's 7-column Markdown audit table back into the terminal, and end with `---END---` (or pass `--reply audit_reply.md`).
+3. If every row is `SUPPORTED`, newly extracted verbatim quotes and SHA-256 provenance are reconciled into `claims.json` and `sources/`, and `audit_project_facts` confirms `PASS`. If any item is `DRIFTED`, `REFUTED`, or `UNVERIFIED`, the CLI fails closed and prints a targeted `LLM RE-PROMPT BLOCK` with NotebookLM's discrepancy note and `<=38`-char Japanese fix.
+
 ### 3.3 Validate, Build, and Multimodal QA
 
 Run the local compiler pipeline (zero AI quota required):
