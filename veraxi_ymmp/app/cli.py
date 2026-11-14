@@ -454,6 +454,12 @@ def _cmd_ingest_script(argv: list[str]) -> None:
         help="Direct the ingested dialogue into a validated script.json via this "
         "ScriptProvider (flag alone = manual web-chat handoff; 'api' reserved)",
     )
+    parser.add_argument(
+        "--strict-facts",
+        action="store_true",
+        default=False,
+        help="Run full claim-ledger and source-tier fact audit immediately during ingest",
+    )
     args = parser.parse_args(argv)
 
     md_path = Path(args.input_markdown)
@@ -493,7 +499,7 @@ def _cmd_ingest_script(argv: list[str]) -> None:
         validator = build_project_gate_validator(
             out_path.parent,
             audit_pacing=True,
-            audit_facts=True,
+            audit_facts=bool(args.strict_facts),
             evidence_markdown=content if table_rows else None,
             manifest_data=manifest_data,
         )
@@ -519,6 +525,12 @@ def _cmd_ingest_script(argv: list[str]) -> None:
         claims_path = Path(args.claims_out) if args.claims_out else out_path.parent / "claims.json"
         claims_path.write_text(claims_to_json(claims), encoding="utf-8")
         sys.stdout.write(f"Successfully generated {len(claims)} claims -> {claims_path}\n")
+
+    if args.provider:
+        sys.stdout.write(
+            f"Next: Run 'veraxi-ymmp verify-notebooklm {out_path.parent} --interactive' "
+            f"(or 'veraxi-ymmp run {out_path.parent}')\n"
+        )
 
 
 def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:

@@ -209,3 +209,51 @@ def test_cli_verify_notebooklm_reply_and_interactive_fail_closed(
     out_fail = capsys.readouterr().out
     assert "LLM RE-PROMPT BLOCK" in out_fail
     assert "[UNVERIFIED] cut_01" in out_fail
+
+
+def test_reconcile_notebooklm_audit_single_pdf_no_padding_passes_fact_gate(tmp_path: Path) -> None:
+    _write_sample_project(tmp_path)
+    sec_url = "https://www.sec.gov/Archives/edgar/data/0001018724/amzn-20260930.htm"
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    (sources_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "topic": "Amazon Capex vs Profit Scope",
+                "primary_anchor_doc": {
+                    "url": "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf",
+                    "title": "Placeholder Primary",
+                    "primary": True,
+                },
+                "counter_analysis": {
+                    "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+                    "title": "Placeholder Counter",
+                    "primary": False,
+                },
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    audit_md = (
+        "| Item ID | Assertion | Verdict | Verbatim Quote | Source & Page/URL | Discrepancy | Suggested Fix (<=38 chars) |\n"
+        "|---|---|---|---|---|---|---|\n"
+        f"| cut_01 | 設備投資は850億ドルに達したのですわ | SUPPORTED | \"Capital expenditures reached $85 billion in FY2026.\" | {sec_url} p.12 | - | - |\n"
+        f"| cut_02 | AWSの営業利益が34%増えたのだ | SUPPORTED | \"AWS segment operating income increased 34% year over year.\" | {sec_url} p.24 | - | - |\n"
+        f"| slide_00 | AWS利益と投資規模 | SUPPORTED | \"Capital expenditures reached $85 billion and AWS income rose 34%.\" | {sec_url} p.12 | - | - |\n"
+        f"| thumb_00 | 850億ドルの重圧 | SUPPORTED | \"Capital expenditures reached $85 billion in FY2026.\" | {sec_url} p.12 | - | - |\n"
+    )
+    res = reconcile_notebooklm_audit(tmp_path, audit_md)
+
+    assert res.passed is True
+    assert res.supported_count == 4
+    manifest = json.loads((sources_dir / "manifest.json").read_text(encoding="utf-8"))
+    source_entries = {k: v for k, v in manifest.items() if isinstance(v, dict) and v.get("url")}
+    assert len(source_entries) == 1
+    assert {v["url"] for v in source_entries.values()} == {sec_url}
+    assert "nvd.nist.gov" not in json.dumps(manifest)
+
+    outcome = audit_project_facts(tmp_path / "script.json")
+    assert outcome.blockers == []

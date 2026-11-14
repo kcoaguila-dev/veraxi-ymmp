@@ -146,11 +146,11 @@ The expected reply is a single JSON object:
 
 Older reply shapes (a bare array, or an array with appended b-roll entries) are also accepted — ingest normalizes them — but the object shape is the contract to ask for.
 
-During handoff, the CLI automatically runs **cut-length, unmapped ASCII/ruby, B-roll cognitive load, retention pacing (>= 80), and fact-parity** checks. If anything fails, it prints an `LLM RE-PROMPT BLOCK` to paste back into the web chat without writing broken files. Once valid, it automatically writes `script.json`, `broll_manifest.json`, `thumbnail_config.json` (if provided), and `claims.json`.
+During handoff, the CLI automatically runs **schema, `<=38`-char cut limits, unmapped ASCII/ruby, B-roll cognitive load, `>=80` retention pacing, and cross-file/scale number parity (`$85B` = `850億ドル`)** checks. Full quote/ledger verification is deferred to Step 3.2.5 (`verify-notebooklm`) so valid secondary context does not block scripting (pass `--strict-facts` if you explicitly want full claim-ledger auditing during ingest). If anything fails, it prints an `LLM RE-PROMPT BLOCK` to paste back into the web chat without writing broken files. Once valid, it automatically writes `script.json`, `broll_manifest.json`, `thumbnail_config.json` (if provided), and `claims.json`.
 
-### 3.2.5 Post-Script NotebookLM Fact-Check (Recommended)
+### 3.2.5 Post-Script NotebookLM Fact-Check (Authoritative Fact Gate)
 
-Close the epistemic loop after scripting by auditing every cut, B-roll slide, and thumbnail headline against the full primary PDFs inside your **Gemini NotebookLM** notebook (catching segment/denominator swaps, invented causal bridges, or conditional-to-realized flips):
+Close the epistemic loop after scripting by auditing every cut, B-roll slide, and thumbnail assertion against the full primary PDFs inside your **Gemini NotebookLM** notebook (catching scope drift, causal fidelity gaps, segment/denominator swaps, and conditional-to-realized flips; NotebookLM-verified evidence requires only 1 primary source when backed by verbatim quotes and SHA-256 provenance):
 
 ```powershell
 veraxi-ymmp verify-notebooklm projects/<slug>/ --interactive

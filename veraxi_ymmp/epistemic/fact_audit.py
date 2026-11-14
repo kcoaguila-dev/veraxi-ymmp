@@ -467,7 +467,21 @@ def audit_project_facts(
                         quote_errors.append(f"live URL verification failed for '{e.url}': {err_msg}")
 
         conf_src_texts = [sources[e.source_id].text for e in c.evidence if e.source_id and e.source_id in sources]
-        res = verdict_for(c, quote_errors=quote_errors, profile=active_profile, source_texts=conf_src_texts, extra_primary_domains=extra_domains)
+        has_nlm_primary = any(
+            e.stance is Stance.CONFIRMS
+            and e.source_id
+            and e.source_id in sources
+            and getattr(sources[e.source_id], "provenance", "") == "notebooklm_evidence"
+            for e in c.evidence
+        )
+        res = verdict_for(
+            c,
+            quote_errors=quote_errors,
+            profile=active_profile,
+            source_texts=conf_src_texts,
+            extra_primary_domains=extra_domains,
+            single_primary_ok=has_nlm_primary,
+        )
         if grounding_score is not None:
             res.grounding_score = grounding_score
         results.append(res)
@@ -668,7 +682,19 @@ def audit_visual_and_metadata_parity(
         supported_claim_ids = {r.claim.id for r in results if r.verdict is Verdict.SUPPORTED and not r.quote_errors}
     else:
         from veraxi_ymmp.epistemic.facts import verdict_for
-        supported_claim_ids = {c.id for c in claims if verdict_for(c).verdict is Verdict.SUPPORTED}
+        supported_claim_ids = {
+            c.id for c in claims
+            if verdict_for(
+                c,
+                single_primary_ok=any(
+                    e.stance is Stance.CONFIRMS
+                    and e.source_id
+                    and e.source_id in sources
+                    and getattr(sources[e.source_id], "provenance", "") == "notebooklm_evidence"
+                    for e in c.evidence
+                ),
+            ).verdict is Verdict.SUPPORTED
+        }
 
     approved_mags = []
     for c in claims:

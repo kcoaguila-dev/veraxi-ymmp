@@ -674,9 +674,11 @@ def check_claim_numbers(claim: Claim, quotes: Sequence[str], source_texts: Seque
         ]
     return []
 
-def required_primary_sources(claim: Claim) -> int:
-    """Central claims need 2 independent primary sources; others need 1 source."""
-    return 2 if claim.weight is ClaimWeight.CENTRAL else 1
+def required_primary_sources(claim: Claim, single_primary_ok: bool = False) -> int:
+    """Central claims need 2 independent primary sources (or 1 when NotebookLM-verified); others need 1."""
+    if claim.weight is ClaimWeight.CENTRAL:
+        return 1 if single_primary_ok else 2
+    return 1
 
 def verdict_for(
     claim: Claim,
@@ -684,6 +686,7 @@ def verdict_for(
     profile: EpistemicProfile | str = EpistemicProfile.FINANCE,
     source_texts: Sequence[str] = (),
     extra_primary_domains: Sequence[str] = (),
+    single_primary_ok: bool = False,
 ) -> ClaimResult:
     """Deterministic verdict. Contradiction from tier<=2 refutes; missing proof is UNVERIFIED."""
     if getattr(claim, "axiom", False):
@@ -734,7 +737,7 @@ def verdict_for(
                     f"number check failed: {'; '.join(num_errors)}",
                     quote_errors=num_errors,
                 )
-    need = required_primary_sources(claim)
+    need = required_primary_sources(claim, single_primary_ok=single_primary_ok)
     if claim.weight is ClaimWeight.CENTRAL:
         primary_ev = [
             e for e in confirms

@@ -406,6 +406,73 @@ def _run_fact_gate_check(
                 sources_dir.rmdir()
 
 
+def _validate_cross_file_and_evidence_scale_parity(
+    payload: Dict[str, Any],
+    evidence_markdown: Optional[str],
+) -> List[str]:
+    """Verify cross-file macro figure parity and 10x billion/億 scale conversions."""
+    from veraxi_ymmp.epistemic.epistemic_units import (
+        extract_scaled_magnitudes,
+        extract_token_magnitudes,
+    )
+
+    errors: List[str] = []
+    script_entries = payload.get("script", [])
+    script_mags: List[float] = []
+    for entry in script_entries:
+        if isinstance(entry, dict):
+            script_mags.extend(extract_scaled_magnitudes(str(entry.get("text", ""))))
+    ev_mags = extract_scaled_magnitudes(evidence_markdown) if evidence_markdown else []
+    anchor_mags = script_mags + ev_mags
+
+    if ev_mags:
+        for idx, entry in enumerate(script_entries):
+            if not isinstance(entry, dict):
+                continue
+            for tok, vals in extract_token_magnitudes(str(entry.get("text", ""))).items():
+                m_vals = [v for v in vals if v >= 1e6]
+                if not m_vals or any(
+                    abs(mv - em) / max(mv, em, 1.0) < 0.05 for mv in m_vals for em in ev_mags
+                ):
+                    continue
+                off = next(
+                    (
+                        em for mv in m_vals for em in ev_mags
+                        if em >= 1e6 and (
+                            abs(mv * 10.0 - em) / max(em, 1.0) < 0.05
+                            or abs(mv / 10.0 - em) / max(em, 1.0) < 0.05
+                        )
+                    ),
+                    None,
+                )
+                if off is not None:
+                    errors.append(
+                        f"[SCALE] Cut #{idx}: Figure '{tok}' ({m_vals[0]:g}) is 10x off from "
+                        f"evidence ({off:g}) — check billion/億 conversion ($1B = 10億ドル)."
+                    )
+
+    if anchor_mags:
+        targets: List[Tuple[str, str]] = [
+            (f"broll_manifest[{s_idx}]", " ".join(_collect_slide_texts(spec)))
+            for s_idx, spec in enumerate(payload.get("broll_manifest", []))
+            if isinstance(spec, dict)
+        ]
+        thumb = payload.get("thumbnail_config")
+        if isinstance(thumb, dict):
+            targets.append(("thumbnail_config", json.dumps(thumb, ensure_ascii=False)))
+        for label, txt in targets:
+            for tok, vals in extract_token_magnitudes(txt).items():
+                m_vals = [v for v in vals if v >= 1e8]
+                if m_vals and not any(
+                    abs(mv - am) / max(mv, am, 1.0) < 0.05 for mv in m_vals for am in anchor_mags
+                ):
+                    errors.append(
+                        f"[SCALE] {label} macro figure '{tok}' ({m_vals[0]:g}) "
+                        "does not match any figure in script or evidence.md."
+                    )
+    return errors
+
+
 def build_project_gate_validator(
     project_dir: Path,
     audit_pacing: bool = True,
@@ -419,6 +486,10 @@ def build_project_gate_validator(
     def _validate(payload: Dict[str, Any]) -> List[str]:
         errors = _validate_cuts_and_broll(payload, resolved_dir)
         script_entries = payload.get("script", [])
+        ev_text = evidence_markdown
+        if ev_text is None and (resolved_dir / "evidence.md").is_file():
+            ev_text = (resolved_dir / "evidence.md").read_text(encoding="utf-8")
+        errors.extend(_validate_cross_file_and_evidence_scale_parity(payload, ev_text))
 
         if audit_pacing:
             from veraxi_ymmp.editorial.pacing import audit_script_pacing

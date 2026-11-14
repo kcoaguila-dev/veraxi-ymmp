@@ -463,15 +463,9 @@ def _select_two_primary_slots(
                 seen_ids.add(sid)
             if len(slots) >= 2:
                 return slots
-    for def_sid, def_url, def_title in _DEFAULT_PRIMARY_SOURCES:
-        inst = canonical_institution(def_url) or def_url
-        if inst not in seen_insts:
-            cand_sid = def_sid if def_sid not in seen_ids else f"{def_sid}_nlm"
-            slots.append((cand_sid, def_url, def_title))
-            seen_insts.add(inst)
-            seen_ids.add(cand_sid)
-        if len(slots) >= 2:
-            break
+    if not slots:
+        def_sid, def_url, def_title = _DEFAULT_PRIMARY_SOURCES[0]
+        slots.append((def_sid, def_url, def_title))
     return slots
 
 
@@ -536,6 +530,15 @@ def _ensure_notebooklm_sources(
 
     if primary_domains:
         merged_manifest["primary_domains"] = primary_domains
+    for k in list(merged_manifest.keys()):
+        val = merged_manifest.get(k)
+        if (
+            k not in _MANIFEST_META_KEYS
+            and isinstance(val, dict)
+            and k not in source_meta
+            and not _is_valid_primary_url(str(val.get("url", "")))
+        ):
+            del merged_manifest[k]
     (sources_dir / "manifest.json").write_text(
         json.dumps(merged_manifest, indent=2, ensure_ascii=False), encoding="utf-8"
     )

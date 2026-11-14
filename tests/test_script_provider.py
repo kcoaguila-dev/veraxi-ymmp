@@ -591,3 +591,166 @@ def test_manual_provider_rollback_on_rejected_paste_and_eof(tmp_path: Path) -> N
     assert not (tmp_path / "thumbnail_config.json").exists()
     assert not (tmp_path / "sources").exists()
     assert not (tmp_path / ".candidate_script.tmp.json").exists()
+
+
+def test_handoff_validator_scale_and_cross_file_parity_without_strict_facts(tmp_path: Path) -> None:
+    evidence_md = (
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        "Amazon capex reached $85 billion in FY2026. | "
+        "https://www.sec.gov/Archives/edgar/data/0001018724/amzn-20260930.htm p.12 | "
+        "$85B (850億ドル) |\n"
+    )
+    validator = sp.build_project_gate_validator(
+        tmp_path, audit_pacing=False, audit_facts=False, evidence_markdown=evidence_md
+    )
+
+    # 1. Thumbnail & B-roll macro figure mismatch (950億ドル vs 850億ドル)
+    mismatch_payload = {
+        "script": [
+            {"character": "四国めたん", "text": "設備投資は850億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+        ],
+        "broll_manifest": [
+            {
+                "type": "metric",
+                "filename": "slide_01.png",
+                "title": "設備投資規模",
+                "hero_metric": "950億ドル",
+                "status_pill": "決算報告",
+                "impact_tag": "投資",
+                "impact_text": "投資負担が拡大",
+                "theme_color": "rose",
+            }
+        ],
+        "thumbnail_config": {
+            "badge": "決算検証",
+            "title_line1": "950億ドルの衝撃",
+            "title_line2": "投資の真実",
+            "sub_hook": "注目",
+        },
+    }
+    mismatch_errs = validator(mismatch_payload)
+    assert any("[SCALE]" in e and "broll_manifest[0]" in e for e in mismatch_errs)
+    assert any("[SCALE]" in e and "thumbnail_config" in e for e in mismatch_errs)
+
+    # 2. 10x billion-to-億 conversion mistake ($85 billion -> 85億ドル)
+    ten_x_payload = {
+        "script": [
+            {"character": "四国めたん", "text": "設備投資は85億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+        ],
+        "broll_manifest": [],
+    }
+    ten_x_errs = validator(ten_x_payload)
+    assert any("[SCALE]" in e and "10x off" in e for e in ten_x_errs)
+
+    # 3. Clean match passes without errors
+    clean_payload = {
+        "script": [
+            {"character": "四国めたん", "text": "設備投資は850億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+        ],
+        "broll_manifest": [
+            {
+                "type": "metric",
+                "filename": "slide_01.png",
+                "title": "設備投資規模",
+                "hero_metric": "850億ドル",
+                "status_pill": "決算報告",
+                "impact_tag": "投資",
+                "impact_text": "投資負担が拡大",
+                "theme_color": "rose",
+            }
+        ],
+        "thumbnail_config": {
+            "badge": "決算検証",
+            "title_line1": "850億ドルの衝撃",
+            "title_line2": "投資の真実",
+            "sub_hook": "注目",
+        },
+    }
+    assert validator(clean_payload) == []
+
+
+def test_ingest_script_manual_defers_strict_facts_and_prints_next_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sec_url = "https://www.sec.gov/Archives/edgar/data/0001018724/amzn-20260930.htm"
+    md = tmp_path / "evidence.md"
+    md.write_text(
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        f"Amazon capex reached $85 billion in FY2026. | {sec_url} p.12 | "
+        "$85B (850億ドル) |\n",
+        encoding="utf-8",
+    )
+
+    def _c(char, text, emo="normal", img=None):
+        pos = "left" if char == "四国めたん" else "right"
+        return {
+            "character": char,
+            "character_position": pos,
+            "text": text,
+            "emotion": emo,
+            "motion": "none",
+            "bgm": None,
+            "sfx": None,
+            "image": img,
+        }
+
+    script_with_secondary_pct = [
+        _c("ずんだもん", "巨額投資があれば必ず儲かるのだ！", "excited", None),
+        _c("四国めたん", "甘い幻想ですわ。設備投資は850億ドルですわ。", "smug", None),
+        _c("ずんだもん", "えっ！？", "surprised", None),
+        _c("四国めたん", "この巨額出費が利益を圧迫する現実ですわ。", "normal", "broll/slide_01.png"),
+        _c("ずんだもん", "850億ドルって一体どれほどの負担なのだ？", "confused", "broll/slide_01.png"),
+        _c("四国めたん", "償却費が雪だるま式に膨らみ続けますわ。", "normal", "broll/slide_01.png"),
+        _c("春日部つむぎ", "現場のインフラでも負担が増えてるっす！", "angry", None),
+        _c("ずんだもん", "マジで！？", "surprised", None),
+        _c("四国めたん", "しかも境界設計の課題まで残っていましたわ。", "angry", "broll/slide_01.png"),
+        _c("春日部つむぎ", "運用コストが現場を直撃してるっすよ。", "sad", "broll/slide_01.png"),
+        _c("四国めたん", "投資を急ぐあまり検証が追いつきませんの。", "normal", "broll/slide_01.png"),
+        _c("ずんだもん", "技術も予算も限界スレスレだったのだ…", "sad", None),
+        _c("四国めたん", "一次資料を直視しない企業から脱落しますわ。", "smug", None),
+        _c("春日部つむぎ", "現場の負荷を見落とすと取り返しがつかないっす。", "normal", None),
+        _c("四国めたん", "ちなみに営業利益率は12%の推移ですわ。", "normal", None),
+        _c("ずんだもん", "財務の現実から目を背けちゃダメなのだ。", "normal", None),
+    ]
+    broll_specs = [
+        {
+            "type": "metric",
+            "filename": "slide_01.png",
+            "title": "設備投資規模",
+            "hero_metric": "850億ドル",
+            "status_pill": "公式報告書",
+            "impact_tag": "投資",
+            "impact_text": "年間投資の現実",
+            "theme_color": "rose",
+        }
+    ]
+    reply_obj = json.dumps(
+        {"script": script_with_secondary_pct, "broll_manifest": broll_specs},
+        ensure_ascii=False,
+    )
+
+    monkeypatch.setattr(sp, "_read_paste_from_stdin", lambda: reply_obj)
+    _cmd_ingest_script([str(md), "--provider", "manual"])
+    out = capsys.readouterr().out
+    assert "verify-notebooklm" in out
+    assert (tmp_path / "script.json").is_file()
+    assert (tmp_path / "claims.json").is_file()
+
+    # With --strict-facts, the ungrounded secondary 12% figure triggers [FACTS] rejection
+    strict_dir = tmp_path / "strict_case"
+    strict_dir.mkdir()
+    strict_md = strict_dir / "evidence.md"
+    strict_md.write_text(md.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(sp, "_read_paste_from_stdin", _paste_queue(reply_obj, ""))
+    with pytest.raises(ValueError):
+        _cmd_ingest_script([str(strict_md), "--provider", "manual", "--strict-facts"])
+    strict_out = capsys.readouterr().out
+    assert "[FACTS]" in strict_out

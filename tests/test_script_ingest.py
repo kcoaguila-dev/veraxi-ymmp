@@ -154,3 +154,52 @@ def test_ingest_notebooklm_table_urls_override_ideate_placeholder_manifest(tmp_p
     assert fed_url in evidence_urls
     assert placeholder_sec not in evidence_urls
     assert placeholder_cve not in evidence_urls
+
+
+def test_ingest_notebooklm_single_pdf_no_cve_padding(tmp_path: Path) -> None:
+    from veraxi_ymmp.epistemic.fact_audit import audit_project_facts
+    from veraxi_ymmp.epistemic.facts import claims_to_json
+
+    sec_url = "https://www.sec.gov/Archives/edgar/data/0001018724/amzn-20260930.htm"
+    placeholder_sec = "https://www.sec.gov/Archives/edgar/data/0000000000/primary_anchor_doc.pdf"
+    placeholder_cve = "https://nvd.nist.gov/vuln/detail/CVE-2026-0001"
+
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    placeholder_manifest = {
+        "topic": "Amazon Capex 10-Q Only",
+        "archetype": "post_mortem",
+        "primary_anchor_doc": {"url": placeholder_sec, "title": "Placeholder Primary", "primary": True},
+        "counter_analysis": {"url": placeholder_cve, "title": "Placeholder Counter", "primary": False},
+    }
+    (sources_dir / "manifest.json").write_text(
+        json.dumps(placeholder_manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    evidence_md = (
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        f"Amazon capex reached $85 billion in FY2026. | {sec_url} p.12 | $85B (850億ドル) |\n"
+    )
+    script_entries = [
+        {"character": "四国めたん", "text": "設備投資は850億ドルに達したのですわ", "emotion": "normal", "motion": "none", "image": None},
+    ]
+    (tmp_path / "script.json").write_text(json.dumps(script_entries, ensure_ascii=False), encoding="utf-8")
+
+    claims = ingest_notebooklm_markdown_to_claims(
+        script_entries, evidence_md, manifest=placeholder_manifest, sources_dir=sources_dir
+    )
+    (tmp_path / "claims.json").write_text(claims_to_json(claims), encoding="utf-8")
+
+    manifest = json.loads((sources_dir / "manifest.json").read_text(encoding="utf-8"))
+    source_entries = {k: v for k, v in manifest.items() if isinstance(v, dict) and v.get("url")}
+    assert len(source_entries) == 1
+    assert {v["url"] for v in source_entries.values()} == {sec_url}
+    assert placeholder_cve not in json.dumps(manifest)
+    assert [p.name for p in sources_dir.glob("*.md")] == [f"{next(iter(source_entries))}.md"]
+
+    outcome = audit_project_facts(tmp_path / "script.json")
+    assert outcome.blockers == []
