@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from './api';
-import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry } from './types';
+import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry, ApiHealth } from './types';
 import {
   getInitialProjectName,
   persistActiveProject,
@@ -11,6 +11,8 @@ interface StudioState {
   projects: ProjectSummary[];
   activeProjectName: string | null;
   projectData: ProjectData | null;
+  apiHealth: ApiHealth | null;
+  backendReady: boolean;
   voicevoxHealth: VoicevoxHealth | null;
   pipelineStatus: PipelineStatus;
   isDirty: boolean;
@@ -39,16 +41,30 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectName, setActiveProjectName] = useState<string | null>(() => getInitialProjectName());
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  const [apiHealth, setApiHealth] = useState<ApiHealth | null>(null);
+  const [backendReady, setBackendReady] = useState(false);
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
   const [isDirty, setIsDirty] = useState(false);
   const [mediaCacheBust, setMediaCacheBust] = useState(Date.now());
 
   useEffect(() => {
-    loadProjects();
-    checkVoicevox();
+    let cancelled = false;
+    const bootstrap = async () => {
+      const health = await api.waitForBackendReady();
+      if (cancelled) return;
+      if (health) {
+        setApiHealth(health);
+        setBackendReady(true);
+      }
+      await Promise.all([loadProjects(), checkVoicevox()]);
+    };
+    bootstrap();
     const interval = setInterval(checkVoicevox, 15000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -221,6 +237,8 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     projects,
     activeProjectName,
     projectData,
+    apiHealth,
+    backendReady,
     voicevoxHealth,
     pipelineStatus,
     isDirty,

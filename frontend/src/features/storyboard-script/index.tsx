@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api } from '../../shared/api';
+import { api, apiUrl } from '../../shared/api';
 import { auditionManager, AuditionState } from '../../shared/audio-manager';
 import { DirectorScriptEntry, Emotion, Motion } from '../../shared/types';
 
@@ -179,6 +179,55 @@ export const StoryboardScript: React.FC = () => {
   const [pasteJson, setPasteJson] = useState('');
   const [repromptBlock, setRepromptBlock] = useState<string | null>(null);
   const [isAutoSplitting, setIsAutoSplitting] = useState(false);
+
+  const [showWebEditModal, setShowWebEditModal] = useState(false);
+  const [webEditTask, setWebEditTask] = useState('会話をより自然な掛け合いに調整してください（数値・文字数制限・ルビは維持）');
+  const [webEditReply, setWebEditReply] = useState('');
+  const [webEditBundleInfo, setWebEditBundleInfo] = useState<string | null>(null);
+  const [webEditError, setWebEditError] = useState<string | null>(null);
+  const [isPackingEdit, setIsPackingEdit] = useState(false);
+  const [isApplyingEdit, setIsApplyingEdit] = useState(false);
+
+  const handleCopyEditBundle = async () => {
+    if (!activeProjectName) return;
+    setIsPackingEdit(true);
+    setWebEditBundleInfo(null);
+    setWebEditError(null);
+    try {
+      const res = await api.packEditProject(activeProjectName, webEditTask);
+      await navigator.clipboard.writeText(res.bundle);
+      setWebEditBundleInfo(
+        `✓ ${res.files.join(', ')} (${res.chars.toLocaleString()}文字) をコピーしました！Gemini Web 等に貼り付けてください。`
+      );
+    } catch (e: any) {
+      setWebEditError(e?.data?.error || e?.message || '編集バンドルの生成に失敗しました');
+    } finally {
+      setIsPackingEdit(false);
+    }
+  };
+
+  const handleApplyWebEdit = async () => {
+    if (!activeProjectName) return;
+    setIsApplyingEdit(true);
+    setWebEditError(null);
+    try {
+      const res = await api.applyEditProject(activeProjectName, webEditReply);
+      if (res.success) {
+        await setActiveProject(activeProjectName);
+        setShowWebEditModal(false);
+        setWebEditReply('');
+        setWebEditBundleInfo(null);
+        setHistoryToast('Web AIの編集を適用しました（直前の台本は自動バックアップされました）');
+        setTimeout(() => setHistoryToast(null), 5000);
+      } else {
+        setWebEditError(res.reprompt_block || res.error || '編集の適用に失敗しました');
+      }
+    } catch (e: any) {
+      setWebEditError(e?.data?.reprompt_block || e?.data?.error || e?.message || '編集の適用に失敗しました');
+    } finally {
+      setIsApplyingEdit(false);
+    }
+  };
 
   const handleOpenHistory = async () => {
     if (!activeProjectName) return;
@@ -597,6 +646,17 @@ export const StoryboardScript: React.FC = () => {
             📋 AIプロンプト生成
           </button>
           <button
+            type="button"
+            onClick={() => {
+              setWebEditError(null);
+              setWebEditBundleInfo(null);
+              setShowWebEditModal(true);
+            }}
+            className="h-[30px] px-3 rounded-[6px] bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-300 text-[11px] font-extrabold flex items-center gap-1 transition-colors whitespace-nowrap"
+          >
+            ✨ Web AI編集
+          </button>
+          <button
             onClick={() => setShowPasteModal(true)}
             className="h-[30px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[11px] font-bold flex items-center gap-1 transition-colors whitespace-nowrap"
           >
@@ -676,7 +736,7 @@ export const StoryboardScript: React.FC = () => {
                   >
                     {hasSlideMedia && (
                       <img
-                        src={`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${scene.slideMedia}?t=${mediaCacheBust}`}
+                        src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${scene.slideMedia}?t=${mediaCacheBust}`)}
                         alt={`Slide ${scene.sceneNumber}`}
                         className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-75 transition-opacity"
                         onError={(e) => {
@@ -1146,6 +1206,91 @@ export const StoryboardScript: React.FC = () => {
                   📋 テーマ付きでコピー
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Web-AI Edit (pack --mode edit / apply-edit) Modal */}
+      {showWebEditModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111827] border border-[#1E293B] rounded-[14px] p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="font-extrabold text-[16px] text-[#F8FAFC] mb-1">
+              ✨ Web AIで既存台本をピンポイント編集 (SEARCH / REPLACE)
+            </h3>
+            <p className="text-xs text-[#94A3B8] mb-4">
+              PowerShell や .md ファイルの保存なしで、現在の台本・根拠資料を Web AI 向けにバンドルして編集結果をそのまま適用します。
+            </p>
+
+            <div className="mb-4 p-3.5 rounded-[10px] bg-[#0B0F19] border border-[#1E293B]">
+              <div className="text-xs font-bold text-[#E2E8F0] mb-2">
+                Step 1: 編集指示を入力してバンドルをコピー
+              </div>
+              <input
+                type="text"
+                value={webEditTask}
+                onChange={(e) => setWebEditTask(e.target.value)}
+                placeholder="例: 会話をより自然な掛け合いに調整してください"
+                className="w-full bg-[#111827] border border-[#334155] rounded-[8px] px-3 py-2 text-xs text-[#F8FAFC] mb-2.5 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                disabled={isPackingEdit}
+                onClick={handleCopyEditBundle}
+                className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#080C14] font-extrabold px-4 py-2 rounded-[8px] text-xs transition-colors"
+              >
+                {isPackingEdit ? 'バンドル作成中...' : '📋 編集用バンドルをコピー'}
+              </button>
+              {webEditBundleInfo && (
+                <div className="mt-2 text-xs text-emerald-400 font-semibold">
+                  {webEditBundleInfo}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4 p-3.5 rounded-[10px] bg-[#0B0F19] border border-[#1E293B]">
+              <div className="text-xs font-bold text-[#E2E8F0] mb-2">
+                Step 2: Gemini Web / Claude / ChatGPT の返信 (SEARCH/REPLACE) を貼り付け
+              </div>
+              <textarea
+                className="w-full h-44 bg-[#111827] border border-[#334155] rounded-[8px] p-3 text-xs text-[#F8FAFC] font-mono focus:outline-none focus:border-emerald-500"
+                value={webEditReply}
+                onChange={(e) => setWebEditReply(e.target.value)}
+                placeholder={'### Edit: `projects/.../script.json`\n<<<<<<< SEARCH\n...\n=======\n...\n>>>>>>> REPLACE\n===END OF REPLY==='}
+              />
+            </div>
+
+            {webEditError && (
+              <div className="mb-4">
+                <div className="bg-rose-950/40 border border-rose-800 p-3 rounded-[8px] text-xs font-mono text-rose-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                  {webEditError}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(webEditError)}
+                  className="mt-2 bg-[#1E293B] hover:bg-[#334155] border border-[#475569] px-3 py-1.5 rounded-[6px] text-xs font-bold flex items-center gap-1"
+                >
+                  📋 修正用Re-Promptをコピー
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowWebEditModal(false)}
+                className="bg-[#1E293B] hover:bg-[#334155] px-4 py-2 rounded-[8px] text-xs font-bold text-[#E2E8F0]"
+              >
+                閉じる
+              </button>
+              <button
+                type="button"
+                disabled={isApplyingEdit || !webEditReply.trim()}
+                onClick={handleApplyWebEdit}
+                className="bg-[#10B981] hover:bg-[#34D399] disabled:opacity-50 text-[#080C14] font-extrabold px-5 py-2 rounded-[8px] text-xs"
+              >
+                {isApplyingEdit ? '検証・適用中...' : '✅ 編集を適用'}
+              </button>
             </div>
           </div>
         </div>

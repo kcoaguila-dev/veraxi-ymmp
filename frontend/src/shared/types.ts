@@ -72,6 +72,13 @@ export interface VoicevoxHealth {
   speakers: any[];
 }
 
+export interface ApiHealth {
+  status: string;
+  version: string;
+  workspace: string;
+  ffmpeg_available: boolean;
+}
+
 export interface YoutubeAuthStatus {
   has_client_secrets: boolean;
   has_token: boolean;

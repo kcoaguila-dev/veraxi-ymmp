@@ -8,9 +8,15 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from typing import Any, List, Optional
 from pathlib import Path
+
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _bundled_bin = os.path.join(sys._MEIPASS, "bin")
+    if os.path.isdir(_bundled_bin):
+        os.environ["PATH"] = _bundled_bin + os.pathsep + os.environ.get("PATH", "")
 
 from veraxi_ymmp.app.compiler import YMMPCompiler, CompilerError
 from veraxi_ymmp.app.async_compiler import AsyncYMMPCompiler
@@ -416,11 +422,12 @@ def _cmd_export_spec(argv: List[str]) -> None:
 
 def _cmd_serve(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="Start the veraxi-ymmp API server for the Studio frontend.")
-    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (0 for ephemeral free port, default: 8000)")
+    parser.add_argument("--workspace", type=str, default=None, help="Workspace root directory (overrides VERAXI_WORKSPACE_DIR)")
     args = parser.parse_args(argv)
 
     from veraxi_ymmp.app.api_server import serve
-    serve(port=args.port)
+    serve(port=args.port, workspace=args.workspace)
 
 def _cmd_capture_sec(argv: list[str]) -> None:
     """Capture and highlight an SEC filing passage (alias to 'capture --source sec')."""
@@ -573,6 +580,9 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
 
 def main() -> None:
     """Main entry point for the CLI."""
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     # Ensure stdout uses UTF-8 encoding for proper display of non-ASCII characters
     if hasattr(sys.stdout, "reconfigure") and getattr(sys.stdout, "encoding", None) != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")

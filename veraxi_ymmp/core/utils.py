@@ -4,7 +4,10 @@ Utility functions for veraxi-ymmp.
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import sys
 from pathlib import Path
 from typing import Optional, Union
 
@@ -91,3 +94,62 @@ def normalize_japanese_typography(text: str) -> str:
     t = re.sub(r"([ぁ-んァ-ヶ一-龥])\s+([A-Za-z0-9])", r"\1\2", t)
     t = re.sub(r"([A-Za-z0-9])\s+([ぁ-んァ-ヶ一-龥])", r"\1\2", t)
     return t
+
+
+def get_workspace_root() -> Path:
+    """Resolve the active writable workspace root.
+
+    Precedence:
+    1. ``VERAXI_WORKSPACE_DIR`` environment variable (if set and non-empty).
+    2. Platform app-data directory when running as a frozen PyInstaller binary.
+    3. Current working directory (``Path.cwd()``).
+    """
+    env_dir = os.environ.get("VERAXI_WORKSPACE_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir).expanduser().resolve()
+
+    if getattr(sys, "frozen", False):
+        if sys.platform == "win32":
+            local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+            base = Path(local_app_data) if local_app_data else (Path.home() / "AppData" / "Local")
+            return (base / "VeraxiStudio" / "workspace").resolve()
+        return (Path.home() / ".local" / "share" / "VeraxiStudio" / "workspace").resolve()
+
+    return Path.cwd().resolve()
+
+
+def set_workspace_root(path: Union[str, Path]) -> Path:
+    """Set ``VERAXI_WORKSPACE_DIR`` to a resolved directory and ensure it exists."""
+    resolved = Path(path).expanduser().resolve()
+    resolved.mkdir(parents=True, exist_ok=True)
+    os.environ["VERAXI_WORKSPACE_DIR"] = str(resolved)
+    return resolved
+
+
+def get_bundle_root() -> Path:
+    """Return the read-only bundle root (``sys._MEIPASS`` when frozen, else repo root)."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(getattr(sys, "_MEIPASS")).resolve()
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def seed_frozen_workspace(workspace_dir: Optional[Path] = None) -> Path:
+    """Ensure workspace directories exist and seed read-only assets in frozen mode."""
+    ws = workspace_dir or get_workspace_root()
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "projects").mkdir(parents=True, exist_ok=True)
+
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        bundle = Path(getattr(sys, "_MEIPASS")).resolve()
+        for rel_dir in ("assets", "examples"):
+            src_dir = bundle / rel_dir
+            dst_dir = ws / rel_dir
+            if src_dir.is_dir() and not dst_dir.exists():
+                shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+        for rel_file in ("AGENTS_WEB.md",):
+            src_file = bundle / rel_file
+            dst_file = ws / rel_file
+            if src_file.is_file() and not dst_file.exists():
+                shutil.copy2(src_file, dst_file)
+
+    return ws

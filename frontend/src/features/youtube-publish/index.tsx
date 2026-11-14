@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api } from '../../shared/api';
+import { api, apiUrl } from '../../shared/api';
 import type { YoutubeAuthStatus } from '../../shared/types';
 
 const DEFAULT_TITLES: Record<string, string> = {
@@ -210,7 +210,7 @@ export const YoutubePublish: React.FC = () => {
         <div className="w-full sm:w-[224px] xl:w-[240px] aspect-video rounded-[8px] border border-[#475569] overflow-hidden relative shrink-0 bg-gradient-to-br from-[#065F46] via-[#0F172A] to-[#881337] shadow-md">
           {hasThumb ? (
             <img
-              src={`/api/projects/${encodeURIComponent(activeProjectName!)}/media/thumbnail.png?t=${mediaCacheBust}`}
+              src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/thumbnail.png?t=${mediaCacheBust}`)}
               alt="YouTube Thumbnail Preview"
               className="w-full h-full object-cover"
               onError={() => setThumbLoadFailed(true)}

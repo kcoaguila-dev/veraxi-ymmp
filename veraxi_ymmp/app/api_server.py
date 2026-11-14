@@ -1,15 +1,23 @@
 import http.server
 import json
 import re
+import shutil
 import socketserver
 import sys
 import threading
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
+from veraxi_ymmp import __version__
 from veraxi_ymmp.core.logging import logger
+from veraxi_ymmp.core.utils import (
+    get_bundle_root,
+    get_workspace_root,
+    seed_frozen_workspace,
+    set_workspace_root,
+)
 from veraxi_ymmp.app.mcp_server import (
     list_projects,
     load_project,
@@ -36,10 +44,131 @@ def _project_rel_path(project_name: str) -> str:
     return f"projects/{project_name}"
 
 
+_EDITABLE_PROJECT_FILES = (
+    "script.json",
+    "evidence.md",
+    "broll_manifest.json",
+    "thumbnail_config.json",
+)
+
+
+def _handle_pack_edit(project_name: str, task: str) -> Tuple[int, Dict[str, Any]]:
+    """Build a pack --mode edit bundle for a project's dialogue and grounding files."""
+    from veraxi_ymmp.app import pack_apply as pa
+    from veraxi_ymmp.app import pack_edit as pe
+
+    rel_dir = _project_rel_path(project_name)
+    root = get_workspace_root()
+    proj_path = root / rel_dir
+    if not proj_path.is_dir():
+        return 404, {"error": f"Project not found: {project_name}"}
+
+    file_contents: List[Tuple[str, str]] = []
+    for fname in _EDITABLE_PROJECT_FILES:
+        fpath = proj_path / fname
+        if fpath.is_file():
+            file_contents.append((f"{rel_dir}/{fname}", fpath.read_text(encoding="utf-8")))
+    if not file_contents:
+        return 404, {"error": "No editable project files found (script.json, etc.)."}
+
+    bundle_root = get_bundle_root()
+    web_rules = root / "AGENTS_WEB.md"
+    bundle_web_rules = bundle_root / "AGENTS_WEB.md"
+    agents_rules = root / "AGENTS.md"
+    if web_rules.is_file():
+        agents_md = web_rules.read_text(encoding="utf-8")
+    elif bundle_web_rules.is_file():
+        agents_md = bundle_web_rules.read_text(encoding="utf-8")
+    elif agents_rules.is_file():
+        agents_md = agents_rules.read_text(encoding="utf-8")
+    else:
+        agents_md = ""
+
+    rel_files = [rel for rel, _ in file_contents]
+    extra_rules = pe.build_project_pack_rules(rel_files)
+    if extra_rules:
+        agents_md = f"{agents_md.rstrip()}\n\n{extra_rules}".strip()
+
+    effective_task = task.strip() or (
+        "Make the Japanese dialogue sound more natural and conversational while keeping "
+        "every number, factual claim, <=40-char cut limit, and {Kanji|ruby} rule intact."
+    )
+    bundle = pa.build_pack_bundle(
+        task=effective_task,
+        file_contents=file_contents,
+        agents_md=agents_md,
+        mode="edit",
+    )
+    return 200, {"bundle": bundle, "chars": len(bundle), "files": rel_files}
+
+
+def _handle_apply_edit(project_name: str, reply_text: str) -> Tuple[int, Dict[str, Any]]:
+    """Validate and apply Web-AI SEARCH/REPLACE edit blocks in-place for a project."""
+    from veraxi_ymmp.app import pack_edit as pe
+    from veraxi_ymmp.app.history import backup_project_script
+
+    if not reply_text.strip():
+        return 400, {"success": False, "error": "Reply text is empty."}
+
+    rel_dir = _project_rel_path(project_name)
+    root = get_workspace_root()
+    proj_path = root / rel_dir
+    if not proj_path.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+
+    parsed = pe.parse_edit_reply(reply_text)
+    if not parsed.complete or not parsed.blocks:
+        return 422, {
+            "success": False,
+            "reprompt_block": f"Error: edit reply rejected — {parsed.problem}. No files modified.",
+        }
+
+    expected_prefix = f"{rel_dir}/"
+    for block in parsed.blocks:
+        norm_path = block.path.replace("\\", "/").lstrip("./")
+        if not norm_path.startswith(expected_prefix):
+            return 422, {
+                "success": False,
+                "reprompt_block": (
+                    f"Error: edit target '{block.path}' is outside '{expected_prefix}'. "
+                    "Studio Web-AI Edit only allows modifying files inside the active project."
+                ),
+            }
+
+    backup_id = backup_project_script(proj_path, reason="web_ai_edit")
+    messages: List[str] = []
+    code = pe.apply_edit_reply(
+        reply_text,
+        root,
+        check_runner=lambda *a, **kw: [],
+        output_fn=messages.append,
+        in_place=True,
+    )
+    output_text = "\n".join(messages)
+    if code != 0:
+        return 422, {"success": False, "reprompt_block": output_text}
+    return 200, {"success": True, "message": output_text, "backup_created": backup_id}
+
+
+_ALLOWED_ORIGINS = frozenset({
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
+})
+
+
 class APIHandler(http.server.SimpleHTTPRequestHandler):
+    def _send_cors_headers(self) -> None:
+        origin = self.headers.get("Origin", "")
+        allowed = origin if origin in _ALLOWED_ORIGINS else "http://localhost:1420"
+        self.send_header("Access-Control-Allow-Origin", allowed)
+        self.send_header("Vary", "Origin")
+
     def do_OPTIONS(self) -> None:
         self.send_response(200, "ok")
-        self.send_header('Access-Control-Allow-Origin', 'http://localhost:1420')
+        self._send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
         self.send_header("Access-Control-Allow-Headers", "X-Requested-With, Content-Type")
         self.end_headers()
@@ -53,7 +182,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             return
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', 'http://localhost:1420')
+        self._send_cors_headers()
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -62,6 +191,17 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         try:
             parsed_path = urllib.parse.urlparse(self.path)
             path = parsed_path.path
+
+            if path == '/api/health':
+                return self.send_json(200, {
+                    "status": "ok",
+                    "version": __version__,
+                    "workspace": str(get_workspace_root()),
+                    "ffmpeg_available": shutil.which("ffmpeg") is not None,
+                })
+
+            if path == '/api/workspace':
+                return self.send_json(200, {"workspace": str(get_workspace_root())})
 
             if path == '/api/projects':
                 return self.send_json(200, list_projects())
@@ -158,7 +298,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     length = end - start + 1
                     self.send_response(206)
                     self.send_header('Content-Type', content_type)
-                    self.send_header('Access-Control-Allow-Origin', 'http://localhost:1420')
+                    self._send_cors_headers()
                     self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
                     self.send_header('Content-Length', str(length))
                     self.send_header('Accept-Ranges', 'bytes')
@@ -171,7 +311,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header('Content-Type', content_type)
-            self.send_header('Access-Control-Allow-Origin', 'http://localhost:1420')
+            self._send_cors_headers()
             self.send_header('Content-Length', str(file_size))
             self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
@@ -199,6 +339,13 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             except json.JSONDecodeError:
                 body = {}
 
+            if path == '/api/workspace':
+                ws_raw = body.get("workspace", "")
+                if not isinstance(ws_raw, str) or not ws_raw.strip():
+                    return self.send_json(400, {"error": "workspace path is required"})
+                new_root = seed_frozen_workspace(set_workspace_root(ws_raw.strip()))
+                return self.send_json(200, {"success": True, "workspace": str(new_root)})
+
             if path == '/api/projects':
                 name = body.get("name", "Untitled")
                 # Basic protection
@@ -225,7 +372,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     if wav_path.exists():
                         self.send_response(200)
                         self.send_header('Content-Type', 'audio/wav')
-                        self.send_header('Access-Control-Allow-Origin', 'http://localhost:1420')
+                        self._send_cors_headers()
                         self.send_header('Content-Length', str(wav_path.stat().st_size))
                         self.end_headers()
                         with open(wav_path, 'rb') as f:
@@ -246,6 +393,18 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 max_chars = body.get("max_chars", 40)
                 split = split_long_script_entries(script, max_chars=max_chars)
                 return self.send_json(200, {"script": split})
+
+            match = re.match(r'^/api/projects/([^/]+)/pack-edit$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                status_code, payload = _handle_pack_edit(project_name, str(body.get("task", "")))
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/apply-edit$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                status_code, payload = _handle_apply_edit(project_name, str(body.get("reply", "")))
+                return self.send_json(status_code, payload)
 
             match = re.match(r'^/api/projects/([^/]+)/run$', path)
             if match:
@@ -429,10 +588,16 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         logger.error(f"Socket error for {client_address}: {exc_val}")
 
 
-def serve(port: int = 8000) -> None:
+def serve(port: int = 8000, workspace: Optional[str] = None) -> None:
+    if workspace:
+        set_workspace_root(workspace)
+    seed_frozen_workspace()
+
     server_address = ('127.0.0.1', port)
     httpd = ThreadingHTTPServer(server_address, APIHandler)
-    logger.info(f"Starting Veraxi YMMP API server on http://127.0.0.1:{port}")
+    actual_port = httpd.server_address[1]
+    logger.info(f"Starting Veraxi YMMP API server on http://127.0.0.1:{actual_port}")
+    print(f"VERAXI_API_READY http://127.0.0.1:{actual_port}", flush=True)
     try:
         while True:
             try:

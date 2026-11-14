@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api } from '../../shared/api';
+import { api, apiUrl } from '../../shared/api';
 import { LoudnessResult } from '../../shared/types';
 
 export const VideoPreview: React.FC = () => {
@@ -80,7 +80,7 @@ export const VideoPreview: React.FC = () => {
   if (!projectData) return null;
 
   const videoSrc = projectData.qa_video_path
-    ? `/api/projects/${encodeURIComponent(activeProjectName!)}/media/qa_test.mp4?t=${mediaCacheBust}`
+    ? apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/qa_test.mp4?t=${mediaCacheBust}`)
     : null;
 
   const progressPct = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;

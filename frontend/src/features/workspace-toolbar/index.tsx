@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api } from '../../shared/api';
+import { api, apiUrl } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, voicevoxHealth, pipelineStatus, runPipeline, isDirty } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
@@ -29,7 +29,7 @@ export const WorkspaceToolbar: React.FC = () => {
     if (!activeProjectName) return;
     setLoadingPrem(true);
     try {
-      const url = `/api/projects/${encodeURIComponent(activeProjectName)}/media/premiere/${encodeURIComponent(activeProjectName)}.xml`;
+      const url = apiUrl(`/api/projects/${encodeURIComponent(activeProjectName)}/media/premiere/${encodeURIComponent(activeProjectName)}.xml`);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${activeProjectName}.xml`;
@@ -121,7 +121,7 @@ export const WorkspaceToolbar: React.FC = () => {
           <button
             type="button"
             onClick={() => setUseTts(!useTts)}
-            title="Click to toggle No-TTS fallback mode"
+            title="VOICEVOX Engine (127.0.0.1:50021) が見つかりません。VOICEVOXを起動するか、クリックしてNo-TTSモードに切り替えてください。"
             className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide transition-colors ${
               useTts
                 ? 'bg-[#4C0519] text-[#FECDD3] border border-[#F43F5E]/40'
@@ -132,6 +132,22 @@ export const WorkspaceToolbar: React.FC = () => {
             {useTts ? 'VOICEVOX OFFLINE (No-TTS切替)' : 'NO-TTS モード有効'}
           </button>
         )}
+
+        {!backendReady ? (
+          <span
+            title="Pythonバックエンドの起動を待機中..."
+            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold bg-[#1E293B] text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse"
+          >
+            API 接続中...
+          </span>
+        ) : apiHealth && !apiHealth.ffmpeg_available ? (
+          <span
+            title="FFmpeg が PATH 上に見つかりません。動画プレビュー書き出しや音量正規化には FFmpeg が必要です。"
+            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold bg-[#78350F]/80 text-[#FDE68A] border border-[#F59E0B]/40"
+          >
+            FFmpeg 未検出
+          </span>
+        ) : null}
       </div>
 
       {/* Right: Step 1 (Local Generate) + Optional Editor Handoffs */}

@@ -30,6 +30,7 @@ from veraxi_ymmp.core.script import (
     validate_writer_script,
 )
 from veraxi_ymmp.core.template import extract_character_templates, get_timeline, load_template
+from veraxi_ymmp.core.utils import get_workspace_root
 from veraxi_ymmp.graphics.thumbnail import generate_project_thumbnail
 from veraxi_ymmp.audio.voicevox import NullTTSBackend, VoicevoxClient
 
@@ -38,7 +39,7 @@ mcp = FastMCP("veraxi-ymmp")
 
 def workspace_path(path: str) -> Path:
     """Resolve a path inside the MCP server's workspace."""
-    root = Path.cwd().resolve()
+    root = get_workspace_root()
     candidate = (root / path).resolve()
     try:
         candidate.relative_to(root)
@@ -521,7 +522,8 @@ def launch_ymm4_desktop(project_dir: str) -> Dict[str, Any]:
 @mcp.tool()
 def list_projects() -> Dict[str, Any]:
     """Scans projects/ directory and returns available project folders with artifact flags."""
-    projects_dir = Path.cwd() / "projects"
+    root = get_workspace_root()
+    projects_dir = root / "projects"
     if not projects_dir.exists():
         return {"projects": []}
 
@@ -534,7 +536,7 @@ def list_projects() -> Dict[str, Any]:
             has_thumbnail = (proj_path / "thumbnail.png").exists()
             projects.append({
                 "name": proj_path.name,
-                "path": str(proj_path.relative_to(Path.cwd())),
+                "path": str(proj_path.relative_to(root)),
                 "has_script": has_script,
                 "has_broll_manifest": has_broll_manifest,
                 "has_qa_video": has_qa_video,

@@ -313,3 +313,85 @@ def test_api_youtube_auth_endpoints(api_server: str, tmp_path: Path) -> None:
         res_rev = requests.post(f"{api_server}/api/youtube/auth/revoke")
         assert res_rev.status_code == 200
         assert res_rev.json()["success"] is True
+
+
+def test_api_health_endpoint(api_server: str) -> None:
+    res = requests.get(f"{api_server}/api/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert "version" in data
+    assert "workspace" in data
+    assert isinstance(data["ffmpeg_available"], bool)
+
+
+@pytest.mark.parametrize(
+    "origin,expected",
+    [
+        ("http://localhost:1420", "http://localhost:1420"),
+        ("http://127.0.0.1:1420", "http://127.0.0.1:1420"),
+        ("http://tauri.localhost", "http://tauri.localhost"),
+        ("https://tauri.localhost", "https://tauri.localhost"),
+        ("tauri://localhost", "tauri://localhost"),
+        ("https://evil.example", "http://localhost:1420"),
+    ],
+)
+def test_api_cors_allowlist(api_server: str, origin: str, expected: str) -> None:
+    res = requests.get(f"{api_server}/api/health", headers={"Origin": origin})
+    assert res.status_code == 200
+    assert res.headers.get("Access-Control-Allow-Origin") == expected
+    assert "Origin" in (res.headers.get("Vary") or "")
+
+
+def test_api_workspace_get_and_set(api_server: str, tmp_path: Path) -> None:
+    import os
+
+    orig_ws = os.environ.pop("VERAXI_WORKSPACE_DIR", None)
+    target_ws = tmp_path / "custom_ws"
+    try:
+        res_bad = requests.post(f"{api_server}/api/workspace", json={"workspace": ""})
+        assert res_bad.status_code == 400
+
+        res_set = requests.post(f"{api_server}/api/workspace", json={"workspace": str(target_ws)})
+        assert res_set.status_code == 200
+        assert res_set.json()["success"] is True
+        assert Path(res_set.json()["workspace"]) == target_ws.resolve()
+        assert (target_ws / "projects").is_dir()
+
+        res_get = requests.get(f"{api_server}/api/workspace")
+        assert res_get.status_code == 200
+        assert Path(res_get.json()["workspace"]) == target_ws.resolve()
+    finally:
+        if orig_ws is not None:
+            os.environ["VERAXI_WORKSPACE_DIR"] = orig_ws
+        else:
+            os.environ.pop("VERAXI_WORKSPACE_DIR", None)
+
+
+def test_api_serve_ephemeral_port_readiness_handshake(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import os
+    from veraxi_ymmp.app import api_server as api_mod
+
+    orig_ws = os.environ.pop("VERAXI_WORKSPACE_DIR", None)
+    ws = tmp_path / "ephemeral_ws"
+
+    def _stop_immediately(_self: object) -> None:
+        raise KeyboardInterrupt()
+
+    try:
+        with patch.object(api_mod.ThreadingHTTPServer, "serve_forever", _stop_immediately):
+            api_mod.serve(port=0, workspace=str(ws))
+
+        captured = capsys.readouterr()
+        assert "VERAXI_API_READY http://127.0.0.1:" in captured.out
+        ready_line = [ln for ln in captured.out.splitlines() if ln.startswith("VERAXI_API_READY ")][0]
+        port_num = int(ready_line.rsplit(":", 1)[1])
+        assert port_num > 0
+        assert (ws / "projects").is_dir()
+    finally:
+        if orig_ws is not None:
+            os.environ["VERAXI_WORKSPACE_DIR"] = orig_ws
+        else:
+            os.environ.pop("VERAXI_WORKSPACE_DIR", None)

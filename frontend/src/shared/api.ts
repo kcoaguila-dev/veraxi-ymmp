@@ -1,7 +1,65 @@
 import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
-  YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus
+  YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
+  ApiHealth
 } from './types.ts';
+
+interface TauriInternals {
+  invoke?: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+}
+
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: TauriInternals;
+  }
+}
+
+let cachedApiBaseUrl = '';
+let initBaseUrlPromise: Promise<string> | null = null;
+
+export function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && typeof window.__TAURI_INTERNALS__?.invoke === 'function';
+}
+
+export function setApiBaseUrl(url: string): void {
+  cachedApiBaseUrl = url.replace(/\/+$/, '');
+}
+
+export function getApiBaseUrl(): string {
+  return cachedApiBaseUrl;
+}
+
+export async function initApiBaseUrl(): Promise<string> {
+  if (cachedApiBaseUrl) {
+    return cachedApiBaseUrl;
+  }
+  if (!isTauriRuntime()) {
+    return '';
+  }
+  if (!initBaseUrlPromise) {
+    initBaseUrlPromise = window.__TAURI_INTERNALS__!.invoke!<string>('get_api_base_url')
+      .then((url) => {
+        if (typeof url === 'string' && url.trim()) {
+          setApiBaseUrl(url.trim());
+        }
+        return cachedApiBaseUrl;
+      })
+      .catch((err) => {
+        console.warn('Failed to resolve Tauri API base URL, falling back to relative paths:', err);
+        initBaseUrlPromise = null;
+        return '';
+      });
+  }
+  return initBaseUrlPromise;
+}
+
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return cachedApiBaseUrl ? `${cachedApiBaseUrl}${normalized}` : normalized;
+}
 
 export class APIError extends Error {
   status: number;
@@ -16,7 +74,8 @@ export class APIError extends Error {
 }
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(endpoint, options);
+  await initApiBaseUrl();
+  const res = await fetch(apiUrl(endpoint), options);
   if (!res.ok) {
     let errorData = null;
     try {
@@ -78,12 +137,49 @@ export const api = {
     body: JSON.stringify({ script, max_chars: maxChars })
   }),
 
+  packEditProject: (name: string, task: string) => fetchAPI<{ bundle: string; chars: number; files: string[] }>(`/api/projects/${encodeURIComponent(name)}/pack-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task })
+  }),
+
+  applyEditProject: (name: string, reply: string) => fetchAPI<{ success: boolean; message?: string; reprompt_block?: string; backup_created?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/apply-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reply })
+  }),
+
   getAIPrompt: () => fetchAPI<{ prompt_markdown: string; json_schema: any }>('/api/ai-prompt'),
+
+  getHealth: () => fetchAPI<ApiHealth>('/api/health'),
+
+  waitForBackendReady: async (maxAttempts: number = 30, intervalMs: number = 500): Promise<ApiHealth | null> => {
+    await initApiBaseUrl();
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await fetchAPI<ApiHealth>('/api/health');
+      } catch {
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
+      }
+    }
+    return null;
+  },
+
+  getWorkspace: () => fetchAPI<{ workspace: string }>('/api/workspace'),
+
+  setWorkspace: (workspace: string) => fetchAPI<{ success: boolean; workspace: string }>('/api/workspace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace })
+  }),
 
   getVoicevoxHealth: () => fetchAPI<VoicevoxHealth>('/api/voicevox/health'),
 
   auditionVoice: async (text: string, character: string, speed: number = 1.0, signal?: AbortSignal) => {
-    const res = await fetch('/api/voicevox/audition', {
+    await initApiBaseUrl();
+    const res = await fetch(apiUrl('/api/voicevox/audition'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, character, speed }),
