@@ -634,8 +634,10 @@ export const StoryboardScript: React.FC = () => {
 
   if (!projectData) {
     return (
-      <div className="p-6 text-sm text-[#94A3B8] flex items-center justify-center h-full">
-        プロジェクトを読み込み中...
+      <div className="p-6 text-sm text-[#94A3B8] flex items-center justify-center h-full text-center leading-relaxed">
+        {activeProjectName
+          ? 'プロジェクトを読み込み中...'
+          : 'プロジェクトが選択されていません。Step 1「リサーチ & 素材」で Dossier を生成するか、上のドロップダウンからプロジェクトを選択してください。'}
       </div>
     );
   }
@@ -645,8 +647,8 @@ export const StoryboardScript: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-[#111827] text-[#F8FAFC]">
       {/* Panel Header & Web AI Copy-Paste Bridge */}
-      <div className="h-[54px] px-5 border-b border-[#1E293B] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="min-h-[54px] px-5 py-2 border-b border-[#1E293B] flex items-center justify-between flex-wrap gap-x-3 gap-y-2 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-wrap">
           <h2 className="text-[15px] font-extrabold text-[#F8FAFC] whitespace-nowrap">
             1. 台本・スライド編集
           </h2>
@@ -700,7 +702,7 @@ export const StoryboardScript: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             type="button"
             onClick={handleOpenHistory}

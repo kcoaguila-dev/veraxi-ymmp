@@ -251,7 +251,10 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
               )}
               {manifestEntries.length > 0 && (
                 <p className="text-[11px] text-[#64748B]">
-                  manifest 登録済み: {manifestEntries.map(([k]) => k).join(', ')}
+                  manifest 登録済み: {manifestEntries.map(([k, v]) => {
+                    const url = (v as { url?: unknown })?.url;
+                    return typeof url === 'string' && url ? `${k} (${url})` : k;
+                  }).join(', ')}
                 </p>
               )}
             </>

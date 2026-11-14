@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 }
 
 export const App: React.FC = () => {
-  const [activeStep, setActiveStep] = useState(1)
+  const [activeStep, setActiveStep] = useState(0)
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-full bg-[#0B0F19] text-[#F8FAFC] font-sans select-none">
