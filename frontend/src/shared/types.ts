@@ -79,6 +79,101 @@ export interface ApiHealth {
   ffmpeg_available: boolean;
 }
 
+export interface IdeateResult {
+  success: boolean;
+  project_name: string;
+  dossier_markdown: string;
+  sources_manifest: Record<string, any>;
+}
+
+export interface SourceFileEntry {
+  name: string;
+  size: number;
+  sha256: string;
+  extension: string;
+}
+
+export interface SourcesResult {
+  success: boolean;
+  sources: SourceFileEntry[];
+  sources_manifest: Record<string, any>;
+}
+
+export interface IngestResult {
+  success: boolean;
+  cut_count: number;
+  claim_count: number;
+  script: DirectorScriptEntry[];
+}
+
+export interface PacingViolation {
+  rule_name: string;
+  severity: string;
+  character: string | null;
+  message: string;
+  remedy: string;
+}
+
+export interface FactClaimResult {
+  id: string;
+  cut_index: number;
+  text: string;
+  verdict: 'SUPPORTED' | 'UNSUPPORTED' | 'INSUFFICIENT';
+  verdict_raw: string;
+  reason: string;
+  quote_errors: string[];
+  evidence_quotes: string[];
+}
+
+export interface ValidateResult {
+  success: boolean;
+  passed: boolean;
+  retention_score: number;
+  pacing_is_healthy: boolean;
+  pacing_summary: string;
+  cast_balance: Record<string, number>;
+  character_stats: Record<string, any>;
+  pacing_violations: PacingViolation[];
+  fact_summary: {
+    supported: number;
+    unsupported: number;
+    insufficient: number;
+    total: number;
+    claims: FactClaimResult[];
+  };
+  fact_blocked: boolean;
+  fact_report: string | null;
+  fact_error: string | null;
+}
+
+export interface QaCheck {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface QaFrame {
+  key: string;
+  label: string;
+  url: string;
+  cut_index: number | null;
+  timestamp_sec: number | null;
+  speaker: string | null;
+  text: string | null;
+}
+
+export interface QaResult {
+  success: boolean;
+  passed: boolean;
+  checks: QaCheck[];
+  frames: QaFrame[];
+  missing_audio: string[];
+  coverage_issues: string[];
+  thumbnail_issues: string[];
+  total_cuts?: number | null;
+  video_duration_sec?: number | null;
+}
+
 export interface YoutubeAuthStatus {
   has_client_secrets: boolean;
   has_token: boolean;

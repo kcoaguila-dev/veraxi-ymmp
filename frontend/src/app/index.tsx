@@ -1,8 +1,16 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import React, { Component, ErrorInfo, ReactNode, useState } from 'react'
 import { WorkspaceToolbar } from '../features/workspace-toolbar'
 import { StoryboardScript } from '../features/storyboard-script'
 import { VideoPreview } from '../features/video-preview'
 import { YoutubePublish } from '../features/youtube-publish'
+import { ResearchDossier } from '../features/research-dossier'
+
+const WORKFLOW_STEPS = [
+  '1. リサーチ & 素材',
+  '2. 台本 & 監査',
+  '3. 動画生成 & QA',
+  '4. サムネ & 公開',
+] as const
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -54,14 +62,38 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 }
 
 export const App: React.FC = () => {
+  const [activeStep, setActiveStep] = useState(1)
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-full bg-[#0B0F19] text-[#F8FAFC] font-sans select-none">
         <WorkspaceToolbar />
+        {/* Golden Path Stepper: Steps 1-2 (research/ingest) -> 3 (audit) -> 4-5 (generate/QA) -> publish */}
+        <nav className="h-[42px] px-6 bg-[#0B0F19] border-b border-[#1E293B] flex items-center gap-2 shrink-0" aria-label="ワークフロー">
+          {WORKFLOW_STEPS.map((label, idx) => (
+            <React.Fragment key={label}>
+              <button
+                type="button"
+                onClick={() => setActiveStep(idx)}
+                className={`h-[28px] px-3.5 rounded-full text-[12px] font-extrabold transition-colors ${
+                  activeStep === idx
+                    ? 'bg-gradient-to-br from-[#10B981] to-[#059669] text-white'
+                    : 'bg-[#1E293B] text-[#94A3B8] hover:text-white border border-[#334155]'
+                }`}
+              >
+                {label}
+              </button>
+              {idx < WORKFLOW_STEPS.length - 1 && <span className="text-[#475569] text-xs">→</span>}
+            </React.Fragment>
+          ))}
+        </nav>
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(480px,46%)_1fr] gap-5 p-4 lg:p-5 overflow-hidden">
-          {/* LEFT WORKSPACE: 1. STORYBOARD & WEB-AI COPY-PASTE BRIDGE */}
+          {/* LEFT WORKSPACE: Step 1-2 RESEARCH PANEL or STORYBOARD & WEB-AI COPY-PASTE BRIDGE */}
           <section className="h-full overflow-hidden rounded-[14px] bg-[#111827] border border-[#1E293B] shadow-[0_6px_20px_rgba(0,0,0,0.4)] flex flex-col">
-            <StoryboardScript />
+            {activeStep === 0 ? (
+              <ResearchDossier onIngestDone={() => setActiveStep(1)} />
+            ) : (
+              <StoryboardScript />
+            )}
           </section>
 
           {/* RIGHT WORKSPACE: 2. PREVIEW PLAYER + 3. YOUTUBE UPLOAD CARD */}

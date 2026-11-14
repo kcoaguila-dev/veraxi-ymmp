@@ -230,6 +230,13 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 project_name = urllib.parse.unquote(match.group(1))
                 return self.send_json(200, load_project(_project_rel_path(project_name)))
 
+            match = re.match(r'^/api/projects/([^/]+)/sources$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_list_sources
+                status_code, payload = handle_list_sources(project_name)
+                return self.send_json(status_code, payload)
+
             match = re.match(r'^/api/projects/([^/]+)/history$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -358,6 +365,39 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 if not script_path.exists():
                     script_path.write_text("[]", encoding="utf-8")
                 return self.send_json(200, {"success": True, "name": name})
+
+            if path == '/api/ideate':
+                from veraxi_ymmp.app.studio_workflow_routes import handle_ideate
+                status_code, payload = handle_ideate(body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/sources$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_add_source
+                status_code, payload = handle_add_source(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/ingest$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_ingest
+                status_code, payload = handle_ingest(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/validate$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_validate
+                status_code, payload = handle_validate(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/qa$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_qa
+                status_code, payload = handle_qa(project_name)
+                return self.send_json(status_code, payload)
 
             if path == '/api/voicevox/audition':
                 text = body.get("text", "")

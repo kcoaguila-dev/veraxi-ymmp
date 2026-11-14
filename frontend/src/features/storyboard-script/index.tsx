@@ -145,6 +145,8 @@ export const StoryboardScript: React.FC = () => {
     setActiveProject,
     isDirty,
     mediaCacheBust,
+    lastValidation,
+    setLastValidation,
   } = useStudioStore();
 
   const [newChar, setNewChar] = useState('ずんだもん');
@@ -187,6 +189,37 @@ export const StoryboardScript: React.FC = () => {
   const [webEditError, setWebEditError] = useState<string | null>(null);
   const [isPackingEdit, setIsPackingEdit] = useState(false);
   const [isApplyingEdit, setIsApplyingEdit] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [showAuditDetails, setShowAuditDetails] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const jumpToCut = (cutIndex: number) => {
+    setSelectedIndex(cutIndex);
+    requestAnimationFrame(() => {
+      document.getElementById(`cut-card-${cutIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const handleValidate = async () => {
+    if (!activeProjectName) return;
+    if (isDirty) {
+      const saved = await saveScript();
+      if (saved && saved.success === false) {
+        setAuditError('監査前に台本を保存できませんでした。保存エラーを確認してください。');
+        return;
+      }
+    }
+    setIsValidating(true);
+    setAuditError(null);
+    try {
+      const res = await api.validateProject(activeProjectName);
+      setLastValidation(res);
+      setShowAuditDetails(true);
+    } catch (e: any) {
+      setAuditError(e?.data?.error || e?.message || '監査実行に失敗しました');
+    }
+    setIsValidating(false);
+  };
 
   const handleCopyEditBundle = async () => {
     if (!activeProjectName) return;
@@ -628,6 +661,43 @@ export const StoryboardScript: React.FC = () => {
               💾 保存
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleValidate}
+            disabled={isValidating}
+            title="Step 3: 事実監査 (Fact Audit) と リテンション監査 (Pacing) を実行"
+            className="bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {isValidating ? '⏳ 監査中...' : '🔍 監査実行 (Fact & Pacing Audit)'}
+          </button>
+          {lastValidation && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+                title={lastValidation.pacing_summary}
+                className={`text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] whitespace-nowrap ${
+                  lastValidation.retention_score >= 80
+                    ? 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/40'
+                    : 'bg-[#78350F]/80 text-[#FDE68A] border border-[#F59E0B]/40'
+                }`}
+              >
+                Retention {lastValidation.retention_score}/100
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+                className={`text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] whitespace-nowrap ${
+                  lastValidation.fact_summary.unsupported > 0
+                    ? 'bg-[#4C0519] text-[#FECDD3] border border-[#F43F5E]/40'
+                    : 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/40'
+                }`}
+              >
+                Fact {lastValidation.fact_summary.supported}/{lastValidation.fact_summary.total} SUPPORTED
+                {lastValidation.fact_summary.unsupported > 0 && ` ⚠ ${lastValidation.fact_summary.unsupported} UNSUPPORTED`}
+              </button>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -664,6 +734,79 @@ export const StoryboardScript: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Step 3 Audit Drawer (Fact & Pacing) */}
+      {(auditError || (lastValidation && showAuditDetails)) && (
+        <div className="border-b border-[#1E293B] bg-[#0B0F19] px-5 py-3 max-h-64 overflow-y-auto shrink-0">
+          {auditError && (
+            <p className="text-[12px] font-semibold text-[#FECDD3]">⚠ {auditError}</p>
+          )}
+          {lastValidation && showAuditDetails && (
+            <div className="space-y-2.5">
+              {!lastValidation.passed && (
+                <p className="text-[12px] font-extrabold text-[#FDE68A] bg-[#78350F]/60 border border-[#F59E0B]/40 rounded-[6px] px-2.5 py-1.5">
+                  ⚠ ゲート警告: Retention {lastValidation.retention_score}/100
+                  {lastValidation.retention_score < 80 && ' (80未満)'}
+                  {lastValidation.fact_summary.unsupported > 0 &&
+                    ` / UNSUPPORTED ${lastValidation.fact_summary.unsupported}件`}
+                  {' '}— このまま「動画生成」(Step 4) へ進む前に修正を推奨します。
+                </p>
+              )}
+              <p className="text-[11.5px] text-[#94A3B8]">
+                {lastValidation.pacing_summary}
+                {' · '}配役バランス:{' '}
+                {Object.entries(lastValidation.cast_balance)
+                  .map(([name, ratio]) => `${name} ${Math.round(ratio * 100)}%`)
+                  .join(' / ') || '—'}
+                {' '}(目標 50/30/20)
+              </p>
+              {lastValidation.pacing_violations.length > 0 && (
+                <ul className="space-y-1">
+                  {lastValidation.pacing_violations.map((v, i) => {
+                    const cutMatch = v.message.match(/#(\d+)/);
+                    return (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          onClick={() => { if (cutMatch) jumpToCut(parseInt(cutMatch[1], 10)); }}
+                          className="text-left text-[11.5px] text-[#FDE68A] hover:text-white"
+                          title={v.remedy}
+                        >
+                          [{v.severity}] {v.rule_name}: {v.message}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {lastValidation.fact_summary.claims.filter((c) => c.verdict !== 'SUPPORTED').length > 0 && (
+                <ul className="space-y-1">
+                  {lastValidation.fact_summary.claims
+                    .filter((c) => c.verdict !== 'SUPPORTED')
+                    .map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => jumpToCut(c.cut_index)}
+                          className={`text-left text-[11.5px] hover:text-white ${
+                            c.verdict === 'UNSUPPORTED' ? 'text-[#FECDD3]' : 'text-[#FDE68A]'
+                          }`}
+                          title={c.reason}
+                        >
+                          [{c.verdict}] Cut #{c.cut_index + 1}: {c.text}
+                          {c.quote_errors.length > 0 && ` — ${c.quote_errors[0]}`}
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {lastValidation.fact_error && (
+                <p className="text-[11.5px] text-[#FECDD3]">Fact audit: {lastValidation.fact_error}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Scrollable Scene Blocks Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
@@ -801,6 +944,7 @@ export const StoryboardScript: React.FC = () => {
                   return (
                     <div
                       key={index}
+                      id={`cut-card-${index}`}
                       onClick={() => setSelectedIndex(index)}
                       className={`rounded-[8px] px-3 py-2.5 flex items-center gap-3 transition-colors group ${cardBgClass}`}
                     >

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl } from '../../shared/api';
-import { LoudnessResult } from '../../shared/types';
+import { LoudnessResult, QaResult } from '../../shared/types';
 
 export const VideoPreview: React.FC = () => {
   const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus } = useStudioStore();
@@ -11,6 +11,21 @@ export const VideoPreview: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loudness, setLoudness] = useState<LoudnessResult | null>(null);
   const [isNormalizing, setIsNormalizing] = useState(false);
+  const [qaResult, setQaResult] = useState<QaResult | null>(null);
+  const [isRunningQa, setIsRunningQa] = useState(false);
+
+  const handleQa = async () => {
+    if (!activeProjectName) return;
+    setIsRunningQa(true);
+    try {
+      const res = await api.runProjectQa(activeProjectName);
+      setQaResult(res);
+    } catch (e) {
+      console.error(e);
+      alert('QA 検査に失敗しました (QA audit failed)');
+    }
+    setIsRunningQa(false);
+  };
 
   useEffect(() => {
     const handlePausePreview = () => {
@@ -124,6 +139,28 @@ export const VideoPreview: React.FC = () => {
             : loudness
             ? `🔊 音量バランス: 最適 (${loudness.measured_i.toFixed(1)} LUFS) ✓`
             : '🔊 音量バランス: 最適 ✓'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleQa}
+          disabled={isRunningQa}
+          title="Step 5: TTSカバレッジ・サムネイル・キーフレームの自動QA検査"
+          className={`h-[26px] px-3.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors ${
+            qaResult
+              ? qaResult.passed
+                ? 'bg-[#064E3B] text-[#A7F3D0]'
+                : 'bg-[#4C0519] text-[#FECDD3]'
+              : 'bg-[#1E293B] hover:bg-[#334155] text-[#E2E8F0]'
+          }`}
+        >
+          {isRunningQa
+            ? '⏳ QA検査中...'
+            : qaResult
+            ? qaResult.passed
+              ? '🔎 QA 検査: 合格 ✓'
+              : '🔎 QA 検査: 不合格 ✗'
+            : '🔎 QA 検査 (Keyframe Audit)'}
         </button>
       </div>
 
@@ -239,6 +276,42 @@ export const VideoPreview: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Step 5 QA Results: checks + milestone keyframe grid */}
+      {qaResult && (
+        <div className="px-5 pb-4 pt-1 space-y-3">
+          <ul className="space-y-1">
+            {qaResult.checks.map((check) => (
+              <li key={check.name} className="text-[11.5px] font-semibold flex gap-2">
+                <span className={check.passed ? 'text-[#34D399]' : 'text-[#FB7185]'}>
+                  {check.passed ? '✓' : '✗'}
+                </span>
+                <span className="text-[#CBD5E1]">
+                  {check.name}: {check.detail}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {qaResult.frames.length > 0 && (
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
+              {qaResult.frames.map((frame) => (
+                <figure key={frame.key} className="bg-[#0B0F19] border border-[#1E293B] rounded-[8px] overflow-hidden">
+                  <img
+                    src={apiUrl(`${frame.url}?t=${mediaCacheBust}`)}
+                    alt={frame.label}
+                    className="w-full aspect-video object-cover"
+                  />
+                  <figcaption className="px-2 py-1.5 text-[10.5px] font-bold text-[#94A3B8]">
+                    {frame.label}
+                    {frame.timestamp_sec !== null && ` · ${frame.timestamp_sec}s`}
+                    {frame.speaker && ` · ${frame.speaker}`}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

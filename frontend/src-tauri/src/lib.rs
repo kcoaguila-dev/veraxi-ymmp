@@ -88,6 +88,8 @@ fn get_api_base_url(state: State<'_, ApiState>) -> String {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(ApiState(Mutex::new(String::new())))
         .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![get_api_base_url])

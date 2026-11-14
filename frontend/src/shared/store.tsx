@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from './api';
-import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry, ApiHealth } from './types';
+import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry, ApiHealth, ValidateResult } from './types';
 import {
   getInitialProjectName,
   persistActiveProject,
@@ -16,6 +16,8 @@ interface StudioState {
   voicevoxHealth: VoicevoxHealth | null;
   pipelineStatus: PipelineStatus;
   isDirty: boolean;
+  lastValidation: ValidateResult | null;
+  setLastValidation: (result: ValidateResult | null) => void;
 
   loadProjects: (preferredName?: string) => Promise<void>;
   createProject: (name: string) => Promise<void>;
@@ -46,6 +48,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
   const [isDirty, setIsDirty] = useState(false);
+  const [lastValidation, setLastValidation] = useState<ValidateResult | null>(null);
   const [mediaCacheBust, setMediaCacheBust] = useState(Date.now());
 
   useEffect(() => {
@@ -136,6 +139,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const data = await api.getProject(name);
       setProjectData(data);
       setIsDirty(false);
+      setLastValidation(null);
       try {
         const initialStatus = await api.getPipelineStatus(name);
         setPipelineStatus(initialStatus);
@@ -242,6 +246,8 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     voicevoxHealth,
     pipelineStatus,
     isDirty,
+    lastValidation,
+    setLastValidation,
     loadProjects,
     createProject,
     setActiveProject,

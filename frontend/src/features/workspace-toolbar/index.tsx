@@ -1,13 +1,70 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api, apiUrl } from '../../shared/api';
+import { api, apiUrl, isTauriRuntime } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
   const [useTts, setUseTts] = useState(true);
+  const [workspacePath, setWorkspacePath] = useState('');
+
+  useEffect(() => {
+    if (!backendReady) return;
+    api.getWorkspace()
+      .then((res) => setWorkspacePath(res.workspace))
+      .catch(() => setWorkspacePath(''));
+  }, [backendReady]);
+
+  const handleChangeWorkspace = async () => {
+    try {
+      let selected: string | null = null;
+      if (isTauriRuntime()) {
+        const dialog = await import('@tauri-apps/plugin-dialog');
+        const picked = await dialog.open({ directory: true, multiple: false });
+        selected = typeof picked === 'string' ? picked : null;
+      } else {
+        selected = prompt('ワークスペースフォルダのパスを入力してください:', workspacePath);
+      }
+      if (!selected) return;
+      const res = await api.setWorkspace(selected);
+      setWorkspacePath(res.workspace);
+      await loadProjects();
+    } catch (e) {
+      console.error(e);
+      alert('ワークスペースの変更に失敗しました');
+    }
+  };
+
+  const handleOpenProjectFolder = async () => {
+    if (!workspacePath || !activeProjectName) return;
+    const projectDir = `${workspacePath.replace(/[\\/]+$/, '')}/projects/${activeProjectName}`;
+    if (isTauriRuntime()) {
+      try {
+        const opener = await import('@tauri-apps/plugin-opener');
+        await opener.revealItemInDir(projectDir);
+        return;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    alert(`プロジェクトフォルダ: ${projectDir}`);
+  };
+
+  const handleRunPipeline = () => {
+    if (lastValidation && !lastValidation.passed) {
+      const confirmed = window.confirm(
+        `⚠ 監査ゲート警告: Retention ${lastValidation.retention_score}/100` +
+        (lastValidation.fact_summary.unsupported > 0
+          ? ` / UNSUPPORTED ${lastValidation.fact_summary.unsupported}件`
+          : '') +
+        '\n監査を通過していませんが、動画生成を続行しますか？'
+      );
+      if (!confirmed) return;
+    }
+    runPipeline(useTts && vvOnline);
+  };
 
   const handleYMM4 = async () => {
     if (!activeProjectName) return;
@@ -152,8 +209,32 @@ export const WorkspaceToolbar: React.FC = () => {
 
       {/* Right: Step 1 (Local Generate) + Optional Editor Handoffs */}
       <div className="flex items-center gap-2.5">
+        <div className="hidden xl:flex items-center gap-1.5 min-w-0">
+          <span
+            title={workspacePath || 'ワークスペース未接続'}
+            className="text-[10.5px] font-mono text-[#64748B] truncate max-w-[180px]"
+          >
+            {workspacePath || '…'}
+          </span>
+          <button
+            onClick={handleChangeWorkspace}
+            className="h-[26px] px-2 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#94A3B8] hover:text-white text-[10.5px] font-bold whitespace-nowrap transition-colors"
+            title="ワークスペースフォルダを変更"
+          >
+            📁 フォルダ変更
+          </button>
+          <button
+            onClick={handleOpenProjectFolder}
+            disabled={!activeProjectName}
+            className="h-[26px] px-2 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#94A3B8] hover:text-white text-[10.5px] font-bold whitespace-nowrap disabled:opacity-50 transition-colors"
+            title="アクティブプロジェクトのフォルダを開く"
+          >
+            📂 開く
+          </button>
+        </div>
+
         <button
-          onClick={() => runPipeline(useTts && vvOnline)}
+          onClick={handleRunPipeline}
           disabled={isRunning}
           className="h-[36px] min-w-[196px] px-4 rounded-[8px] bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white text-[13px] font-extrabold shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all"
         >

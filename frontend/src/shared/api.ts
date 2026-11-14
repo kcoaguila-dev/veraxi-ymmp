@@ -1,7 +1,7 @@
 import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
-  ApiHealth
+  ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult
 } from './types.ts';
 
 interface TauriInternals {
@@ -147,6 +147,44 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reply })
+  }),
+
+  ideate: (topic: string, archetype: string, projectName?: string) => fetchAPI<IdeateResult>('/api/ideate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, archetype, project_name: projectName || undefined })
+  }),
+
+  getSources: (name: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`),
+
+  addSourceUrl: (name: string, url: string, title?: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, title })
+  }),
+
+  addSourceFile: (name: string, filename: string, contentBase64: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 })
+  }),
+
+  ingestProject: (name: string, payload: { evidence_markdown?: string; dialogue_markdown?: string }) => fetchAPI<IngestResult>(`/api/projects/${encodeURIComponent(name)}/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  validateProject: (name: string) => fetchAPI<ValidateResult>(`/api/projects/${encodeURIComponent(name)}/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  runProjectQa: (name: string) => fetchAPI<QaResult>(`/api/projects/${encodeURIComponent(name)}/qa`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
   }),
 
   getAIPrompt: () => fetchAPI<{ prompt_markdown: string; json_schema: any }>('/api/ai-prompt'),
