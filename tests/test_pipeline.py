@@ -154,3 +154,36 @@ def test_pipeline_progress_callback(tmp_path: Path) -> None:
 
     assert "synthesizing_audio" in stages
     assert "exporting_ymmp_and_xml" in stages
+
+
+def test_pipeline_renders_broll_manifest_once(tmp_path: Path, monkeypatch) -> None:
+    """ProjectPipeline.run renders broll_manifest.json at most once per run."""
+    proj = tmp_path / "broll_once_proj"
+    proj.mkdir()
+    (proj / "script.json").write_text(
+        json.dumps([{"character": "ずんだもん", "text": "テスト"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (proj / "claims.json").write_text("[]", encoding="utf-8")
+    (proj / "broll_manifest.json").write_text("[]", encoding="utf-8")
+
+    calls: list = []
+
+    def _spy_render(manifest_path: Path, out_dir: Path) -> list:
+        calls.append((manifest_path, out_dir))
+        return []
+
+    monkeypatch.setattr("veraxi_ymmp.graphics.broll.render_from_manifest", _spy_render)
+
+    pipeline = ProjectPipeline(use_tts=False)
+    result = pipeline.run(
+        proj,
+        do_premiere=False,
+        do_ymmp=False,
+        do_qa=False,
+        do_thumbnail=False,
+    )
+
+    assert result.success is True
+    assert len(calls) == 1
+    assert calls[0] == (proj / "broll_manifest.json", proj / "broll")

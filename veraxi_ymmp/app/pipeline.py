@@ -261,7 +261,7 @@ class ProjectPipeline:
         return True
 
     def _stage_preflight(self, ctx: _RunContext) -> None:
-        """Pacing preflight and the first B-Roll manifest pass."""
+        """Pacing preflight."""
         # Audience Retention Pacing Preflight
         try:
             from veraxi_ymmp.editorial.pacing import audit_script_pacing
@@ -277,18 +277,10 @@ class ProjectPipeline:
         except Exception as e:
             logger.debug(f"Pacing preflight skipped: {e}")
 
-        # Optional B-Roll manifest pre-step
         ctx.broll_manifest_path = ctx.proj_dir / "broll_manifest.json"
-        if ctx.broll_manifest_path.exists():
-            logger.info("Found broll_manifest.json; rendering B-Roll assets...")
-            try:
-                from veraxi_ymmp.graphics.broll import render_from_manifest
-                render_from_manifest(ctx.broll_manifest_path, ctx.proj_dir / "broll")
-            except Exception as e:
-                logger.warning(f"Failed rendering B-Roll manifest: {e}")
 
     def _stage_setup_compiler(self, ctx: _RunContext) -> None:
-        """Initialise the TTS backend and compiler; second B-Roll pass."""
+        """Initialise the TTS backend and compiler; render B-Roll manifest."""
         # 1. Initialize TTS backend & build IR
         backend = self.tts_backend or self.voicevox_client
         if self.use_tts and backend is None:

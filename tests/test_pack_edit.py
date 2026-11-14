@@ -20,13 +20,13 @@ def _make_repo(tmp_path: Path) -> Path:
     for args in (["init", "-q"], ["config", "user.email", "t@e.c"],
                  ["config", "user.name", "T"]):
         subprocess.run(["git", "-C", str(root), *args],
-                       check=True, capture_output=True)
+                       check=True, stdin=subprocess.DEVNULL, capture_output=True)
     (root / "mod.py").write_text(BUGGY_MOD, encoding="utf-8")
     (root / "other.py").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     return root
 
 
@@ -48,7 +48,7 @@ def _reply(*blocks: str) -> str:
 def _branches(root: Path) -> list:
     out = subprocess.run(
         ["git", "-C", str(root), "branch", "--format=%(refname:short)"],
-        capture_output=True, text=True, check=True,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True,
     )
     return out.stdout.split()
 

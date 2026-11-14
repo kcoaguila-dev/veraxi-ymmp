@@ -74,12 +74,12 @@ def test_premature_close_reply_applies_nothing(tmp_path):
         ["config", "user.name", "Test"],
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True,
-                       capture_output=True)
+                       stdin=subprocess.DEVNULL, capture_output=True)
     (root / "doc.md").write_text("original\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True,
-                   capture_output=True)
+                   stdin=subprocess.DEVNULL, capture_output=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
 
     content = "line one\n" + FENCE + "\ninner\n" + FENCE + "\nafter\n"
     code = pa.apply_reply(
@@ -91,7 +91,8 @@ def test_premature_close_reply_applies_nothing(tmp_path):
     assert code == 1
     assert (root / "doc.md").read_text(encoding="utf-8") == "original\n"
     branches = subprocess.run(
-        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+        ["git", "-C", str(root), "branch"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout
     assert "agent-apply-fence-test" not in branches
 
@@ -126,12 +127,12 @@ def _make_git_repo(tmp_path: Path) -> Path:
         ["config", "user.name", "Test"],
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True,
-                       capture_output=True)
+                       stdin=subprocess.DEVNULL, capture_output=True)
     (root / "doc.md").write_text("original\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True,
-                   capture_output=True)
+                   stdin=subprocess.DEVNULL, capture_output=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     return root
 
 
@@ -148,7 +149,8 @@ def _assert_apply_writes_nothing(tmp_path: Path, reply: str) -> None:
     assert code == 1
     assert (root / "doc.md").read_text(encoding="utf-8") == "original\n"
     branches = subprocess.run(
-        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+        ["git", "-C", str(root), "branch"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout
     assert "agent-apply-wrapper-fail" not in branches
 
@@ -230,12 +232,12 @@ def test_wrapper_with_premature_close_and_inner_end_marker_is_rejected(tmp_path)
         ["config", "user.name", "Test"],
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True,
-                       capture_output=True)
+                       stdin=subprocess.DEVNULL, capture_output=True)
     (root / "doc.md").write_text("original\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True,
-                   capture_output=True)
+                   stdin=subprocess.DEVNULL, capture_output=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     code = pa.apply_reply(
         wrapped, root, branch_name="agent-apply-wrapper-test",
         check_runner=lambda changed, test_path, root_: [],
@@ -244,7 +246,8 @@ def test_wrapper_with_premature_close_and_inner_end_marker_is_rejected(tmp_path)
     assert code == 1
     assert (root / "doc.md").read_text(encoding="utf-8") == "original\n"
     branches = subprocess.run(
-        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+        ["git", "-C", str(root), "branch"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout
     assert "agent-apply-wrapper-test" not in branches
 
@@ -292,7 +295,8 @@ def test_build_pack_bundle_uses_longer_fence_for_fenced_content():
 
 def test_pack_bundle_round_trip_over_every_tracked_py_and_md_file():
     proc = subprocess.run(
-        ["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True
+        ["git", "ls-files"], cwd=REPO_ROOT,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     )
     tracked = [
         line for line in proc.stdout.splitlines()

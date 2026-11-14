@@ -516,3 +516,78 @@ def test_e2e_notebooklm_webchat_to_fact_audit_and_broll(tmp_path, monkeypatch):
     assert (proj / "broll" / "slide_01.png").is_file()
     assert (proj / "broll" / "slide_02.png").is_file()
     assert not (proj / "broll" / "broll").exists()
+
+
+def test_manual_provider_rollback_on_rejected_paste_and_eof(tmp_path: Path) -> None:
+    """Rejected candidate pastes must not leave stale claims.json, sources/, or manifests behind on EOF."""
+    (tmp_path / "evidence.md").write_text(
+        "| # | Point of Contention / Claim | Canonical Period / Scope | "
+        "Verbatim Quote Refuting or Explaining | Source Doc & Exact Section/Page | "
+        "Root Cause / Hard Metric |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 1 | 設備投資が850億ドルに達した | 2026-Q3 | "
+        "Amazon capex reached $85 billion in FY2026. | primary_anchor_doc p.12 | "
+        "$85B (850億ドル) |\n",
+        encoding="utf-8",
+    )
+    bad_payload = json.dumps(
+        {
+            "script": [
+                {
+                    "character": "ずんだもん",
+                    "character_position": "right",
+                    "text": "投資額は9999億ドルに達したのだ",
+                    "emotion": "surprised",
+                    "motion": "none",
+                    "bgm": None,
+                    "sfx": None,
+                    "image": None,
+                },
+                {
+                    "character": "四国めたん",
+                    "character_position": "left",
+                    "text": "本当ですか？",
+                    "emotion": "normal",
+                    "motion": "none",
+                    "bgm": None,
+                    "sfx": None,
+                    "image": None,
+                },
+            ],
+            "broll_manifest": [
+                {
+                    "type": "metric",
+                    "filename": "slide_01.png",
+                    "title": "テスト",
+                    "hero_metric": "9999億ドル",
+                    "status_pill": "公式",
+                    "impact_tag": "重大",
+                    "impact_text": "確認が必要",
+                    "theme_color": "rose",
+                }
+            ],
+            "thumbnail_config": {
+                "badge": "検証",
+                "title_line1": "9999億ドル",
+                "title_line2": "巨額投資",
+                "sub_hook": "真実",
+            },
+        },
+        ensure_ascii=False,
+    )
+    outputs: list = []
+    validator = sp.build_project_gate_validator(tmp_path, audit_pacing=True, audit_facts=True)
+    provider = sp.ManualHandoffProvider(
+        paste_fn=_paste_queue(bad_payload, ""),
+        output_fn=outputs.append,
+        extra_validator=validator,
+    )
+    with pytest.raises(ValueError):
+        provider.generate_script("Test Topic", "dossier")
+
+    assert "[FACTS]" in "\n".join(outputs)
+    assert not (tmp_path / "claims.json").exists()
+    assert not (tmp_path / "broll_manifest.json").exists()
+    assert not (tmp_path / "thumbnail_config.json").exists()
+    assert not (tmp_path / "sources").exists()
+    assert not (tmp_path / ".candidate_script.tmp.json").exists()

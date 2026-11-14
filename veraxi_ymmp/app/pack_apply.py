@@ -589,7 +589,7 @@ def apply_reply(
 def _run_failing_test(test_path: str, root: Path) -> str:
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", test_path, "-q", "-p", "no:cacheprovider"],
-        cwd=root, capture_output=True, text=True, timeout=900,
+        cwd=root, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=900,
     )
     return (proc.stdout + proc.stderr).strip()
 
@@ -686,7 +686,8 @@ def build_pack_bundle(
 
 def _repo_root() -> Path:
     proc = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+        ["git", "rev-parse", "--show-toplevel"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     )
     if proc.returncode == 0 and proc.stdout.strip():
         return Path(proc.stdout.strip())

@@ -14,13 +14,13 @@ def _make_repo(tmp_path: Path) -> Path:
     for args in (["init", "-q"], ["config", "user.email", "t@e.c"],
                  ["config", "user.name", "T"]):
         subprocess.run(["git", "-C", str(root), *args],
-                       check=True, capture_output=True)
+                       check=True, stdin=subprocess.DEVNULL, capture_output=True)
     (root / "AGENTS_WEB.md").write_bytes(b"# Slim rules\nBe exact.\n")
     (root / "mod.py").write_bytes(b"# TODO: tighten the retry loop\nx = 1\n")
     subprocess.run(["git", "-C", str(root), "add", "-A"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
+                   check=True, stdin=subprocess.DEVNULL, capture_output=True)
     return root
 
 

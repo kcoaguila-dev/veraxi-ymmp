@@ -14,7 +14,10 @@ BUGGY_MOD = "def add(a, b):\n    return a - b\n"
 
 
 def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True, stdin=subprocess.DEVNULL, capture_output=True,
+    )
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -106,7 +109,7 @@ def test_apply_happy_path_creates_branch_and_writes(tmp_path):
     assert (root / "mod.py").read_text(encoding="utf-8") == FIXED_MOD
     branch = subprocess.run(
         ["git", "-C", str(root), "branch", "--show-current"],
-        capture_output=True, text=True,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout.strip()
     assert branch == "agent-apply-test"
 
@@ -120,7 +123,8 @@ def test_apply_malformed_reply_modifies_nothing(tmp_path):
     assert code == 1
     assert (root / "mod.py").read_text(encoding="utf-8") == BUGGY_MOD
     branches = subprocess.run(
-        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+        ["git", "-C", str(root), "branch"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout
     assert "agent-apply" not in branches
 
@@ -185,7 +189,7 @@ def test_apply_real_bugfix_end_to_end(tmp_path):
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", "tests/test_mod.py", "-q",
          "-p", "no:cacheprovider"],
-        cwd=root, capture_output=True, text=True,
+        cwd=root, stdin=subprocess.DEVNULL, capture_output=True, text=True,
     )
     assert proc.returncode == 0
     assert code in (0, 1)  # mypy strictness in a bare tmp repo may differ
@@ -201,7 +205,8 @@ def _commit_all(root: Path, message: str = "update") -> None:
 
 def _branches(root: Path) -> str:
     return subprocess.run(
-        ["git", "-C", str(root), "branch"], capture_output=True, text=True
+        ["git", "-C", str(root), "branch"],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     ).stdout
 
 

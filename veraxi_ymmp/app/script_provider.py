@@ -344,24 +344,38 @@ def _run_fact_gate_check(
         ev_text = (resolved_dir / "evidence.md").read_text(encoding="utf-8")
 
     claims_path = resolved_dir / "claims.json"
-    if ev_text is not None and parse_markdown_evidence_table(ev_text):
-        mf = manifest_data
-        if mf is None and (resolved_dir / "sources" / "manifest.json").is_file():
-            try:
-                mf = json.loads((resolved_dir / "sources" / "manifest.json").read_text(encoding="utf-8"))
-            except Exception:
-                mf = None
-        claims = ingest_notebooklm_markdown_to_claims(
-            script_entries, ev_text, manifest=mf, sources_dir=resolved_dir / "sources"
-        )
-        claims_path.write_text(claims_to_json(claims), encoding="utf-8")
-
-    if not claims_path.is_file():
-        return []
+    sources_dir = resolved_dir / "sources"
+    manifest_path = sources_dir / "manifest.json"
+    sources_dir_existed = sources_dir.is_dir()
+    pre_source_files = set(sources_dir.iterdir()) if sources_dir_existed else set()
 
     tmp_script = resolved_dir / ".candidate_script.tmp.json"
     backups: List[Tuple[Path, Optional[str]]] = []
     try:
+        if ev_text is not None and parse_markdown_evidence_table(ev_text):
+            mf = manifest_data
+            if mf is None and manifest_path.is_file():
+                try:
+                    mf = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except Exception:
+                    mf = None
+            backups.append(
+                (claims_path, claims_path.read_text(encoding="utf-8") if claims_path.is_file() else None)
+            )
+            backups.append(
+                (manifest_path, manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None)
+            )
+            for item in pre_source_files:
+                if item.is_file() and item.suffix.lower() == ".md":
+                    backups.append((item, item.read_text(encoding="utf-8")))
+            claims = ingest_notebooklm_markdown_to_claims(
+                script_entries, ev_text, manifest=mf, sources_dir=sources_dir
+            )
+            claims_path.write_text(claims_to_json(claims), encoding="utf-8")
+
+        if not claims_path.is_file():
+            return []
+
         tmp_script.write_text(
             json.dumps(list(script_entries), indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -378,11 +392,18 @@ def _run_fact_gate_check(
         ]
     finally:
         tmp_script.unlink(missing_ok=True)
-        for fpath, prev in backups:
+        for fpath, prev in reversed(backups):
             if prev is None:
                 fpath.unlink(missing_ok=True)
             else:
+                fpath.parent.mkdir(parents=True, exist_ok=True)
                 fpath.write_text(prev, encoding="utf-8")
+        if sources_dir.is_dir():
+            for item in list(sources_dir.iterdir()):
+                if item not in pre_source_files and item.is_file():
+                    item.unlink(missing_ok=True)
+            if not sources_dir_existed and not any(sources_dir.iterdir()):
+                sources_dir.rmdir()
 
 
 def build_project_gate_validator(

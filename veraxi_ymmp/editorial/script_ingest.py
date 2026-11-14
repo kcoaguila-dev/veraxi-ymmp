@@ -25,6 +25,7 @@ from veraxi_ymmp.epistemic.facts import (
     check_claim_numbers,
     compute_deterministic_grounding,
     extract_claim_numbers,
+    is_primary_authority_url,
     verify_quote_in_source,
 )
 from veraxi_ymmp.epistemic.fact_audit import (
@@ -414,6 +415,7 @@ def _build_evidence_corpus(table_rows: Sequence[Dict[str, str]]) -> str:
 
 def _select_two_primary_slots(
     manifest_sources: Sequence[Dict[str, str]],
+    table_rows: Sequence[Dict[str, str]] = (),
 ) -> List[Tuple[str, str, str]]:
     """Choose two primary (source_id, url, title) slots from distinct institutions."""
     slots: List[Tuple[str, str, str]] = []
@@ -431,6 +433,27 @@ def _select_two_primary_slots(
             seen_ids.add(sid)
         if len(slots) >= 2:
             return slots
+    for row in table_rows:
+        for raw_url in re.findall(r"https?://\S+", row.get("source", "")):
+            url = raw_url.rstrip(").,]>\"'")
+            if not _is_valid_primary_url(url) or not is_primary_authority_url(url):
+                continue
+            inst = canonical_institution(url) or url
+            if inst not in seen_insts:
+                if "primary_anchor_doc" not in seen_ids:
+                    sid = "primary_anchor_doc"
+                elif "counter_analysis" not in seen_ids:
+                    sid = "counter_analysis"
+                else:
+                    stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(urlparse(url).path).stem).strip("_")
+                    sid = stem or f"source_{len(slots) + 1}"
+                    if sid in seen_ids:
+                        sid = f"{sid}_{len(slots) + 1}"
+                slots.append((sid, url, f"{inst} (NotebookLM Verified Evidence)"))
+                seen_insts.add(inst)
+                seen_ids.add(sid)
+            if len(slots) >= 2:
+                return slots
     for def_sid, def_url, def_title in _DEFAULT_PRIMARY_SOURCES:
         inst = canonical_institution(def_url) or def_url
         if inst not in seen_insts:
@@ -467,7 +490,7 @@ def _ensure_notebooklm_sources(
     sources_dir.mkdir(parents=True, exist_ok=True)
     existing = load_project_sources(sources_dir.parent)
     corpus = _build_evidence_corpus(table_rows)
-    slots = _select_two_primary_slots(manifest_sources)
+    slots = _select_two_primary_slots(manifest_sources, table_rows=table_rows)
 
     source_meta: Dict[str, Tuple[str, str]] = {}
     disk_texts: Dict[str, str] = {}
