@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl } from '../../shared/api';
 import type { YoutubeAuthStatus, PackagingData, PackagingPair, PackagingAxis } from '../../shared/types';
@@ -42,6 +42,10 @@ export const YoutubePublish: React.FC = () => {
   const [selectingAxis, setSelectingAxis] = useState<PackagingAxis | null>(null);
   const [packagingError, setPackagingError] = useState<string | null>(null);
   const [packagingImgFailed, setPackagingImgFailed] = useState<Record<string, boolean>>({});
+  const [packagingImgRev, setPackagingImgRev] = useState(0);
+  const activeProjectRef = useRef<string | null>(activeProjectName);
+  activeProjectRef.current = activeProjectName;
+  const packagingOpIdRef = useRef(0);
 
   const fetchAuthStatus = async () => {
     try {
@@ -59,6 +63,11 @@ export const YoutubePublish: React.FC = () => {
   useEffect(() => {
     if (activeProjectName) {
       setTitle(DEFAULT_TITLES[activeProjectName] || activeProjectName);
+    }
+  }, [activeProjectName]);
+
+  useEffect(() => {
+    if (activeProjectName) {
       setThumbLoadFailed(false);
     }
   }, [activeProjectName, mediaCacheBust]);
@@ -122,58 +131,90 @@ export const YoutubePublish: React.FC = () => {
     setIsRegeneratingThumb(false);
   };
 
-  const fetchPackaging = async (name: string) => {
+  const isStalePackagingOp = (reqProject: string, opId: number) =>
+    activeProjectRef.current !== reqProject || packagingOpIdRef.current !== opId;
+
+  const fetchPackaging = async (name: string, opId?: number) => {
+    const id = opId ?? ++packagingOpIdRef.current;
     try {
       const res = await api.getPackaging(name);
-      setPackaging(res.success ? res.packaging : null);
+      if (isStalePackagingOp(name, id)) return;
+      const pkg = res.success ? res.packaging : null;
+      setPackaging(pkg);
+      if (pkg?.selected_axis) {
+        const selectedPair = pkg.pairs.find((p) => p.axis === pkg.selected_axis);
+        if (selectedPair?.title) {
+          setTitle(selectedPair.title);
+        }
+      }
     } catch (e) {
+      if (isStalePackagingOp(name, id)) return;
       console.debug('Failed to fetch packaging candidates:', e);
       setPackaging(null);
     }
   };
 
   useEffect(() => {
+    const opId = ++packagingOpIdRef.current;
     setPackaging(null);
     setPackagingError(null);
     setPackagingImgFailed({});
+    setIsGeneratingPackaging(false);
+    setSelectingAxis(null);
     if (activeProjectName) {
-      fetchPackaging(activeProjectName);
+      fetchPackaging(activeProjectName, opId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectName]);
 
   const handleGeneratePackaging = async () => {
-    if (!activeProjectName) return;
+    const reqProject = activeProjectName;
+    if (!reqProject) return;
+    const opId = ++packagingOpIdRef.current;
     setIsGeneratingPackaging(true);
     setPackagingError(null);
     try {
-      const res = await api.generatePackaging(activeProjectName);
+      const res = await api.generatePackaging(reqProject);
+      if (isStalePackagingOp(reqProject, opId)) return;
       setPackaging(res.packaging);
       setPackagingImgFailed({});
+      setPackagingImgRev((r) => r + 1);
     } catch (e: any) {
+      if (isStalePackagingOp(reqProject, opId)) return;
       console.error(e);
       setPackagingError(e.data?.error || e.message || '候補の生成に失敗しました');
+    } finally {
+      if (!isStalePackagingOp(reqProject, opId)) {
+        setIsGeneratingPackaging(false);
+      }
     }
-    setIsGeneratingPackaging(false);
   };
 
   const handleSelectPackagingPair = async (pair: PackagingPair) => {
-    if (!activeProjectName) return;
+    const reqProject = activeProjectName;
+    if (!reqProject) return;
+    const opId = ++packagingOpIdRef.current;
     setSelectingAxis(pair.axis);
     setPackagingError(null);
     try {
-      await api.selectPackagingPair(activeProjectName, pair.axis);
+      const res = await api.selectPackagingPair(reqProject, pair.axis);
+      if (isStalePackagingOp(reqProject, opId)) return;
       // The chosen pair becomes thumbnail.png and its title is the publish
       // title (backend also refreshes youtube_metadata.txt).
-      setTitle(pair.title);
+      setTitle(res.selected?.title || pair.title);
       setThumbLoadFailed(false);
-      await fetchPackaging(activeProjectName);
+      await fetchPackaging(reqProject, opId);
+      if (isStalePackagingOp(reqProject, opId)) return;
       await refreshMedia();
     } catch (e: any) {
+      if (isStalePackagingOp(reqProject, opId)) return;
       console.error(e);
       setPackagingError(e.data?.error || e.message || '候補の選択に失敗しました');
+    } finally {
+      if (!isStalePackagingOp(reqProject, opId)) {
+        setSelectingAxis(null);
+      }
     }
-    setSelectingAxis(null);
   };
 
   const handlePublish = async () => {
@@ -533,7 +574,7 @@ export const YoutubePublish: React.FC = () => {
           <button
             type="button"
             onClick={handleGeneratePackaging}
-            disabled={isGeneratingPackaging || !activeProjectName}
+            disabled={isGeneratingPackaging || selectingAxis !== null || !activeProjectName}
             className="h-[28px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] text-[11.5px] font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors whitespace-nowrap"
           >
             {isGeneratingPackaging ? '⏳ 生成中... (3案レンダリング中)' : '🎨 候補を生成'}
@@ -574,7 +615,7 @@ export const YoutubePublish: React.FC = () => {
                       </div>
                     ) : (
                       <img
-                        src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${pair.thumbnail_file}?t=${mediaCacheBust}`)}
+                        src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${pair.thumbnail_file}?t=${mediaCacheBust}&pkgRev=${packagingImgRev}`)}
                         alt={`${PACKAGING_AXIS_LABELS[pair.axis] || pair.axis} サムネイル候補`}
                         className="w-full h-full object-cover"
                         onError={() => setPackagingImgFailed((prev) => ({ ...prev, [pair.axis]: true }))}
@@ -635,7 +676,7 @@ export const YoutubePublish: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleSelectPackagingPair(pair)}
-                      disabled={isSelected || selectingAxis !== null}
+                      disabled={isSelected || isGeneratingPackaging || selectingAxis !== null}
                       className={`mt-auto h-[30px] rounded-[6px] text-[11.5px] font-bold transition-colors disabled:opacity-50 ${
                         isSelected
                           ? 'bg-[#064E3B] text-[#A7F3D0] cursor-default'

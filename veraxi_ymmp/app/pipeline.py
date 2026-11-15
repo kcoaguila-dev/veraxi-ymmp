@@ -577,9 +577,31 @@ class ProjectPipeline:
             logger.info("--- [4/4] Generating High-CTR YouTube Thumbnail ---")
             try:
                 thumb_out = ctx.proj_dir / "thumbnail.png"
-                generate_project_thumbnail(ctx.proj_dir, out_path=thumb_out)
+                used_packaging = False
+                pkg_path = ctx.proj_dir / "packaging.json"
+                if pkg_path.is_file():
+                    try:
+                        from veraxi_ymmp.graphics.packaging import (
+                            load_packaging,
+                            select_packaging_pair,
+                        )
+
+                        pkg_data = load_packaging(ctx.proj_dir)
+                        sel_axis = pkg_data.get("selected_axis")
+                        if isinstance(sel_axis, str) and sel_axis:
+                            select_packaging_pair(ctx.proj_dir, sel_axis)
+                            used_packaging = True
+                            logger.info(
+                                f"Preserved selected packaging thumbnail ({sel_axis}) at: {thumb_out}"
+                            )
+                    except Exception as pkg_e:
+                        logger.warning(
+                            f"Could not preserve selected packaging thumbnail: {pkg_e}"
+                        )
+                if not used_packaging:
+                    generate_project_thumbnail(ctx.proj_dir, out_path=thumb_out)
+                    logger.info(f"High-CTR YouTube thumbnail ready at: {thumb_out}")
                 ctx.result.thumbnail_path = thumb_out
-                logger.info(f"High-CTR YouTube thumbnail ready at: {thumb_out}")
                 # Visual QA: previously validate_thumbnail_visual_qa had
                 # no production caller, so oversize / dead-zone-violating /
                 # low-contrast thumbnails passed silently. An oversize file
@@ -598,6 +620,7 @@ class ProjectPipeline:
                             "Thumbnail exceeds the 2MB YouTube limit: "
                             f"{ctx.result.thumbnail_qa.get('file_size_bytes')} bytes"
                         )
+                        ctx.result.thumbnail_path = None
                     elif not ctx.result.thumbnail_qa.get("passed", False):
                         # Advisory only: the fail-closed gate is cli_qa.
                         # Failing the whole run for a QA-imperfect (but
@@ -624,6 +647,32 @@ class ProjectPipeline:
             logger.info(f"YouTube metadata ready at: {ctx.proj_dir / 'youtube_metadata.txt'}")
         except Exception as e:
             logger.warning(f"Failed generating YouTube metadata: {e}")
+
+    @staticmethod
+    def _resolve_upload_title(ctx: _RunContext) -> str:
+        """Resolve upload title: explicit ctx.title > youtube_config.json > packaging > dir name."""
+        if ctx.title:
+            return ctx.title
+        yt_cfg_path = ctx.proj_dir / "youtube_config.json"
+        if yt_cfg_path.is_file():
+            try:
+                yt_cfg = json.loads(yt_cfg_path.read_text(encoding="utf-8-sig"))
+                if isinstance(yt_cfg, dict) and yt_cfg.get("title"):
+                    return str(yt_cfg["title"])
+            except Exception:
+                pass
+        if (ctx.proj_dir / "packaging.json").is_file():
+            try:
+                from veraxi_ymmp.graphics.packaging import load_packaging
+
+                pkg_data = load_packaging(ctx.proj_dir)
+                sel_axis = pkg_data.get("selected_axis")
+                for pair in pkg_data.get("pairs", []):
+                    if isinstance(pair, dict) and pair.get("axis") == sel_axis and pair.get("title"):
+                        return str(pair["title"])
+            except Exception:
+                pass
+        return ctx.proj_dir.name
 
     def _stage_upload(self, ctx: _RunContext) -> bool:
         """YouTube publishing automation. False = abort (no video artifact)."""
@@ -690,7 +739,7 @@ class ProjectPipeline:
 
             try:
                 meta = VideoPublishMetadata(
-                    title=ctx.title or ctx.proj_dir.name,
+                    title=self._resolve_upload_title(ctx),
                     description=ctx.description or "",
                     tags=ctx.tags or [],
                     category_id="22",

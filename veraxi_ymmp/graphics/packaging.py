@@ -23,8 +23,10 @@ NOT a CTR prediction.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -328,12 +330,14 @@ def extract_packaging_inputs(project_dir: Union[str, Path]) -> Tuple[ThumbnailCo
             for slide in slides:
                 if not isinstance(slide, dict):
                     continue
-                if not topic:
-                    topic = str(slide.get("title") or slide.get("hero_title") or "").strip()
-                if not metric:
-                    metric = str(slide.get("hero_metric") or "").strip()
-                if topic and metric:
-                    break
+                slide_topic = str(slide.get("title") or slide.get("hero_title") or "").strip()
+                if not slide_topic:
+                    continue
+                topic = slide_topic
+                slide_metric = str(slide.get("hero_metric") or "").strip()
+                if slide_metric:
+                    metric = slide_metric
+                break
         except Exception as e:
             logger.warning("Failed to read broll_manifest.json in %s: %s", proj, e)
     if not topic:
@@ -422,10 +426,56 @@ def select_packaging_pair(project_dir: Union[str, Path], axis: str) -> Dict[str,
     src = proj / str(pair.get("thumbnail_file") or "")
     if not src.is_file():
         raise FileNotFoundError(f"Candidate thumbnail missing: {src}")
-    shutil.copyfile(src, proj / "thumbnail.png")
+
+    thumb_dest = proj / "thumbnail.png"
+    pkg_dest = proj / "packaging.json"
     data["selected_axis"] = axis
-    (proj / "packaging.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+
+    tmp_thumb: Optional[Path] = None
+    tmp_pkg: Optional[Path] = None
+    backup_thumb: Optional[Path] = None
+    thumb_replaced = False
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=proj, prefix=".thumbnail.", suffix=".png.tmp", delete=False
+        ) as tf:
+            tmp_thumb = Path(tf.name)
+        shutil.copyfile(src, tmp_thumb)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=proj,
+            prefix=".packaging.",
+            suffix=".json.tmp",
+            encoding="utf-8",
+            delete=False,
+        ) as pf:
+            tmp_pkg = Path(pf.name)
+            pf.write(json.dumps(data, ensure_ascii=False, indent=2))
+            pf.flush()
+
+        if thumb_dest.exists():
+            with tempfile.NamedTemporaryFile(
+                dir=proj, prefix=".thumbnail.bak.", suffix=".png", delete=False
+            ) as bf:
+                backup_thumb = Path(bf.name)
+            shutil.copyfile(thumb_dest, backup_thumb)
+
+        os.replace(tmp_thumb, thumb_dest)
+        tmp_thumb = None
+        thumb_replaced = True
+
+        os.replace(tmp_pkg, pkg_dest)
+        tmp_pkg = None
+    except BaseException:
+        if thumb_replaced and backup_thumb is not None and backup_thumb.exists():
+            os.replace(backup_thumb, thumb_dest)
+            backup_thumb = None
+        raise
+    finally:
+        for leftover in (tmp_thumb, tmp_pkg, backup_thumb):
+            if leftover is not None and leftover.exists():
+                leftover.unlink(missing_ok=True)
+
     logger.info("Packaging pair '%s' selected for %s", axis, proj.name)
     return pair
