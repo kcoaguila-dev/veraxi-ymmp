@@ -1,6 +1,6 @@
 [package]
 name = "veraxi-studio"
-version = "0.2.0"
+version = "0.2.1"
 description = "Veraxi YMMP Desktop Studio"
 authors = ["Veraxi"]
 edition = "2021"

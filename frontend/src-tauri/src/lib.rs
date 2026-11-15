@@ -1,6 +1,7 @@
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 use tauri::{Manager, RunEvent, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -138,6 +139,7 @@ pub fn run() {
             let (tx, ready_rx) = mpsc::channel::<Result<String, String>>();
             tauri::async_runtime::spawn(async move {
                 let mut sent = false;
+                let mut stderr_tail: Vec<String> = Vec::new();
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(line_bytes) => {
@@ -152,6 +154,13 @@ pub fn run() {
                         CommandEvent::Stderr(err_bytes) => {
                             let err = String::from_utf8_lossy(&err_bytes);
                             eprintln!("[veraxi-sidecar] {err}");
+                            let trimmed = err.trim();
+                            if !trimmed.is_empty() {
+                                stderr_tail.push(trimmed.to_string());
+                                if stderr_tail.len() > 12 {
+                                    stderr_tail.remove(0);
+                                }
+                            }
                         }
                         CommandEvent::Error(err) => {
                             if !sent {
@@ -161,10 +170,16 @@ pub fn run() {
                         }
                         CommandEvent::Terminated(payload) => {
                             if !sent {
+                                let detail = if stderr_tail.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("\n\nSidecar output:\n{}", stderr_tail.join("\n"))
+                                };
                                 let _ = tx.send(Err(format!(
-                                    "Sidecar exited prematurely (code: {:?})",
+                                    "Sidecar exited prematurely (code: {:?}){detail}",
                                     payload.code
                                 )));
+                                sent = true;
                             }
                             break;
                         }
@@ -173,10 +188,23 @@ pub fn run() {
                 }
             });
 
-            let base_url = ready_rx
+            let base_url = match ready_rx
                 .recv_timeout(Duration::from_secs(30))
-                .map_err(|_| "Timed out waiting for Veraxi API sidecar readiness".to_string())?
-                .map_err(|e| e)?;
+                .map_err(|_| "Timed out waiting for Veraxi API sidecar readiness (30s).".to_string())
+                .and_then(|res| res)
+            {
+                Ok(url) => url,
+                Err(err) => {
+                    app.dialog()
+                        .message(format!(
+                            "Veraxi Studio could not start its backend sidecar.\n\n{err}"
+                        ))
+                        .title("Veraxi Studio — Startup Error")
+                        .kind(MessageDialogKind::Error)
+                        .blocking_show();
+                    return Err(err.into());
+                }
+            };
 
             if let Ok(mut guard) = app.state::<ApiState>().0.lock() {
                 *guard = base_url;
