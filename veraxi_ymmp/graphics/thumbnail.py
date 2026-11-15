@@ -117,6 +117,13 @@ class ThumbnailConfig:
     zabuton_color: Optional[str] = None
     metric_highlight: str = ""
     rotate_angle: float = -3.2
+    subject_image_path: Optional[str] = None
+    brand_logo_path: Optional[str] = None
+    brand_symbol_path: Optional[str] = None
+    eyebrow_text: str = ""
+    subject_caption: str = ""
+    stat_callout: str = ""
+    invert_brand_logo: bool = True
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -402,6 +409,13 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
 
     w, h = config.width, config.height
     theme_colors = THEMES.get(config.theme, THEMES["gold"])
+
+    if config.layout == "editorial_spotlight":
+        from veraxi_ymmp.graphics.thumbnail_editorial import render_editorial_spotlight_layout
+        font_path, font_index = find_best_font_path()
+        canvas = render_editorial_spotlight_layout(config, font_path, font_index)
+        canvas.save(out_file, "PNG")
+        return out_file
 
     if config.layout == "vs_duel":
         from veraxi_ymmp.graphics.thumbnail_composer import create_vs_duel_background, render_vs_duel_layout

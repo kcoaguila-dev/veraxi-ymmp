@@ -537,9 +537,11 @@ def render_vs_duel_layout(
         draw.rounded_rectangle([t_bx, 55, t_bx + t_bw, 55 + t_bh], radius=18, fill=(220, 38, 38, 255), outline=(255, 255, 255, 255), width=4)
         draw.text((t_bx + 32 - t_bbox[0], 55 + 18 - t_bbox[1]), top_badge_text, font=t_font, fill=(255, 255, 255, 255))
 
-    # 6. Colossal Catchphrase on Angled Red/Yellow Zabuton (200pt - Maximum Impact)
+    # 6. Colossal Catchphrase on Angled Red/Yellow Zabuton (auto-fitted up to 200pt - Zero Clipping)
     main_text = config.title_line2 or config.title_line1 or "勝つのはどっち！？"
-    title_font = ImageFont.truetype(font_path, 200, index=font_index) if font_path else ImageFont.load_default()
+    from veraxi_ymmp.graphics.thumbnail import fit_font_to_width
+    title_font, title_sz = fit_font_to_width(main_text, 200, w - 240, font_path, font_index)
+    title_stroke = max(14, int(title_sz * 0.14))
 
     zabuton_color = getattr(config, "zabuton_color", "red")
     bg_rgba = (225, 20, 20, 255) if zabuton_color != "gold" else (245, 158, 11, 255)
@@ -557,7 +559,7 @@ def render_vs_duel_layout(
         border_width=5,
         angle=tilt_angle,
         padding=(50, 24),
-        stroke_w=28,
+        stroke_w=title_stroke,
     )
 
     # 7. Mascot High-Visibility Dialogue Speech Bubble (80pt) - ONLY if explicitly provided
