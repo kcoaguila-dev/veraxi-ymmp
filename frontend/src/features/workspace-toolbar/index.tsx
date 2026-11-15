@@ -3,7 +3,7 @@ import { useStudioStore } from '../../shared/store';
 import { api, apiUrl, isTauriRuntime } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation, workspacePath, setWorkspacePath, useTts, setUseTts } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, isDirty, loadProjects, workspacePath, setWorkspacePath, useTts, setUseTts } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
@@ -47,20 +47,6 @@ export const WorkspaceToolbar: React.FC = () => {
       }
     }
     alert(`プロジェクトフォルダ: ${projectDir}`);
-  };
-
-  const handleRunPipeline = () => {
-    if (lastValidation && !lastValidation.passed) {
-      const confirmed = window.confirm(
-        `⚠ 監査ゲート警告: Retention ${lastValidation.retention_score}/100` +
-        (lastValidation.fact_summary.unsupported > 0
-          ? ` / UNSUPPORTED ${lastValidation.fact_summary.unsupported}件`
-          : '') +
-        '\n監査を通過していませんが、動画生成を続行しますか？'
-      );
-      if (!confirmed) return;
-    }
-    runPipeline(useTts && vvOnline);
   };
 
   const handleYMM4 = async () => {
@@ -230,20 +216,15 @@ export const WorkspaceToolbar: React.FC = () => {
           </button>
         </div>
 
-        <button
-          onClick={handleRunPipeline}
-          disabled={isRunning}
-          className="h-[36px] min-w-[196px] px-4 rounded-[8px] bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white text-[13px] font-extrabold shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all"
-        >
-          {isRunning ? (
-            <span className="flex items-center justify-between w-full gap-3">
-              <span className="truncate">⚡ {pipelineStatus.stage}</span>
-              <span className="font-mono tabular-nums">{Math.round(pipelineStatus.progress || 0)}%</span>
-            </span>
-          ) : (
-            <span>⚡ 動画を生成 (プレビュー)</span>
-          )}
-        </button>
+        {isRunning && (
+          <span
+            className="h-[36px] min-w-[196px] px-4 rounded-[8px] bg-[#064E3B] border border-[#10B981]/50 text-[#A7F3D0] text-[13px] font-extrabold flex items-center justify-between gap-3"
+            title="生成は Step 3 パネルからのみ開始できます"
+          >
+            <span className="truncate">⚡ 生成中: {pipelineStatus.stage}</span>
+            <span className="font-mono tabular-nums">{Math.round(pipelineStatus.progress || 0)}%</span>
+          </span>
+        )}
 
         <div className="h-6 w-[1px] bg-[#334155] mx-0.5" />
 

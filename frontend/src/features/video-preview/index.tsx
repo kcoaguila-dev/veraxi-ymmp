@@ -272,6 +272,13 @@ export const VideoPreview: React.FC = () => {
             監査: {lastValidation ? (lastValidation.passed ? '合格' : '不合格 (生成時に確認)') : '未実施'}
           </span>
           {videoSrc && <span className="px-2 py-0.5 rounded-full bg-[#1E293B] text-[#E2E8F0]">既存プレビューあり (再生成で置換)</span>}
+          <button
+            type="button"
+            onClick={handleGenerate}
+            className="ml-auto h-[28px] px-4 rounded-[8px] bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white text-[12px] font-extrabold shadow-sm transition-all"
+          >
+            ⚡ 動画を生成 (プレビュー)
+          </button>
         </div>
       )}
 
@@ -366,12 +373,6 @@ export const VideoPreview: React.FC = () => {
               <div className="text-xs text-[#64748B]">
                 上の「⚡ 動画を生成 (プレビュー)」をクリックすると音声・立ち絵・字幕を自動合成します
               </div>
-              <button
-                onClick={handleGenerate}
-                className="mt-1 bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white font-extrabold px-4 py-2 rounded-[8px] text-xs shadow"
-              >
-                ⚡ 動画を生成 (プレビュー)
-              </button>
             </div>
           )}
         </div>
