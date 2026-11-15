@@ -4,7 +4,7 @@ import { api, apiUrl } from '../../shared/api';
 import { LoudnessResult, QaResult } from '../../shared/types';
 
 export const VideoPreview: React.FC = () => {
-  const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus, lastValidation } = useStudioStore();
+  const { projectData, activeProjectName, mediaCacheBust, runPipeline, pipelineStatus, lastValidation, useTts, voicevoxHealth } = useStudioStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -51,7 +51,9 @@ export const VideoPreview: React.FC = () => {
       );
       if (!confirmed) return;
     }
-    runPipeline(true);
+    // Same guard as the toolbar button: honor the user's TTS toggle and
+    // the VOICEVOX online state instead of always requesting TTS.
+    runPipeline(useTts && !!voicevoxHealth?.available);
   };
 
   useEffect(() => {

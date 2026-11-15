@@ -3,11 +3,10 @@ import { useStudioStore } from '../../shared/store';
 import { api, apiUrl, isTauriRuntime } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation, workspacePath, setWorkspacePath } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation, workspacePath, setWorkspacePath, useTts, setUseTts } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
-  const [useTts, setUseTts] = useState(true);
 
   const handleChangeWorkspace = async () => {
     if (isDirty) {

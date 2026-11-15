@@ -17,6 +17,8 @@ interface StudioState {
   pipelineStatus: PipelineStatus;
   workspacePath: string | null;
   setWorkspacePath: (path: string | null) => void;
+  useTts: boolean;
+  setUseTts: (value: boolean) => void;
   isDirty: boolean;
   lastValidation: ValidateResult | null;
   setLastValidation: (result: ValidateResult | null) => void;
@@ -50,6 +52,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [useTts, setUseTts] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [lastValidation, setLastValidation] = useState<ValidateResult | null>(null);
   const [mediaCacheBust, setMediaCacheBust] = useState(Date.now());
@@ -259,6 +262,8 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     pipelineStatus,
     workspacePath,
     setWorkspacePath,
+    useTts,
+    setUseTts,
     isDirty,
     lastValidation,
     setLastValidation,
