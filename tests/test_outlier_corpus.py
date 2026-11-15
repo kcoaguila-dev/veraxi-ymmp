@@ -206,3 +206,48 @@ def test_get_api_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
         get_api_key()
     monkeypatch.setenv("YOUTUBE_API_KEY", "  secret  ")
     assert get_api_key() == "secret"
+
+
+def test_request_exception_does_not_leak_api_key() -> None:
+    import requests as req
+
+    class _ErrSession:
+        def get(self, url: str, params=None, timeout=30.0):
+            raise req.ConnectionError(f"Failed to connect to {url}?key=SUPER_SECRET_KEY")
+
+    client = YouTubeDataClient("SUPER_SECRET_KEY", session=_ErrSession())  # type: ignore[arg-type]
+    with pytest.raises(CorpusError) as exc_info:
+        client.resolve_channel("@bench")
+    assert "SUPER_SECRET_KEY" not in str(exc_info.value)
+    assert "ConnectionError" in str(exc_info.value)
+
+
+def test_invalid_json_on_http_200_raises_corpus_error() -> None:
+    class _BadJsonResponse(_FakeResponse):
+        def __init__(self) -> None:
+            super().__init__({}, status=200)
+
+        def json(self) -> Dict[str, Any]:
+            raise ValueError("Expecting value")
+
+    routes = {"/channels": _BadJsonResponse()}
+    client = YouTubeDataClient("k", session=_FakeSession(routes))  # type: ignore[arg-type]
+    with pytest.raises(CorpusError, match="invalid JSON"):
+        client.resolve_channel("@bench")
+
+
+def test_download_thumbnails_handles_write_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus: Dict[str, Any] = {
+        "outliers": [{"video_id": "v1", "thumbnail_url": "https://img/v1.jpg"}]
+    }
+
+    def _fail_write(self: Path, data: bytes) -> int:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_bytes", _fail_write)
+    download_thumbnails(corpus, tmp_path, fetch=lambda _url: b"\xff\xd8jpeg")
+    row = corpus["outliers"][0]
+    assert row["thumbnail_file"] is None
+    assert "disk full" in row["thumbnail_error"]

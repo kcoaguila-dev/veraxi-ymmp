@@ -30,6 +30,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,7 +40,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 import requests
 
 API_BASE = "https://www.googleapis.com/youtube/v3"
-API_KEY_ENV = "YOUTUBE_API_KEY"
+API_KEY_ENV = "YOUTUBE_API_KEY"  # pragma: allowlist secret
 DEFAULT_PER_CHANNEL = 60
 DEFAULT_BASELINE_WINDOW = 20
 DEFAULT_MIN_RATIO = 3.0
@@ -122,10 +123,16 @@ class YouTubeDataClient:
                 f"{API_BASE}/{path}", params=query, timeout=self._timeout
             )
         except requests.RequestException as exc:
-            raise CorpusError(f"YouTube API request failed: {exc}") from exc
+            raise CorpusError(
+                f"YouTube API request failed on {path} ({type(exc).__name__})"
+            ) from None
         try:
             payload = resp.json()
         except ValueError:
+            if resp.status_code == 200:
+                raise CorpusError(
+                    f"YouTube API returned invalid JSON on {path}"
+                ) from None
             payload = {}
         if resp.status_code != 200:
             message = (
@@ -374,23 +381,41 @@ def download_thumbnails(
                 data = None
         if data:
             target = thumb_dir / f"{video_id}.jpg"
-            target.write_bytes(data)
-            row["thumbnail_file"] = f"thumbnails/{video_id}.jpg"
-            row["thumbnail_error"] = None
+            try:
+                target.write_bytes(data)
+            except OSError as exc:
+                row["thumbnail_file"] = None
+                row["thumbnail_error"] = str(exc)
+            else:
+                row["thumbnail_file"] = f"thumbnails/{video_id}.jpg"
+                row["thumbnail_error"] = None
         else:
             row["thumbnail_file"] = None
             row["thumbnail_error"] = last_error or "download failed"
 
 
 def write_corpus(corpus: Dict[str, Any], out_dir: Path) -> Path:
-    """Write corpus.json atomically (temp file + rename)."""
+    """Write corpus.json atomically (unique temp file + rename)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     target = out_dir / "corpus.json"
-    tmp = out_dir / "corpus.json.tmp"
-    tmp.write_text(
-        json.dumps(corpus, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    tmp.replace(target)
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=out_dir,
+            prefix="corpus.json.",
+            suffix=".tmp",
+            encoding="utf-8",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(json.dumps(corpus, ensure_ascii=False, indent=2))
+            handle.flush()
+        tmp_path.replace(target)
+    except BaseException:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise
     return target
 
 
