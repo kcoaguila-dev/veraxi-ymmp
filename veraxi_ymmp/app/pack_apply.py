@@ -642,8 +642,14 @@ def build_pack_bundle(
     if mode == "edit":
         parts += [
             "## Reply Format (strict — follow exactly)",
-            "Reply with ONLY edit blocks, one per change, in this format:",
+            "Wrap your ENTIRE reply in a single fenced code block using at "
+            "least FOUR backticks (````text ... ````) so Markdown renderers "
+            "do not turn `>>>>>>>` into blockquotes or `=======` into "
+            "headings.",
+            "Inside that single code block, reply with ONLY edit blocks, "
+            "one per change, in this format:",
             "",
+            "````text",
             "### Edit: `relative/path/from/repo/root.py`",
             "<<<<<<< SEARCH",
             "(exact current text, copied verbatim from the file above — "
@@ -651,6 +657,9 @@ def build_pack_bundle(
             "=======",
             "(the replacement text)",
             ">>>>>>> REPLACE",
+            "",
+            END_MARKER,
+            "````",
             "",
             "You may send several edit blocks, including several for the "
             "same file; they are applied in order. Each SEARCH text must "
@@ -660,7 +669,7 @@ def build_pack_bundle(
             "SEARCH unique. Do not retype whole files, and do not use "
             "diffs or line numbers — the SEARCH text is the anchor.",
             "",
-            "End the reply with a line containing only:",
+            "The closing line inside the code block MUST be:",
             END_MARKER,
             "A truncated or marker-less reply is rejected without "
             "applying anything.",

@@ -92,14 +92,33 @@ def _split_lines(text: str) -> List[str]:
     ]
 
 
+def _unwrap_outer_fence(lines: List[str]) -> List[str]:
+    """Strip a single outer fenced code block wrapping an edit reply."""
+    nonempty = [i for i, line in enumerate(lines) if line.strip()]
+    if len(nonempty) < 2:
+        return lines
+    open_match = pa._FENCE_LINE.match(lines[nonempty[0]].strip())
+    close_match = pa._FENCE_LINE.match(lines[nonempty[-1]].strip())
+    if (
+        open_match
+        and close_match
+        and not close_match.group(2)
+        and len(close_match.group(1)) >= len(open_match.group(1))
+    ):
+        return lines[nonempty[0] + 1 : nonempty[-1]]
+    return lines
+
+
 def parse_edit_reply(text: str) -> ParsedEditReply:
     """Parse an edit reply into blocks, failing closed on any defect.
 
-    The reply must end with the END marker as its last non-empty
-    line; anything unexpected outside a block, or a block missing
-    its SEARCH/separator/REPLACE lines, makes the reply incomplete.
+    The reply may be wrapped in a single outer fenced code block (e.g.
+    ````text ... ````) to prevent Markdown renderers from mangling
+    ``>>>>>>>`` or ``=======``. It must end with the END marker as its
+    last non-empty line; anything unexpected outside a block, or a block
+    missing its SEARCH/separator/REPLACE lines, makes the reply incomplete.
     """
-    lines = _split_lines(text)
+    lines = _unwrap_outer_fence(_split_lines(text))
     nonempty = [i for i, line in enumerate(lines) if line.strip()]
     if not nonempty or lines[nonempty[-1]].strip() != pa.END_MARKER:
         return ParsedEditReply(

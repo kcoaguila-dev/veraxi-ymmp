@@ -1220,3 +1220,34 @@ def test_pass4_synthesizes_midpoint_from_quote_range():
     assert derived.derived is True
     assert "/ 2" in derived.derivation
     assert check_claim_numbers(derived, [quote]) == []
+
+
+def test_parse_edit_reply_unwraps_outer_fenced_code_block():
+    inner = _reply(_edit_block("a.py", "old = 1", "new = 2"))
+    for fence_open, fence_close in [("````text", "````"), ("```", "```")]:
+        wrapped = f"{fence_open}\n{inner}{fence_close}\n"
+        parsed = pe.parse_edit_reply(wrapped)
+        assert parsed.complete is True, parsed.problem
+        assert len(parsed.blocks) == 1
+        assert parsed.blocks[0].path == "a.py"
+        assert parsed.blocks[0].search == "old = 1"
+        assert parsed.blocks[0].replace == "new = 2"
+
+
+def test_parse_edit_reply_rejects_unclosed_outer_fence():
+    inner = _reply(_edit_block("a.py", "old = 1", "new = 2"))
+    unclosed = f"````text\n{inner}"
+    parsed = pe.parse_edit_reply(unclosed)
+    assert parsed.complete is False
+    assert "unexpected line outside an edit block" in (parsed.problem or "")
+
+
+def test_pack_edit_bundle_instructs_four_backtick_wrapper():
+    bundle = pa.build_pack_bundle(
+        "Make dialogue natural",
+        [("projects/demo/script.json", "[]")],
+        "",
+        mode="edit",
+    )
+    assert "````text" in bundle
+    assert "FOUR backticks" in bundle
