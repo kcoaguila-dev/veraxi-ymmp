@@ -257,3 +257,38 @@ def test_reconcile_notebooklm_audit_single_pdf_no_padding_passes_fact_gate(tmp_p
 
     outcome = audit_project_facts(tmp_path / "script.json")
     assert outcome.blockers == []
+
+
+def test_build_post_script_audit_prompts_chunks_long_scripts(tmp_path: Path) -> None:
+    from veraxi_ymmp.editorial.notebooklm_verify import build_post_script_audit_prompts
+
+    script = [
+        {"character": "ずんだもん", "emotion": "normal", "text": f"売上は{100 + i}億ドルに達したのだ"}
+        for i in range(40)
+    ]
+    (tmp_path / "script.json").write_text(json.dumps(script, ensure_ascii=False), encoding="utf-8")
+
+    batches = build_post_script_audit_prompts(tmp_path, max_chars=2500)
+    assert len(batches) >= 2
+    assert all(len(b) <= 2500 for b in batches)
+    joined = "\n".join(batches)
+    for i in range(40):
+        assert f"cut_{i:02d}" in joined
+
+
+def test_parse_notebooklm_audit_table_merges_multiple_batches() -> None:
+    from veraxi_ymmp.editorial.notebooklm_verify import parse_notebooklm_audit_table
+
+    combined_reply = (
+        "| Item ID | Assertion | Verdict | Verbatim Quote | Source & Page/URL | Discrepancy | Suggested Fix (<=38 chars) |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| cut_00 | 売上は100億ドル | SUPPORTED | \"Revenue was $10B.\" | doc.pdf p.1 | - | - |\n\n"
+        "Here is batch 2:\n\n"
+        "| Item ID | Assertion | Verdict | Verbatim Quote | Source & Page/URL | Discrepancy | Suggested Fix (<=38 chars) |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| cut_01 | 営業利益は20億ドル | DRIFTED | \"Operating income was $1.5B.\" | doc.pdf p.2 | 20億 vs 15億 | 15億ドルに修正 |\n"
+    )
+    rows = parse_notebooklm_audit_table(combined_reply)
+    assert [r["item_id"] for r in rows] == ["cut_00", "cut_01"]
+    assert rows[0]["verdict"] == "SUPPORTED"
+    assert rows[1]["verdict"] == "DRIFTED"

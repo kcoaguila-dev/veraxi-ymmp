@@ -546,6 +546,7 @@ def handle_notebooklm_prompt(
     """
     from veraxi_ymmp.editorial.notebooklm_verify import (
         build_post_script_audit_prompt,
+        build_post_script_audit_prompts,
     )
 
     try:
@@ -561,10 +562,11 @@ def handle_notebooklm_prompt(
         }
     try:
         prompt = build_post_script_audit_prompt(proj_dir)
+        prompts = build_post_script_audit_prompts(proj_dir)
     except (ValueError, FileNotFoundError) as exc:
         return 400, {"success": False, "error": str(exc)}
     (proj_dir / "notebooklm_audit_prompt.md").write_text(prompt, encoding="utf-8")
-    return 200, {"success": True, "prompt": prompt}
+    return 200, {"success": True, "prompt": prompt, "prompts": prompts}
 
 
 def handle_notebooklm_verify(

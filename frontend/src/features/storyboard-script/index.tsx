@@ -193,6 +193,8 @@ export const StoryboardScript: React.FC = () => {
   const [showAuditDetails, setShowAuditDetails] = useState(false);
   const [showNlm, setShowNlm] = useState(false);
   const [nlmPrompt, setNlmPrompt] = useState('');
+  const [nlmPrompts, setNlmPrompts] = useState<string[]>([]);
+  const [nlmCopiedBatch, setNlmCopiedBatch] = useState<number | null>(null);
   const [nlmTable, setNlmTable] = useState('');
   const [nlmResult, setNlmResult] = useState<import('../../shared/types').NotebooklmVerifyResult | null>(null);
   const [nlmBusy, setNlmBusy] = useState<'prompt' | 'verify' | null>(null);
@@ -270,6 +272,8 @@ export const StoryboardScript: React.FC = () => {
         return;
       }
       setNlmPrompt(res.prompt);
+      setNlmPrompts(res.prompts && res.prompts.length > 0 ? res.prompts : [res.prompt]);
+      setNlmCopiedBatch(null);
     } catch (e: any) {
       if (activeProjectRef.current !== projectAtStart) return;
       setNlmError(e?.data?.error || e?.message || 'プロンプト生成に失敗しました');
@@ -922,15 +926,41 @@ export const StoryboardScript: React.FC = () => {
               >
                 {nlmBusy === 'prompt' ? '⏳ 生成中...' : '1. 監査プロンプトを生成'}
               </button>
-              {nlmPrompt && (
+              {nlmPrompts.length > 1 ? (
+                <>
+                  {nlmPrompts.map((batchText, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(batchText);
+                        setNlmCopiedBatch(idx);
+                      }}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-[6px] border whitespace-nowrap ${
+                        nlmCopiedBatch === idx
+                          ? 'bg-[#064E3B] border-[#10B981] text-[#A7F3D0]'
+                          : 'bg-[#1E293B] hover:bg-[#334155] border-[#475569] text-[#E2E8F0]'
+                      }`}
+                    >
+                      {nlmCopiedBatch === idx ? '✓' : '📋'} Batch {idx + 1}/{nlmPrompts.length} ({batchText.length.toLocaleString()}文字)
+                    </button>
+                  ))}
+                  <span className="text-[10.5px] text-[#94A3B8]">
+                    ※ チャット上限対策のため分割済み。各Batchの返信表を下の欄へ続けて貼り付けてください
+                  </span>
+                </>
+              ) : nlmPrompt ? (
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(nlmPrompt)}
+                  onClick={() => {
+                    navigator.clipboard.writeText(nlmPrompt);
+                    setNlmCopiedBatch(0);
+                  }}
                   className="text-[11px] font-bold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
                 >
-                  📋 プロンプトをコピー
+                  {nlmCopiedBatch === 0 ? '✓ コピー済み' : '📋 プロンプトをコピー'}
                 </button>
-              )}
+              ) : null}
             </div>
             {nlmPrompt && (
               <pre className="bg-[#111827] border border-[#1E293B] rounded-[6px] p-2.5 text-[10.5px] text-[#94A3B8] max-h-36 overflow-y-auto whitespace-pre-wrap">{nlmPrompt}</pre>

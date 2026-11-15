@@ -210,7 +210,7 @@ export const api = {
     body: JSON.stringify({ job_id: jobId })
   }),
 
-  generateNotebooklmPrompt: (name: string) => fetchAPI<{ success: boolean; prompt?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/notebooklm/prompt`, {
+  generateNotebooklmPrompt: (name: string) => fetchAPI<{ success: boolean; prompt?: string; prompts?: string[]; error?: string }>(`/api/projects/${encodeURIComponent(name)}/notebooklm/prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})

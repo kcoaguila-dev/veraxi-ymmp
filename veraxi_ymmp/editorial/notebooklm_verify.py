@@ -205,19 +205,16 @@ def extract_audit_checklist(project_dir: Path) -> List[AuditChecklistItem]:
     return items
 
 
-def build_post_script_audit_prompt(project_dir: Path) -> str:
-    """Build a compact copy-paste adversarial verification prompt for Gemini NotebookLM."""
-    items = extract_audit_checklist(project_dir)
-    seed = _load_json_safe(project_dir / "script_seed.json")
-    topic = str(seed.get("topic", "")).strip() if isinstance(seed, dict) else ""
+def _format_audit_prompt(
+    topic: str, checklist_lines: List[str], batch_label: str = ""
+) -> str:
+    """Format a NotebookLM post-script adversarial audit prompt."""
     topic_line = f"Topic: **{topic}**\n\n" if topic else ""
-
-    checklist_lines = [
-        f"- `[{it.item_id} | {it.label}]`: {it.assertion}" for it in items
-    ] or ["- _(No checkable items found in script.json / broll_manifest.json / thumbnail_config.json)_"]
-
+    body_lines = checklist_lines or [
+        "- _(No checkable items found in script.json / broll_manifest.json / thumbnail_config.json)_"
+    ]
     return (
-        "# Post-Script Adversarial Fact-Check (NotebookLM Source Audit)\n\n"
+        f"# Post-Script Adversarial Fact-Check (NotebookLM Source Audit){batch_label}\n\n"
         f"{topic_line}"
         "You hold the full uploaded primary source PDFs/filings. Audit **every item** in the "
         "checklist below strictly against the uploaded primary documents — do NOT rely on "
@@ -233,7 +230,7 @@ def build_post_script_audit_prompt(project_dir: Path) -> str:
         "5. **Verbatim Quote Backing:** For every `SUPPORTED` item, extract an exact verbatim "
         "quote copied straight from the uploaded primary source.\n\n"
         "## Checklist to Audit\n"
-        + "\n".join(checklist_lines)
+        + "\n".join(body_lines)
         + "\n\n## Required Output Format (Strict 7-Column Markdown Table)\n"
         "Return **ONLY** a 7-column Markdown table using these exact headers and allowed `Verdict` "
         "values (`SUPPORTED`, `DRIFTED`, `REFUTED`, `UNVERIFIED`):\n\n"
@@ -241,6 +238,59 @@ def build_post_script_audit_prompt(project_dir: Path) -> str:
         "|---|---|---|---|---|---|---|\n"
         "| cut_XX | ... | SUPPORTED | \"...\" | Doc / URL p.12 | - | - |\n"
     )
+
+
+def _extract_topic_and_checklist(project_dir: Path) -> Tuple[str, List[str]]:
+    items = extract_audit_checklist(project_dir)
+    seed = _load_json_safe(project_dir / "script_seed.json")
+    topic = str(seed.get("topic", "")).strip() if isinstance(seed, dict) else ""
+    checklist_lines = [
+        f"- `[{it.item_id} | {it.label}]`: {it.assertion}" for it in items
+    ]
+    return topic, checklist_lines
+
+
+def build_post_script_audit_prompt(project_dir: Path) -> str:
+    """Build a compact copy-paste adversarial verification prompt for Gemini NotebookLM."""
+    topic, checklist_lines = _extract_topic_and_checklist(project_dir)
+    return _format_audit_prompt(topic, checklist_lines)
+
+
+def build_post_script_audit_prompts(
+    project_dir: Path, max_chars: int = 2500
+) -> List[str]:
+    """Build chat-sized NotebookLM audit prompt batches so each stays under *max_chars*."""
+    topic, checklist_lines = _extract_topic_and_checklist(project_dir)
+    full = _format_audit_prompt(topic, checklist_lines)
+    if len(full) <= max_chars or len(checklist_lines) <= 1:
+        return [full]
+
+    # Measure fixed overhead (using worst-case batch label) to chunk greedily.
+    overhead = len(_format_audit_prompt(topic, ["X"], batch_label=" (Batch 99/99)")) - 1
+    budget = max(200, max_chars - overhead)
+
+    chunks: List[List[str]] = []
+    cur: List[str] = []
+    cur_len = 0
+    for line in checklist_lines:
+        added = len(line) + (1 if cur else 0)
+        if cur and cur_len + added > budget:
+            chunks.append(cur)
+            cur = [line]
+            cur_len = len(line)
+        else:
+            cur.append(line)
+            cur_len += added
+    if cur:
+        chunks.append(cur)
+
+    total = len(chunks)
+    if total == 1:
+        return [full]
+    return [
+        _format_audit_prompt(topic, chunk, batch_label=f" (Batch {idx}/{total})")
+        for idx, chunk in enumerate(chunks, start=1)
+    ]
 
 
 def _normalize_verdict(raw: str) -> str:
@@ -260,33 +310,9 @@ def _extract_item_id(raw: str) -> str:
     return re.sub(r"[`*\[\]]", "", raw).strip("_ ")
 
 
-def parse_notebooklm_audit_table(markdown_text: str) -> List[Dict[str, str]]:
-    """Parse NotebookLM's 7-column Markdown audit table into normalized row dicts."""
-    blocks: List[List[str]] = []
-    cur: List[str] = []
-    for line in markdown_text.splitlines():
-        s = line.strip()
-        if s.startswith("|") and s.endswith("|"):
-            cur.append(s)
-        elif cur:
-            blocks.append(cur)
-            cur = []
-    if cur:
-        blocks.append(cur)
-
-    chosen: List[str] = []
-    for blk in blocks:
-        if len(blk) >= 2:
-            hdr = blk[0].lower()
-            if any(k in hdr for k in ("verdict", "item", "discrepancy", "quote", "判定", "指摘")):
-                chosen = blk
-                break
-    if not chosen:
-        chosen = next((b for b in blocks if len(b) >= 2 and b[0].count("|") >= 5), [])
-    if not chosen:
-        return []
-
-    raw_headers = [c.strip().lower() for c in chosen[0].strip("|").split("|")]
+def _parse_table_block(block: List[str]) -> List[Dict[str, str]]:
+    """Parse a single Markdown table block into normalized audit row dicts."""
+    raw_headers = [c.strip().lower() for c in block[0].strip("|").split("|")]
     col_map: Dict[str, int] = {}
     for idx, h in enumerate(raw_headers):
         if "item" in h or "id" in h or "項目" in h:
@@ -310,7 +336,7 @@ def parse_notebooklm_audit_table(markdown_text: str) -> List[Dict[str, str]]:
             col_map[name] = pos
 
     rows: List[Dict[str, str]] = []
-    for line in chosen[1:]:
+    for line in block[1:]:
         if _TABLE_SEP_RE.match(line):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
@@ -333,6 +359,37 @@ def parse_notebooklm_audit_table(markdown_text: str) -> List[Dict[str, str]]:
             "discrepancy": _get("discrepancy"),
             "suggested_fix": _get("suggested_fix"),
         })
+    return rows
+
+
+def parse_notebooklm_audit_table(markdown_text: str) -> List[Dict[str, str]]:
+    """Parse NotebookLM's 7-column Markdown audit table(s) into normalized row dicts."""
+    blocks: List[List[str]] = []
+    cur: List[str] = []
+    for line in markdown_text.splitlines():
+        s = line.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cur.append(s)
+        elif cur:
+            blocks.append(cur)
+            cur = []
+    if cur:
+        blocks.append(cur)
+
+    selected: List[List[str]] = [
+        blk
+        for blk in blocks
+        if len(blk) >= 2
+        and any(k in blk[0].lower() for k in ("verdict", "item", "discrepancy", "quote", "判定", "指摘"))
+    ]
+    if not selected:
+        selected = [b for b in blocks if len(b) >= 2 and b[0].count("|") >= 5]
+    if not selected:
+        return []
+
+    rows: List[Dict[str, str]] = []
+    for blk in selected:
+        rows.extend(_parse_table_block(blk))
     return rows
 
 
