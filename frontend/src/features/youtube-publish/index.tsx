@@ -383,8 +383,29 @@ export const YoutubePublish: React.FC = () => {
             </div>
           )}
 
+          {/* Pre-flight summary: confirm what will be uploaded */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[#94A3B8]">
+            <span className="text-[#64748B] font-bold mr-0.5">投稿前チェック:</span>
+            <span className={`px-2 py-0.5 rounded-full ${projectData?.qa_video_path ? 'bg-[#1E293B] text-[#E2E8F0]' : 'bg-[#4C0519] text-[#FECDD3]'}`}>
+              動画: {projectData?.qa_video_path ? 'あり' : '未生成'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full ${projectData?.thumbnail_path ? 'bg-[#1E293B] text-[#E2E8F0]' : 'bg-[#4C0519] text-[#FECDD3]'}`}>
+              サムネイル: {projectData?.thumbnail_path ? 'あり' : '未生成'}
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-[#1E293B] text-[#E2E8F0]">
+              タイトル: {title.length} 文字
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-[#1E293B] text-[#E2E8F0]">
+              公開設定: {privacyStatus === 'private' ? '非公開' : privacyStatus === 'unlisted' ? '限定公開' : '公開'}
+              {publishAt ? ' (予約)' : ''}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full ${mockUpload ? 'bg-[#1E293B] text-[#E2E8F0]' : authStatus?.authenticated ? 'bg-[#064E3B] text-[#A7F3D0]' : 'bg-[#4C0519] text-[#FECDD3]'}`}>
+              投稿モード: {mockUpload ? 'Mock (テスト)' : authStatus?.authenticated ? '本番' : '本番 (未連携)'}
+            </span>
+          </div>
+
           {/* Action Row */}
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex flex-wrap items-center gap-3 mt-0.5">
             <select
               aria-label="公開設定"
               className="h-[40px] px-3 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#E2E8F0] text-[12px] font-bold focus:outline-none cursor-pointer transition-colors shrink-0"
@@ -401,7 +422,7 @@ export const YoutubePublish: React.FC = () => {
               type="button"
               onClick={handlePublish}
               disabled={isPublishing}
-              className={`flex-1 h-[40px] px-4 rounded-[8px] text-white text-[13px] font-extrabold shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all whitespace-nowrap ${
+              className={`flex-1 min-w-[220px] h-[40px] px-4 rounded-[8px] text-white text-[13px] font-extrabold shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all whitespace-nowrap ${
                 mockUpload
                   ? 'bg-gradient-to-br from-[#EF4444] to-[#DC2626] hover:from-[#F87171] hover:to-[#EF4444]'
                   : 'bg-gradient-to-br from-[#E11D48] to-[#9F1239] hover:from-[#F43F5E] hover:to-[#BE123C]'

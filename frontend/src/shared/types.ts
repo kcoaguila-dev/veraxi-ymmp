@@ -79,6 +79,167 @@ export interface ApiHealth {
   ffmpeg_available: boolean;
 }
 
+export interface IdeateResult {
+  success: boolean;
+  project_name: string;
+  dossier_markdown: string;
+  sources_manifest: Record<string, any>;
+}
+
+export interface SourceFileEntry {
+  name: string;
+  size: number;
+  sha256: string;
+  extension: string;
+}
+
+export interface SourcesResult {
+  success: boolean;
+  sources: SourceFileEntry[];
+  sources_manifest: Record<string, any>;
+}
+
+export interface IngestResult {
+  success: boolean;
+  cut_count: number;
+  claim_count: number;
+  script: DirectorScriptEntry[];
+}
+
+export interface PacingViolation {
+  rule_name: string;
+  severity: string;
+  character: string | null;
+  message: string;
+  remedy: string;
+}
+
+export interface FactClaimResult {
+  id: string;
+  cut_index: number;
+  text: string;
+  verdict: 'SUPPORTED' | 'UNSUPPORTED' | 'INSUFFICIENT';
+  verdict_raw: string;
+  reason: string;
+  quote_errors: string[];
+  evidence_quotes: string[];
+}
+
+export interface ValidateResult {
+  success: boolean;
+  passed: boolean;
+  retention_score: number;
+  pacing_is_healthy: boolean;
+  pacing_summary: string;
+  cast_balance: Record<string, number>;
+  character_stats: Record<string, any>;
+  pacing_violations: PacingViolation[];
+  fact_summary: {
+    supported: number;
+    unsupported: number;
+    insufficient: number;
+    total: number;
+    claims: FactClaimResult[];
+  };
+  fact_blocked: boolean;
+  fact_report: string | null;
+  fact_error: string | null;
+}
+
+export interface QaCheck {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface QaFrame {
+  key: string;
+  label: string;
+  url: string;
+  cut_index: number | null;
+  timestamp_sec: number | null;
+  speaker: string | null;
+  text: string | null;
+}
+
+export interface QaResult {
+  success: boolean;
+  passed: boolean;
+  checks: QaCheck[];
+  frames: QaFrame[];
+  missing_audio: string[];
+  coverage_issues: string[];
+  thumbnail_issues: string[];
+  total_cuts?: number | null;
+  video_duration_sec?: number | null;
+}
+
+export interface ClipInboxItem {
+  name: string;
+  size: number;
+}
+
+export interface IngestedClip {
+  id: string;
+  source: string;
+  file: string;
+  duration_sec: number;
+  width: number;
+  height: number;
+  fps: number;
+  has_audio: boolean;
+}
+
+export interface ClipsState {
+  success: boolean;
+  inbox: ClipInboxItem[];
+  clips: IngestedClip[];
+  error?: string;
+}
+
+export interface ClipIngestStatus {
+  success: boolean;
+  status?: 'running' | 'done';
+  ok?: boolean;
+  error?: string;
+  result?: {
+    clips: IngestedClip[];
+    rejected: Array<{ source: string; reason: string }>;
+    matching_aborted: boolean;
+    ingest_aborted: boolean;
+    from_manifest?: string | null;
+  };
+}
+
+export interface NotebooklmVerifyResult {
+  success: boolean;
+  passed?: boolean;
+  supported_count?: number;
+  flagged_rows?: Array<Record<string, string>>;
+  reprompt_block?: string;
+  gate_blockers?: Array<{ claim_id: string; verdict: string; reason: string }>;
+  claims_count?: number;
+  error?: string;
+}
+
+export interface DevPackResult {
+  success: boolean;
+  pack_id?: string;
+  bundle?: string;
+  chars?: number;
+  files?: string[];
+  mode?: string;
+  error?: string;
+}
+
+export interface DevApplyStatus {
+  success: boolean;
+  status?: 'running' | 'done';
+  exit_code?: number | null;
+  output?: string;
+  error?: string;
+}
+
 export interface YoutubeAuthStatus {
   has_client_secrets: boolean;
   has_token: boolean;

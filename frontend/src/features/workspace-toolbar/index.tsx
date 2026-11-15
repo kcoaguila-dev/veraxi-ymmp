@@ -1,13 +1,53 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../../shared/store';
-import { api, apiUrl } from '../../shared/api';
+import { api, apiUrl, isTauriRuntime } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, isDirty, loadProjects, workspacePath, setWorkspacePath, useTts, setUseTts } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
-  const [useTts, setUseTts] = useState(true);
+
+  const handleChangeWorkspace = async () => {
+    if (isDirty) {
+      const confirmed = window.confirm(
+        '未保存の台本編集があります。ワークスペースを切り替えると変更が破棄されますがよろしいですか？'
+      );
+      if (!confirmed) return;
+    }
+    try {
+      let selected: string | null = null;
+      if (isTauriRuntime()) {
+        const dialog = await import('@tauri-apps/plugin-dialog');
+        const picked = await dialog.open({ directory: true, multiple: false });
+        selected = typeof picked === 'string' ? picked : null;
+      } else {
+        selected = prompt('ワークスペースフォルダのパスを入力してください:', workspacePath || '');
+      }
+      if (!selected) return;
+      const res = await api.setWorkspace(selected);
+      setWorkspacePath(res.workspace);
+      await loadProjects();
+    } catch (e) {
+      console.error(e);
+      alert('ワークスペースの変更に失敗しました');
+    }
+  };
+
+  const handleOpenProjectFolder = async () => {
+    if (!workspacePath || !activeProjectName) return;
+    const projectDir = `${workspacePath.replace(/[\\/]+$/, '')}/projects/${activeProjectName}`;
+    if (isTauriRuntime()) {
+      try {
+        const opener = await import('@tauri-apps/plugin-opener');
+        await opener.revealItemInDir(projectDir);
+        return;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    alert(`プロジェクトフォルダ: ${projectDir}`);
+  };
 
   const handleYMM4 = async () => {
     if (!activeProjectName) return;
@@ -54,7 +94,7 @@ export const WorkspaceToolbar: React.FC = () => {
   const vvOnline = !!voicevoxHealth?.available;
 
   return (
-    <header className="h-[60px] px-6 bg-[#111827] border-b border-[#1E293B] flex items-center justify-between text-[#F8FAFC] shrink-0">
+    <header className="min-h-[60px] px-6 py-2 bg-[#111827] border-b border-[#1E293B] flex flex-wrap items-center gap-x-3 gap-y-2 justify-between text-[#F8FAFC] shrink-0">
       {/* Left: Brand + Project Selector + Voicevox Pill */}
       <div className="flex items-center gap-3.5">
         <div className="flex items-center gap-2.5">
@@ -108,7 +148,7 @@ export const WorkspaceToolbar: React.FC = () => {
             type="button"
             onClick={() => setUseTts(!useTts)}
             title="クリックしてTTSモードを切り替え"
-            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide transition-colors ${
+            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide whitespace-nowrap transition-colors ${
               useTts
                 ? 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/30'
                 : 'bg-[#1E293B] text-[#94A3B8] border border-[#475569]'
@@ -122,7 +162,7 @@ export const WorkspaceToolbar: React.FC = () => {
             type="button"
             onClick={() => setUseTts(!useTts)}
             title="VOICEVOX Engine (127.0.0.1:50021) が見つかりません。VOICEVOXを起動するか、クリックしてNo-TTSモードに切り替えてください。"
-            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide transition-colors ${
+            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide whitespace-nowrap transition-colors ${
               useTts
                 ? 'bg-[#4C0519] text-[#FECDD3] border border-[#F43F5E]/40'
                 : 'bg-[#78350F]/80 text-[#FDE68A] border border-[#F59E0B]/40'
@@ -136,7 +176,7 @@ export const WorkspaceToolbar: React.FC = () => {
         {!backendReady ? (
           <span
             title="Pythonバックエンドの起動を待機中..."
-            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold bg-[#1E293B] text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse"
+            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold whitespace-nowrap bg-[#1E293B] text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse"
           >
             API 接続中...
           </span>
@@ -152,27 +192,46 @@ export const WorkspaceToolbar: React.FC = () => {
 
       {/* Right: Step 1 (Local Generate) + Optional Editor Handoffs */}
       <div className="flex items-center gap-2.5">
-        <button
-          onClick={() => runPipeline(useTts && vvOnline)}
-          disabled={isRunning}
-          className="h-[36px] min-w-[196px] px-4 rounded-[8px] bg-gradient-to-br from-[#10B981] to-[#059669] hover:from-[#34D399] hover:to-[#10B981] text-white text-[13px] font-extrabold shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all"
-        >
-          {isRunning ? (
-            <span className="flex items-center justify-between w-full gap-3">
-              <span className="truncate">⚡ {pipelineStatus.stage}</span>
-              <span className="font-mono tabular-nums">{Math.round(pipelineStatus.progress || 0)}%</span>
-            </span>
-          ) : (
-            <span>⚡ 動画を生成 (プレビュー)</span>
-          )}
-        </button>
+        <div className="hidden xl:flex items-center gap-1.5 min-w-0">
+          <span
+            title={workspacePath || 'ワークスペース未接続'}
+            className="text-[10.5px] font-mono text-[#64748B] truncate max-w-[180px]"
+          >
+            {workspacePath || '…'}
+          </span>
+          <button
+            onClick={handleChangeWorkspace}
+            className="h-[26px] px-2 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#94A3B8] hover:text-white text-[10.5px] font-bold whitespace-nowrap transition-colors"
+            title="ワークスペースフォルダを変更"
+          >
+            📁 フォルダ変更
+          </button>
+          <button
+            onClick={handleOpenProjectFolder}
+            disabled={!activeProjectName}
+            className="h-[26px] px-2 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#94A3B8] hover:text-white text-[10.5px] font-bold whitespace-nowrap disabled:opacity-50 transition-colors"
+            title="アクティブプロジェクトのフォルダを開く"
+          >
+            📂 開く
+          </button>
+        </div>
+
+        {isRunning && (
+          <span
+            className="h-[36px] min-w-[196px] px-4 rounded-[8px] bg-[#064E3B] border border-[#10B981]/50 text-[#A7F3D0] text-[13px] font-extrabold flex items-center justify-between gap-3"
+            title="生成は Step 3 パネルからのみ開始できます"
+          >
+            <span className="truncate">⚡ 生成中: {pipelineStatus.stage}</span>
+            <span className="font-mono tabular-nums">{Math.round(pipelineStatus.progress || 0)}%</span>
+          </span>
+        )}
 
         <div className="h-6 w-[1px] bg-[#334155] mx-0.5" />
 
         <button
           onClick={handleYMM4}
           disabled={loadingYMM}
-          className={`h-[36px] px-3.5 rounded-[8px] border text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors ${
+          className={`h-[36px] px-3.5 rounded-[8px] border text-[12.5px] font-bold flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors ${
             ymmSuccess
               ? 'bg-[#064E3B] border-[#10B981] text-[#A7F3D0]'
               : 'bg-[#1E293B] hover:bg-[#334155] border-[#475569] text-[#E2E8F0]'
@@ -186,7 +245,7 @@ export const WorkspaceToolbar: React.FC = () => {
         <button
           onClick={handlePremiere}
           disabled={loadingPrem}
-          className="h-[36px] px-3.5 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+          className="h-[36px] px-3.5 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[12.5px] font-bold flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors"
         >
           <span>{loadingPrem ? '⏳' : '📄'}</span>
           <span>Premiere書き出し</span>

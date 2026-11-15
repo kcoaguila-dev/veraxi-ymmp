@@ -154,6 +154,39 @@ def test_api_pipeline_run_and_status_path_serialization(
         assert status_data["result"]["qa_video_path"].endswith("qa_test.mp4")
 
 
+def test_api_pipeline_blocked_run_reports_error_status(
+    api_server: str, tmp_path: Path
+) -> None:
+    """A pipeline result with success=False (e.g. the fact-check gate blocked
+    the run) must surface as status 'error' with the blocker text, not as a
+    silent 'complete' with all-null outputs."""
+    fake_res = PipelineResult(
+        project_dir=tmp_path / "projects" / "demo",
+        success=False,
+        errors=[
+            "Fact-check gate blocked project execution (1 blockers in claims.json):",
+            "[FACTS] d02 (cut 1) unverified: central claim needs 1 primary sources, has 0",
+        ],
+    )
+    with (
+        patch("veraxi_ymmp.app.api_server.workspace_path", return_value=tmp_path / "projects" / "demo"),
+        patch("veraxi_ymmp.app.pipeline.ProjectPipeline.run", return_value=fake_res),
+    ):
+        res_run = requests.post(f"{api_server}/api/projects/demo/run", json={"use_tts": False})
+        assert res_run.status_code == 200
+        deadline = time.time() + 5
+        status_data: dict = {}
+        while time.time() < deadline:
+            status_data = requests.get(f"{api_server}/api/projects/demo/status").json()
+            if status_data.get("status") == "error":
+                break
+            time.sleep(0.1)
+        assert status_data["status"] == "error"
+        assert "Fact-check gate blocked" in status_data["error"]
+        assert "d02" in status_data["error"]
+        assert status_data["result"]["success"] is False
+
+
 def test_api_integration_lifecycle(api_server: str, tmp_path: Path) -> None:
     def mock_wp(p: str) -> Path:
         return tmp_path / p

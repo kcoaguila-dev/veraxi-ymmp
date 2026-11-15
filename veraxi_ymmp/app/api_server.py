@@ -230,6 +230,20 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 project_name = urllib.parse.unquote(match.group(1))
                 return self.send_json(200, load_project(_project_rel_path(project_name)))
 
+            match = re.match(r'^/api/projects/([^/]+)/sources$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_list_sources
+                status_code, payload = handle_list_sources(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_list_clips
+                status_code, payload = handle_list_clips(project_name)
+                return self.send_json(status_code, payload)
+
             match = re.match(r'^/api/projects/([^/]+)/history$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -359,6 +373,106 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     script_path.write_text("[]", encoding="utf-8")
                 return self.send_json(200, {"success": True, "name": name})
 
+            if path == '/api/ideate':
+                from veraxi_ymmp.app.studio_workflow_routes import handle_ideate
+                status_code, payload = handle_ideate(body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/sources$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_add_source
+                status_code, payload = handle_add_source(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/ingest$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_ingest
+                status_code, payload = handle_ingest(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/validate$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_validate
+                status_code, payload = handle_validate(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/qa$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_qa
+                status_code, payload = handle_qa(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/upload$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_upload_clip
+                status_code, payload = handle_upload_clip(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/ingest$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_ingest_clips_start,
+                )
+                status_code, payload = handle_ingest_clips_start(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/ingest/status$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_ingest_clips_status,
+                )
+                status_code, payload = handle_ingest_clips_status(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/notebooklm/prompt$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_notebooklm_prompt,
+                )
+                status_code, payload = handle_notebooklm_prompt(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/notebooklm/verify$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_notebooklm_verify,
+                )
+                status_code, payload = handle_notebooklm_verify(project_name, body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/session-start':
+                from veraxi_ymmp.app.studio_dev_routes import (
+                    handle_dev_session_start,
+                )
+                status_code, payload = handle_dev_session_start()
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/pack':
+                from veraxi_ymmp.app.studio_dev_routes import handle_dev_pack
+                status_code, payload = handle_dev_pack(body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/apply':
+                from veraxi_ymmp.app.studio_dev_routes import handle_dev_apply_start
+                status_code, payload = handle_dev_apply_start(body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/apply/status':
+                from veraxi_ymmp.app.studio_dev_routes import (
+                    handle_dev_apply_status,
+                )
+                status_code, payload = handle_dev_apply_status(body)
+                return self.send_json(status_code, payload)
+
             if path == '/api/voicevox/audition':
                 text = body.get("text", "")
                 character = body.get("character", "unknown")
@@ -436,10 +550,22 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                         )
                         res = dataclasses.asdict(res_obj)
                         with _pipeline_lock:
-                            _pipeline_status[project_name] = {
-                                "status": "complete",
-                                "result": res
-                            }
+                            if res.get("success") is False:
+                                # The pipeline returns a failed result (e.g. the
+                                # fact-check gate blocked the run) instead of
+                                # raising; surface it as an error so the UI can
+                                # show the reason instead of a silent no-op.
+                                _pipeline_status[project_name] = {
+                                    "status": "error",
+                                    "error": " ".join(res.get("errors") or [])
+                                    or "Pipeline failed",
+                                    "result": res,
+                                }
+                            else:
+                                _pipeline_status[project_name] = {
+                                    "status": "complete",
+                                    "result": res
+                                }
                     except Exception as e:
                         logger.error(f"Pipeline error: {e}", exc_info=True)
                         with _pipeline_lock:

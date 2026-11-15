@@ -14,6 +14,22 @@ import veraxi_ymmp.app.pack_edit as pe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+
+VIDEO11_PROJECT = REPO_ROOT / "projects" / "11_anthropic_ipo_2026"
+
+
+def _require_video11_project() -> None:
+    """Skip video11 tests when the local production project is absent.
+
+    These tests exercise the real video-11 production project, which is
+    user content under ``projects/`` and is not committed to the repo;
+    on a clean checkout they must skip instead of failing.
+    """
+    if not VIDEO11_PROJECT.is_dir():
+        pytest.skip(
+            "local production project projects/11_anthropic_ipo_2026 not present"
+        )
+
 BUGGY_MOD = "def add(a, b):\n    return a - b\n"
 FIXED_LINE = "    return a + b"
 
@@ -559,6 +575,7 @@ def test_project_edit_rejects_bad_asset_unmapped_ascii_and_hallucinated_number(
 def test_pack_edit_auto_includes_project_rules_and_fits_video11_budget(
     monkeypatch, capsys
 ):
+    _require_video11_project()
     monkeypatch.chdir(REPO_ROOT)
     pa.cmd_pack([
         "--mode", "edit",
@@ -577,6 +594,7 @@ def test_pack_edit_auto_includes_project_rules_and_fits_video11_budget(
 
 
 def test_video11_staged_edit_reconciles_all_80_claims_cleanly(tmp_path):
+    _require_video11_project()
     root = _make_repo(tmp_path)
     src_proj = REPO_ROOT / "projects" / "11_anthropic_ipo_2026"
     dst_proj = root / "projects" / "11_anthropic_ipo_2026"
@@ -625,6 +643,7 @@ def test_video11_staged_edit_reconciles_all_80_claims_cleanly(tmp_path):
 
 
 def test_video11_edit_rhetorical_negation_and_hook_claim_promotion(tmp_path):
+    _require_video11_project()
     root = _make_repo(tmp_path)
     src_proj = REPO_ROOT / "projects" / "11_anthropic_ipo_2026"
     dst_proj = root / "projects" / "11_anthropic_ipo_2026"
@@ -729,6 +748,7 @@ def test_video11_edit_rhetorical_negation_and_hook_claim_promotion(tmp_path):
 
 
 def test_video11_edit_compound_claim_union_and_fact_loss_polarity(tmp_path):
+    _require_video11_project()
     root = _make_repo(tmp_path)
     src_proj = REPO_ROOT / "projects" / "11_anthropic_ipo_2026"
     dst_proj = root / "projects" / "11_anthropic_ipo_2026"
@@ -803,6 +823,7 @@ def test_video11_edit_compound_claim_union_and_fact_loss_polarity(tmp_path):
 
 
 def test_video11_edit_synthesizes_derived_arithmetic_claim(tmp_path):
+    _require_video11_project()
     root = _make_repo(tmp_path)
     src_proj = REPO_ROOT / "projects" / "11_anthropic_ipo_2026"
     dst_proj = root / "projects" / "11_anthropic_ipo_2026"

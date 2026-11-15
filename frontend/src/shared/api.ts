@@ -1,7 +1,9 @@
 import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
-  ApiHealth
+  ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult,
+  NotebooklmVerifyResult, DevPackResult, DevApplyStatus,
+  ClipsState, ClipIngestStatus
 } from './types.ts';
 
 interface TauriInternals {
@@ -147,6 +149,100 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reply })
+  }),
+
+  ideate: (topic: string, archetype: string, projectName?: string) => fetchAPI<IdeateResult>('/api/ideate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, archetype, project_name: projectName || undefined })
+  }),
+
+  getSources: (name: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`),
+
+  addSourceUrl: (name: string, url: string, title?: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, title })
+  }),
+
+  addSourceFile: (name: string, filename: string, contentBase64: string) => fetchAPI<SourcesResult>(`/api/projects/${encodeURIComponent(name)}/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 })
+  }),
+
+  ingestProject: (name: string, payload: { evidence_markdown?: string; dialogue_markdown?: string }) => fetchAPI<IngestResult>(`/api/projects/${encodeURIComponent(name)}/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  validateProject: (name: string) => fetchAPI<ValidateResult>(`/api/projects/${encodeURIComponent(name)}/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  runProjectQa: (name: string) => fetchAPI<QaResult>(`/api/projects/${encodeURIComponent(name)}/qa`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  getClips: (name: string) => fetchAPI<ClipsState>(`/api/projects/${encodeURIComponent(name)}/clips`),
+
+  uploadClip: (name: string, filename: string, contentBase64: string) => fetchAPI<ClipsState>(`/api/projects/${encodeURIComponent(name)}/clips/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 })
+  }),
+
+  startClipIngest: (name: string, manifestText?: string) => fetchAPI<{ success: boolean; job_id?: string; mode?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/clips/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manifest_text: manifestText || undefined })
+  }),
+
+  clipIngestStatus: (name: string, jobId: string) => fetchAPI<ClipIngestStatus>(`/api/projects/${encodeURIComponent(name)}/clips/ingest/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
+  }),
+
+  generateNotebooklmPrompt: (name: string) => fetchAPI<{ success: boolean; prompt?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/notebooklm/prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  verifyNotebooklm: (name: string, auditMd: string) => fetchAPI<NotebooklmVerifyResult>(`/api/projects/${encodeURIComponent(name)}/notebooklm/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_md: auditMd })
+  }),
+
+  devSessionStart: () => fetchAPI<{ success: boolean; text?: string; error?: string }>('/api/dev/session-start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  devPack: (payload: { task: string; files: string[]; mode: 'full' | 'edit'; test?: string }) => fetchAPI<DevPackResult>('/api/dev/pack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  devApply: (payload: { reply: string; mode: 'full' | 'edit'; pack_id?: string; allow_tests?: boolean; test?: string }) => fetchAPI<{ success: boolean; job_id?: string; error?: string }>('/api/dev/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  devApplyStatus: (jobId: string) => fetchAPI<DevApplyStatus>('/api/dev/apply/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
   }),
 
   getAIPrompt: () => fetchAPI<{ prompt_markdown: string; json_schema: any }>('/api/ai-prompt'),

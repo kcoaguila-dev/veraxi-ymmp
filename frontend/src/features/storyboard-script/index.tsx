@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl } from '../../shared/api';
 import { auditionManager, AuditionState } from '../../shared/audio-manager';
@@ -145,6 +145,8 @@ export const StoryboardScript: React.FC = () => {
     setActiveProject,
     isDirty,
     mediaCacheBust,
+    lastValidation,
+    setLastValidation,
   } = useStudioStore();
 
   const [newChar, setNewChar] = useState('ずんだもん');
@@ -187,6 +189,116 @@ export const StoryboardScript: React.FC = () => {
   const [webEditError, setWebEditError] = useState<string | null>(null);
   const [isPackingEdit, setIsPackingEdit] = useState(false);
   const [isApplyingEdit, setIsApplyingEdit] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [showAuditDetails, setShowAuditDetails] = useState(false);
+  const [showNlm, setShowNlm] = useState(false);
+  const [nlmPrompt, setNlmPrompt] = useState('');
+  const [nlmTable, setNlmTable] = useState('');
+  const [nlmResult, setNlmResult] = useState<import('../../shared/types').NotebooklmVerifyResult | null>(null);
+  const [nlmBusy, setNlmBusy] = useState<'prompt' | 'verify' | null>(null);
+  const [nlmError, setNlmError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const jumpToCut = (cutIndex: number) => {
+    setSelectedIndex(cutIndex);
+    requestAnimationFrame(() => {
+      document.getElementById(`cut-card-${cutIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  // Pacing numbers dialogue entries only (directives such as a leading BGM
+  // entry are dropped before numbering), while storyboard cards use the
+  // original script index. Translate before navigating, or a script that
+  // starts with a directive would jump to a missing card.
+  const dialogueToScriptIndex = useMemo(() => {
+    if (!projectData) return [] as number[];
+    return projectData.script
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry && 'character' in entry && 'text' in entry)
+      .map(({ index }) => index);
+  }, [projectData]);
+
+  const jumpToDialogueCut = (dialogueIndex: number) => {
+    const scriptIndex = dialogueToScriptIndex[dialogueIndex];
+    jumpToCut(scriptIndex !== undefined ? scriptIndex : dialogueIndex);
+  };
+
+  const activeProjectRef = useRef(activeProjectName);
+  useEffect(() => {
+    activeProjectRef.current = activeProjectName;
+  }, [activeProjectName]);
+
+  const handleValidate = async () => {
+    if (!activeProjectName) return;
+    const projectAtStart = activeProjectName;
+    if (isDirty) {
+      const saved = await saveScript();
+      if (!saved || saved.success !== true) {
+        setAuditError('監査前に台本を保存できませんでした。保存エラーを確認してください。');
+        return;
+      }
+    }
+    setIsValidating(true);
+    setAuditError(null);
+    try {
+      const res = await api.validateProject(projectAtStart);
+      // The user may have switched projects while the audit ran; a stale
+      // result must not land on the newly selected project.
+      if (activeProjectRef.current !== projectAtStart) return;
+      setLastValidation(res);
+      setShowAuditDetails(true);
+    } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
+      setAuditError(e?.data?.error || e?.message || '監査実行に失敗しました');
+    } finally {
+      // The running flag belongs to this mounted component, so it must be
+      // cleared even when the result was dropped as stale.
+      setIsValidating(false);
+    }
+  };
+
+  const handleNlmPrompt = async () => {
+    if (!activeProjectName) return;
+    const projectAtStart = activeProjectName;
+    setNlmBusy('prompt');
+    setNlmError(null);
+    try {
+      const res = await api.generateNotebooklmPrompt(projectAtStart);
+      if (activeProjectRef.current !== projectAtStart) return;
+      if (!res.success || !res.prompt) {
+        setNlmError(res.error || 'プロンプト生成に失敗しました');
+        return;
+      }
+      setNlmPrompt(res.prompt);
+    } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmError(e?.data?.error || e?.message || 'プロンプト生成に失敗しました');
+    } finally {
+      setNlmBusy(null);
+    }
+  };
+
+  const handleNlmVerify = async () => {
+    if (!activeProjectName || !nlmTable.trim()) return;
+    const projectAtStart = activeProjectName;
+    setNlmBusy('verify');
+    setNlmError(null);
+    setNlmResult(null);
+    try {
+      const res = await api.verifyNotebooklm(projectAtStart, nlmTable);
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmResult(res);
+      if (res.success) {
+        // claims.json changed; refresh the local audit badges to match.
+        await handleValidate();
+      }
+    } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmError(e?.data?.error || e?.message || 'NotebookLM照合に失敗しました');
+    } finally {
+      setNlmBusy(null);
+    }
+  };
 
   const handleCopyEditBundle = async () => {
     if (!activeProjectName) return;
@@ -601,8 +713,10 @@ export const StoryboardScript: React.FC = () => {
 
   if (!projectData) {
     return (
-      <div className="p-6 text-sm text-[#94A3B8] flex items-center justify-center h-full">
-        プロジェクトを読み込み中...
+      <div className="p-6 text-sm text-[#94A3B8] flex items-center justify-center h-full text-center leading-relaxed">
+        {activeProjectName
+          ? 'プロジェクトを読み込み中...'
+          : 'プロジェクトが選択されていません。Step 1「リサーチ & 素材」で Dossier を生成するか、上のドロップダウンからプロジェクトを選択してください。'}
       </div>
     );
   }
@@ -612,8 +726,8 @@ export const StoryboardScript: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-[#111827] text-[#F8FAFC]">
       {/* Panel Header & Web AI Copy-Paste Bridge */}
-      <div className="h-[54px] px-5 border-b border-[#1E293B] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="min-h-[54px] px-5 py-2 border-b border-[#1E293B] flex items-center justify-between flex-wrap gap-x-3 gap-y-2 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-wrap">
           <h2 className="text-[15px] font-extrabold text-[#F8FAFC] whitespace-nowrap">
             1. 台本・スライド編集
           </h2>
@@ -628,9 +742,46 @@ export const StoryboardScript: React.FC = () => {
               💾 保存
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleValidate}
+            disabled={isValidating}
+            title="Step 3: 事実監査 (Fact Audit) と リテンション監査 (Pacing) を実行"
+            className="bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {isValidating ? '⏳ 監査中...' : '🔍 監査実行 (Fact & Pacing Audit)'}
+          </button>
+          {lastValidation && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+                title={lastValidation.pacing_summary}
+                className={`text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] whitespace-nowrap ${
+                  lastValidation.retention_score >= 80
+                    ? 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/40'
+                    : 'bg-[#78350F]/80 text-[#FDE68A] border border-[#F59E0B]/40'
+                }`}
+              >
+                Retention {lastValidation.retention_score}/100
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+                className={`text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] whitespace-nowrap ${
+                  lastValidation.fact_summary.unsupported > 0
+                    ? 'bg-[#4C0519] text-[#FECDD3] border border-[#F43F5E]/40'
+                    : 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/40'
+                }`}
+              >
+                Fact {lastValidation.fact_summary.supported}/{lastValidation.fact_summary.total} SUPPORTED
+                {lastValidation.fact_summary.unsupported > 0 && ` ⚠ ${lastValidation.fact_summary.unsupported} UNSUPPORTED`}
+              </button>
+            </>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             type="button"
             onClick={handleOpenHistory}
@@ -663,6 +814,176 @@ export const StoryboardScript: React.FC = () => {
             📥 JSON貼り付け
           </button>
         </div>
+      </div>
+
+      {/* Step 3 Audit Drawer (Fact & Pacing) */}
+      {(auditError || (lastValidation && showAuditDetails)) && (
+        <div className="border-b border-[#1E293B] bg-[#0B0F19] px-5 py-3 max-h-64 overflow-y-auto shrink-0">
+          {auditError && (
+            <p className="text-[12px] font-semibold text-[#FECDD3]">⚠ {auditError}</p>
+          )}
+          {lastValidation && showAuditDetails && (
+            <div className="space-y-2.5">
+              {!lastValidation.passed && (
+                <p className="text-[12px] font-extrabold text-[#FDE68A] bg-[#78350F]/60 border border-[#F59E0B]/40 rounded-[6px] px-2.5 py-1.5">
+                  ⚠ ゲート警告: Retention {lastValidation.retention_score}/100
+                  {lastValidation.retention_score < 80 && ' (80未満)'}
+                  {lastValidation.fact_summary.unsupported > 0 &&
+                    ` / UNSUPPORTED ${lastValidation.fact_summary.unsupported}件`}
+                  {' '}— このまま「動画生成」(Step 4) へ進む前に修正を推奨します。
+                </p>
+              )}
+              <p className="text-[11.5px] text-[#94A3B8]">
+                {lastValidation.pacing_summary}
+                {' · '}配役バランス:{' '}
+                {Object.entries(lastValidation.cast_balance)
+                  .map(([name, ratio]) => `${name} ${Math.round(ratio * 100)}%`)
+                  .join(' / ') || '—'}
+                {' '}(目標 50/30/20)
+              </p>
+              {lastValidation.pacing_violations.length > 0 && (
+                <ul className="space-y-1">
+                  {lastValidation.pacing_violations.map((v, i) => {
+                    const cutMatch = v.message.match(/#(\d+)/);
+                    return (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          onClick={() => { if (cutMatch) jumpToDialogueCut(parseInt(cutMatch[1], 10)); }}
+                          className="text-left text-[11.5px] text-[#FDE68A] hover:text-white"
+                          title={v.remedy}
+                        >
+                          [{v.severity}] {v.rule_name}: {v.message}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {lastValidation.fact_summary.claims.filter((c) => c.verdict !== 'SUPPORTED').length > 0 && (
+                <ul className="space-y-1">
+                  {lastValidation.fact_summary.claims
+                    .filter((c) => c.verdict !== 'SUPPORTED')
+                    .map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => jumpToCut(c.cut_index)}
+                          className={`text-left text-[11.5px] hover:text-white ${
+                            c.verdict === 'UNSUPPORTED' ? 'text-[#FECDD3]' : 'text-[#FDE68A]'
+                          }`}
+                          title={c.reason}
+                        >
+                          [{c.verdict}] Cut #{c.cut_index + 1}: {c.text}
+                          {c.quote_errors.length > 0 && ` — ${c.quote_errors[0]}`}
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {lastValidation.fact_error && (
+                <p className="text-[11.5px] text-[#FECDD3]">Fact audit: {lastValidation.fact_error}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 3b: NotebookLM post-script audit round-trip (verify-notebooklm) */}
+      <div className="border-b border-[#1E293B] bg-[#0B0F19] px-5 py-2.5 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowNlm(!showNlm)}
+            className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+            title="NotebookLMへ台本監査プロンプトを渡し、7列監査表を貼り戻して claims.json へ照合します (verify-notebooklm)"
+          >
+            📓 NotebookLM照合 (Step 3b) {showNlm ? '▲' : '▼'}
+          </button>
+          <span className="text-[11px] text-[#64748B]">
+            プロンプト生成 → NotebookLMへ貼付 → 7列監査表を貼り戻して照合
+          </span>
+          {nlmResult?.success && (
+            <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ${nlmResult.passed ? 'bg-[#064E3B] text-[#A7F3D0]' : 'bg-[#4C0519] text-[#FECDD3]'}`}>
+              {nlmResult.passed
+                ? `✓ 全${nlmResult.supported_count}件 SUPPORTED・ゲート通過`
+                : `⚠ 要修正 ${(nlmResult.flagged_rows?.length ?? 0) + (nlmResult.gate_blockers?.length ?? 0)}件`}
+            </span>
+          )}
+        </div>
+        {showNlm && (
+          <div className="mt-2.5 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleNlmPrompt}
+                disabled={nlmBusy !== null}
+                className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-[#312E81] hover:bg-[#3730A3] border border-[#6366F1]/40 text-[#C7D2FE] whitespace-nowrap disabled:opacity-50"
+              >
+                {nlmBusy === 'prompt' ? '⏳ 生成中...' : '1. 監査プロンプトを生成'}
+              </button>
+              {nlmPrompt && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(nlmPrompt)}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+                >
+                  📋 プロンプトをコピー
+                </button>
+              )}
+            </div>
+            {nlmPrompt && (
+              <pre className="bg-[#111827] border border-[#1E293B] rounded-[6px] p-2.5 text-[10.5px] text-[#94A3B8] max-h-36 overflow-y-auto whitespace-pre-wrap">{nlmPrompt}</pre>
+            )}
+            <textarea
+              value={nlmTable}
+              onChange={(e) => setNlmTable(e.target.value)}
+              placeholder="2. NotebookLMの7列監査表 (Markdown) をここに貼り付け"
+              aria-label="NotebookLM監査表"
+              className="w-full h-24 bg-[#111827] border border-[#334155] rounded-[6px] p-2.5 text-[11px] text-[#E2E8F0] placeholder:text-[#475569]"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleNlmVerify}
+                disabled={nlmBusy !== null || !nlmTable.trim()}
+                className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-gradient-to-br from-[#10B981] to-[#059669] text-white whitespace-nowrap disabled:opacity-50"
+              >
+                {nlmBusy === 'verify' ? '⏳ 照合中...' : '3. 照合を実行 (claims.jsonへ反映)'}
+              </button>
+              {nlmError && <span className="text-[11.5px] font-semibold text-[#FECDD3]">⚠ {nlmError}</span>}
+              {nlmResult && !nlmResult.success && (
+                <span className="text-[11.5px] font-semibold text-[#FECDD3]">⚠ {nlmResult.error}</span>
+              )}
+            </div>
+            {nlmResult?.success && !nlmResult.passed && (
+              <div className="space-y-1.5">
+                {(nlmResult.flagged_rows ?? []).map((row, i) => (
+                  <p key={i} className="text-[11.5px] text-[#FDE68A]">
+                    [{row.verdict}] {row.item_id}: {row.discrepancy || row.assertion}
+                  </p>
+                ))}
+                {(nlmResult.gate_blockers ?? []).map((b, i) => (
+                  <p key={`gate-${i}`} className="text-[11.5px] text-[#FECDD3]">
+                    [GATE {b.verdict}] {b.claim_id}: {b.reason}
+                  </p>
+                ))}
+                {nlmResult.reprompt_block && (
+                  <>
+                    <pre className="bg-[#111827] border border-[#78350F]/60 rounded-[6px] p-2.5 text-[10.5px] text-[#FDE68A] max-h-36 overflow-y-auto whitespace-pre-wrap">{nlmResult.reprompt_block}</pre>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(nlmResult.reprompt_block || '')}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+                    >
+                      📋 再プロンプトをコピー
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Scrollable Scene Blocks Area */}
@@ -801,6 +1122,7 @@ export const StoryboardScript: React.FC = () => {
                   return (
                     <div
                       key={index}
+                      id={`cut-card-${index}`}
                       onClick={() => setSelectedIndex(index)}
                       className={`rounded-[8px] px-3 py-2.5 flex items-center gap-3 transition-colors group ${cardBgClass}`}
                     >

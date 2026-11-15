@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from './api';
-import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry, ApiHealth } from './types';
+import { ProjectSummary, ProjectData, PipelineStatus, VoicevoxHealth, DirectorScriptEntry, ApiHealth, ValidateResult } from './types';
 import {
   getInitialProjectName,
   persistActiveProject,
@@ -15,7 +15,13 @@ interface StudioState {
   backendReady: boolean;
   voicevoxHealth: VoicevoxHealth | null;
   pipelineStatus: PipelineStatus;
+  workspacePath: string | null;
+  setWorkspacePath: (path: string | null) => void;
+  useTts: boolean;
+  setUseTts: (value: boolean) => void;
   isDirty: boolean;
+  lastValidation: ValidateResult | null;
+  setLastValidation: (result: ValidateResult | null) => void;
 
   loadProjects: (preferredName?: string) => Promise<void>;
   createProject: (name: string) => Promise<void>;
@@ -45,7 +51,10 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [backendReady, setBackendReady] = useState(false);
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [useTts, setUseTts] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
+  const [lastValidation, setLastValidation] = useState<ValidateResult | null>(null);
   const [mediaCacheBust, setMediaCacheBust] = useState(Date.now());
 
   useEffect(() => {
@@ -56,6 +65,9 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (health) {
         setApiHealth(health);
         setBackendReady(true);
+        api.getWorkspace()
+          .then((res) => setWorkspacePath(res.workspace))
+          .catch(() => setWorkspacePath(null));
       }
       await Promise.all([loadProjects(), checkVoicevox()]);
     };
@@ -85,7 +97,10 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         try {
           const status = await api.getPipelineStatus(activeProjectName);
           setPipelineStatus(status);
-          if (status.status === 'complete') {
+          if (status.status === 'complete' || status.status === 'error') {
+            // Refresh on error too: a run can fail late (e.g. YMM4 export)
+            // after producing qa_test.mp4/thumbnail, and those artifacts
+            // should become visible next to the failure banner.
             await refreshMedia();
           }
         } catch (e) {
@@ -136,6 +151,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const data = await api.getProject(name);
       setProjectData(data);
       setIsDirty(false);
+      setLastValidation(null);
       try {
         const initialStatus = await api.getPipelineStatus(name);
         setPipelineStatus(initialStatus);
@@ -154,12 +170,14 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     newScript[index] = entry;
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const addScriptEntry = (entry: DirectorScriptEntry) => {
     if (!projectData) return;
     setProjectData({ ...projectData, script: [...projectData.script, entry] });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const deleteScriptEntry = (index: number) => {
@@ -168,6 +186,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     newScript.splice(index, 1);
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const moveScriptEntry = (index: number, direction: 'up' | 'down') => {
@@ -180,6 +199,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     [newScript[index], newScript[target]] = [newScript[target], newScript[index]];
     setProjectData({ ...projectData, script: newScript });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const splitScriptCuts = async () => {
@@ -188,6 +208,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const res = await api.splitScript(activeProjectName, projectData.script, 40);
       setProjectData({ ...projectData, script: res.script });
       setIsDirty(true);
+      setLastValidation(null);
     } catch (e) {
       console.error('Failed to split script', e);
     }
@@ -197,6 +218,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (!projectData) return;
     setProjectData({ ...projectData, script });
     setIsDirty(true);
+    setLastValidation(null);
   };
 
   const saveScript = async () => {
@@ -241,7 +263,13 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     backendReady,
     voicevoxHealth,
     pipelineStatus,
+    workspacePath,
+    setWorkspacePath,
+    useTts,
+    setUseTts,
     isDirty,
+    lastValidation,
+    setLastValidation,
     loadProjects,
     createProject,
     setActiveProject,
