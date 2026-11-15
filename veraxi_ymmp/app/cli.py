@@ -545,6 +545,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
     from veraxi_ymmp.app.cli_ideate import cmd_ideate, cmd_verify_notebooklm
     from veraxi_ymmp.app.cli_qa import cmd_qa
     from veraxi_ymmp.app.clip_ingest import cmd_ingest_clips
+    from veraxi_ymmp.app.outlier_corpus import cmd_corpus
     from veraxi_ymmp.app.pack_apply import cmd_apply, cmd_pack
     from veraxi_ymmp.app.pack_edit import cmd_apply_edit
     from veraxi_ymmp.app.session_start import cmd_session_start
@@ -570,6 +571,7 @@ def _dispatch_subcommand(subcmd: str, sub_argv: list[str]) -> bool:
         "apply-edit": cmd_apply_edit,
         "session-start": cmd_session_start,
         "ingest-clips": cmd_ingest_clips,
+        "corpus": cmd_corpus,
     }
     handler = handlers.get(subcmd)
     if handler is None:
