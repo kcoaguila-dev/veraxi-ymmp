@@ -15,6 +15,8 @@ interface StudioState {
   backendReady: boolean;
   voicevoxHealth: VoicevoxHealth | null;
   pipelineStatus: PipelineStatus;
+  workspacePath: string | null;
+  setWorkspacePath: (path: string | null) => void;
   isDirty: boolean;
   lastValidation: ValidateResult | null;
   setLastValidation: (result: ValidateResult | null) => void;
@@ -47,6 +49,7 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [backendReady, setBackendReady] = useState(false);
   const [voicevoxHealth, setVoicevoxHealth] = useState<VoicevoxHealth | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>({ status: 'idle' });
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [lastValidation, setLastValidation] = useState<ValidateResult | null>(null);
   const [mediaCacheBust, setMediaCacheBust] = useState(Date.now());
@@ -59,6 +62,9 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (health) {
         setApiHealth(health);
         setBackendReady(true);
+        api.getWorkspace()
+          .then((res) => setWorkspacePath(res.workspace))
+          .catch(() => setWorkspacePath(null));
       }
       await Promise.all([loadProjects(), checkVoicevox()]);
     };
@@ -251,6 +257,8 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     backendReady,
     voicevoxHealth,
     pipelineStatus,
+    workspacePath,
+    setWorkspacePath,
     isDirty,
     lastValidation,
     setLastValidation,

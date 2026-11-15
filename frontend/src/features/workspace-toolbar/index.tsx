@@ -1,21 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl, isTauriRuntime } from '../../shared/api';
 
 export const WorkspaceToolbar: React.FC = () => {
-  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation } = useStudioStore();
+  const { projects, activeProjectName, setActiveProject, createProject, apiHealth, backendReady, voicevoxHealth, pipelineStatus, runPipeline, isDirty, loadProjects, lastValidation, workspacePath, setWorkspacePath } = useStudioStore();
   const [loadingYMM, setLoadingYMM] = useState(false);
   const [ymmSuccess, setYmmSuccess] = useState(false);
   const [loadingPrem, setLoadingPrem] = useState(false);
   const [useTts, setUseTts] = useState(true);
-  const [workspacePath, setWorkspacePath] = useState('');
-
-  useEffect(() => {
-    if (!backendReady) return;
-    api.getWorkspace()
-      .then((res) => setWorkspacePath(res.workspace))
-      .catch(() => setWorkspacePath(''));
-  }, [backendReady]);
 
   const handleChangeWorkspace = async () => {
     if (isDirty) {
@@ -31,7 +23,7 @@ export const WorkspaceToolbar: React.FC = () => {
         const picked = await dialog.open({ directory: true, multiple: false });
         selected = typeof picked === 'string' ? picked : null;
       } else {
-        selected = prompt('ワークスペースフォルダのパスを入力してください:', workspacePath);
+        selected = prompt('ワークスペースフォルダのパスを入力してください:', workspacePath || '');
       }
       if (!selected) return;
       const res = await api.setWorkspace(selected);

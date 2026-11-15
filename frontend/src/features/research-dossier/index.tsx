@@ -27,7 +27,7 @@ interface ResearchDossierProps {
 }
 
 export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }) => {
-  const { activeProjectName, loadProjects, setActiveProject, refreshMedia } = useStudioStore();
+  const { activeProjectName, loadProjects, setActiveProject, refreshMedia, workspacePath } = useStudioStore();
   const [topic, setTopic] = useState('');
   const [archetype, setArchetype] = useState('post_mortem');
   const [projectName, setProjectName] = useState('');
@@ -67,28 +67,25 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
     reloadSources();
   }, [reloadSources]);
 
-  // Evidence/dialogue drafts are per-project: stash them under the previous
-  // project's name on switch and restore the newly selected project's drafts,
-  // so text pasted for project A never leaks into project B.
+  // Evidence/dialogue drafts are scoped to (workspace, project): stash them
+  // under the previous scope on switch and restore the new scope's drafts,
+  // so text pasted for project A never leaks into project B — including a
+  // same-named project in a different workspace.
   const draftsRef = useRef<Record<string, { evidence: string; dialogue: string }>>({});
-  const prevProjectRef = useRef<string | null>(null);
+  const scopeKey = `${workspacePath ?? ''}::${activeProjectName ?? ''}`;
+  const prevScopeRef = useRef<string | null>(null);
   useEffect(() => {
-    const prev = prevProjectRef.current;
-    if (prev !== activeProjectName) {
-      if (prev) {
+    const prev = prevScopeRef.current;
+    if (prev !== scopeKey) {
+      if (prev !== null) {
         draftsRef.current[prev] = { evidence: evidenceMd, dialogue: dialogueMd };
       }
-      if (activeProjectName) {
-        const stash = draftsRef.current[activeProjectName];
-        setEvidenceMd(stash?.evidence ?? '');
-        setDialogueMd(stash?.dialogue ?? '');
-      } else {
-        setEvidenceMd('');
-        setDialogueMd('');
-      }
-      prevProjectRef.current = activeProjectName;
+      const stash = draftsRef.current[scopeKey];
+      setEvidenceMd(stash?.evidence ?? '');
+      setDialogueMd(stash?.dialogue ?? '');
+      prevScopeRef.current = scopeKey;
     }
-  }, [activeProjectName, evidenceMd, dialogueMd]);
+  }, [scopeKey, evidenceMd, dialogueMd]);
 
   const handleGenerateDossier = async () => {
     if (!topic.trim()) return;

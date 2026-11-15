@@ -200,6 +200,23 @@ export const StoryboardScript: React.FC = () => {
     });
   };
 
+  // Pacing numbers dialogue entries only (directives such as a leading BGM
+  // entry are dropped before numbering), while storyboard cards use the
+  // original script index. Translate before navigating, or a script that
+  // starts with a directive would jump to a missing card.
+  const dialogueToScriptIndex = useMemo(() => {
+    if (!projectData) return [] as number[];
+    return projectData.script
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry && 'character' in entry && 'text' in entry)
+      .map(({ index }) => index);
+  }, [projectData]);
+
+  const jumpToDialogueCut = (dialogueIndex: number) => {
+    const scriptIndex = dialogueToScriptIndex[dialogueIndex];
+    jumpToCut(scriptIndex !== undefined ? scriptIndex : dialogueIndex);
+  };
+
   const activeProjectRef = useRef(activeProjectName);
   useEffect(() => {
     activeProjectRef.current = activeProjectName;
@@ -227,8 +244,11 @@ export const StoryboardScript: React.FC = () => {
     } catch (e: any) {
       if (activeProjectRef.current !== projectAtStart) return;
       setAuditError(e?.data?.error || e?.message || '監査実行に失敗しました');
+    } finally {
+      // The running flag belongs to this mounted component, so it must be
+      // cleared even when the result was dropped as stale.
+      setIsValidating(false);
     }
-    setIsValidating(false);
   };
 
   const handleCopyEditBundle = async () => {
@@ -780,7 +800,7 @@ export const StoryboardScript: React.FC = () => {
                       <li key={i}>
                         <button
                           type="button"
-                          onClick={() => { if (cutMatch) jumpToCut(parseInt(cutMatch[1], 10)); }}
+                          onClick={() => { if (cutMatch) jumpToDialogueCut(parseInt(cutMatch[1], 10)); }}
                           className="text-left text-[11.5px] text-[#FDE68A] hover:text-white"
                           title={v.remedy}
                         >

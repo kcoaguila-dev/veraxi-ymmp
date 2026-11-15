@@ -35,8 +35,9 @@ export const VideoPreview: React.FC = () => {
       if (activeProjectRef.current !== projectAtStart) return;
       console.error(e);
       alert('QA 検査に失敗しました (QA audit failed)');
+    } finally {
+      setIsRunningQa(false);
     }
-    setIsRunningQa(false);
   };
 
   const handleGenerate = () => {
