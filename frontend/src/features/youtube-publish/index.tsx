@@ -43,6 +43,20 @@ export const YoutubePublish: React.FC = () => {
   const [packagingError, setPackagingError] = useState<string | null>(null);
   const [packagingImgFailed, setPackagingImgFailed] = useState<Record<string, boolean>>({});
   const [packagingImgRev, setPackagingImgRev] = useState(0);
+  const [mobilePreview, setMobilePreview] = useState(false);
+  const [editingAxis, setEditingAxis] = useState<PackagingAxis | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    title: string;
+    title_line1: string;
+    title_line2: string;
+    highlight_word: string;
+    badge: string;
+    emotion: string;
+    theme: string;
+    layout: string;
+  } | null>(null);
+  const [isUpdatingPair, setIsUpdatingPair] = useState(false);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const activeProjectRef = useRef<string | null>(activeProjectName);
   activeProjectRef.current = activeProjectName;
   const packagingOpIdRef = useRef(0);
@@ -214,6 +228,65 @@ export const YoutubePublish: React.FC = () => {
       if (!isStalePackagingOp(reqProject, opId)) {
         setSelectingAxis(null);
       }
+    }
+  };
+
+  const handleStartEditPair = (pair: PackagingPair) => {
+    setEditingAxis(pair.axis);
+    setEditDraft({
+      title: pair.title || '',
+      title_line1: String(pair.config?.title_line1 || ''),
+      title_line2: String(pair.config?.title_line2 || ''),
+      highlight_word: String(pair.config?.highlight_word || ''),
+      badge: String(pair.config?.badge || ''),
+      emotion: String(pair.config?.emotion || 'surprised'),
+      theme: String(pair.config?.theme || 'gold'),
+      layout: String(pair.config?.layout || 'classic_split'),
+    });
+  };
+
+  const handleSaveEditPair = async () => {
+    if (!activeProjectName || !editingAxis || !editDraft) return;
+    setIsUpdatingPair(true);
+    setPackagingError(null);
+    try {
+      const res = await api.updatePackagingPair(activeProjectName, editingAxis, {
+        title: editDraft.title,
+        config: {
+          title_line1: editDraft.title_line1,
+          title_line2: editDraft.title_line2,
+          highlight_word: editDraft.highlight_word,
+          badge: editDraft.badge,
+          emotion: editDraft.emotion,
+          theme: editDraft.theme,
+          layout: editDraft.layout,
+        },
+      });
+      setPackaging(res.packaging);
+      setPackagingImgFailed((prev) => ({ ...prev, [editingAxis]: false }));
+      setPackagingImgRev((r) => r + 1);
+      setEditingAxis(null);
+      setEditDraft(null);
+    } catch (e: any) {
+      setPackagingError(e.data?.error || e.message || '候補の更新に失敗しました');
+    } finally {
+      setIsUpdatingPair(false);
+    }
+  };
+
+  const handleRecordFeedback = async (pair: PackagingPair, won: boolean) => {
+    setFeedbackNotice(null);
+    try {
+      await api.recordPatternFeedback({
+        axis: pair.axis,
+        layout: String(pair.config?.layout || 'classic_split'),
+        won,
+      });
+      setFeedbackNotice(
+        `${PACKAGING_AXIS_LABELS[pair.axis] || pair.axis} の${won ? '勝利' : '敗北'}結果を patterns.json に学習しました`
+      );
+    } catch (e: any) {
+      setPackagingError(e.data?.error || e.message || 'フィードバック記録に失敗しました');
     }
   };
 
@@ -571,14 +644,28 @@ export const YoutubePublish: React.FC = () => {
               タイトル + サムネイルを3軸 (好奇心 / 実績・数字 / 損失回避) で比較
             </span>
           </div>
-          <button
-            type="button"
-            onClick={handleGeneratePackaging}
-            disabled={isGeneratingPackaging || selectingAxis !== null || !activeProjectName}
-            className="h-[28px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] text-[11.5px] font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors whitespace-nowrap"
-          >
-            {isGeneratingPackaging ? '⏳ 生成中... (3案レンダリング中)' : '🎨 候補を生成'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobilePreview(!mobilePreview)}
+              className={`h-[28px] px-2.5 rounded-[6px] text-[11px] font-semibold transition-colors whitespace-nowrap ${
+                mobilePreview
+                  ? 'bg-[#0284C7] text-white'
+                  : 'bg-[#1E293B] hover:bg-[#334155] text-[#CBD5E1]'
+              }`}
+              title="スマホフィード実寸 (168px幅) で視認性をテスト"
+            >
+              {mobilePreview ? '📱 モバイル実寸 ON' : '📱 スマホ視認テスト'}
+            </button>
+            <button
+              type="button"
+              onClick={handleGeneratePackaging}
+              disabled={isGeneratingPackaging || selectingAxis !== null || !activeProjectName}
+              className="h-[28px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] text-[11.5px] font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {isGeneratingPackaging ? '⏳ 生成中... (3案レンダリング中)' : '🎨 候補を生成'}
+            </button>
+          </div>
         </div>
 
         <p className="text-[10.5px] text-[#64748B] font-medium -mt-1">
@@ -588,6 +675,12 @@ export const YoutubePublish: React.FC = () => {
         {packagingError && (
           <div className="px-3 py-1.5 rounded-[6px] text-xs font-medium bg-rose-950/50 border border-rose-800/60 text-rose-300">
             エラー: {packagingError}
+          </div>
+        )}
+
+        {feedbackNotice && (
+          <div className="px-3 py-1.5 rounded-[6px] text-xs font-medium bg-emerald-950/50 border border-emerald-800/60 text-emerald-300">
+            ✓ {feedbackNotice}
           </div>
         )}
 
@@ -608,31 +701,48 @@ export const YoutubePublish: React.FC = () => {
                     isSelected ? 'border-emerald-500/70' : isRecommended ? 'border-amber-500/60' : 'border-[#1E293B]'
                   }`}
                 >
-                  <div className="aspect-video bg-[#111827] relative shrink-0">
-                    {packagingImgFailed[pair.axis] ? (
-                      <div className="w-full h-full flex items-center justify-center text-[11px] text-[#94A3B8] font-semibold px-2 text-center">
-                        候補画像を読み込めませんでした
-                      </div>
-                    ) : (
-                      <img
-                        src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${pair.thumbnail_file}?t=${mediaCacheBust}&pkgRev=${packagingImgRev}`)}
-                        alt={`${PACKAGING_AXIS_LABELS[pair.axis] || pair.axis} サムネイル候補`}
-                        className="w-full h-full object-cover"
-                        onError={() => setPackagingImgFailed((prev) => ({ ...prev, [pair.axis]: true }))}
-                      />
-                    )}
-                    <div className="absolute top-1.5 left-1.5 flex gap-1">
-                      {isRecommended && (
-                        <span className="px-1.5 py-0.5 rounded-[4px] bg-amber-500 text-[#0B0F19] text-[10px] font-extrabold">
-                          おすすめ
-                        </span>
+                  <div className={mobilePreview ? 'p-2.5 bg-[#0F0F0F] flex gap-2.5 items-start' : 'aspect-video bg-[#111827] relative shrink-0'}>
+                    <div className={mobilePreview ? 'w-[168px] aspect-video rounded-[6px] overflow-hidden relative shrink-0 bg-[#111827]' : 'w-full h-full relative'}>
+                      {packagingImgFailed[pair.axis] ? (
+                        <div className="w-full h-full flex items-center justify-center text-[11px] text-[#94A3B8] font-semibold px-2 text-center">
+                          候補画像を読み込めませんでした
+                        </div>
+                      ) : (
+                        <img
+                          src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${pair.thumbnail_file}?t=${mediaCacheBust}&pkgRev=${packagingImgRev}`)}
+                          alt={`${PACKAGING_AXIS_LABELS[pair.axis] || pair.axis} サムネイル候補`}
+                          className="w-full h-full object-cover"
+                          onError={() => setPackagingImgFailed((prev) => ({ ...prev, [pair.axis]: true }))}
+                        />
                       )}
-                      {isSelected && (
-                        <span className="px-1.5 py-0.5 rounded-[4px] bg-emerald-500 text-[#0B0F19] text-[10px] font-extrabold">
-                          選択中
+                      <div className="absolute top-1.5 left-1.5 flex gap-1">
+                        {isRecommended && (
+                          <span className="px-1.5 py-0.5 rounded-[4px] bg-amber-500 text-[#0B0F19] text-[10px] font-extrabold">
+                            おすすめ
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="px-1.5 py-0.5 rounded-[4px] bg-emerald-500 text-[#0B0F19] text-[10px] font-extrabold">
+                            選択中
+                          </span>
+                        )}
+                      </div>
+                      {mobilePreview && (
+                        <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/85 text-white text-[9px] font-mono">
+                          8:24
                         </span>
                       )}
                     </div>
+                    {mobilePreview && (
+                      <div className="min-w-0 flex-1 flex flex-col gap-1">
+                        <div className="text-[12px] font-bold text-white leading-tight">
+                          {pair.title.length > 32 ? `${pair.title.slice(0, 32)}...` : pair.title}
+                        </div>
+                        <div className="text-[10px] text-[#AAAAAA]">
+                          ずんだもん解説 • 1.2万回視聴
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-2.5 flex flex-col gap-1.5 flex-1">
@@ -673,22 +783,121 @@ export const YoutubePublish: React.FC = () => {
                       </ul>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPackagingPair(pair)}
-                      disabled={isSelected || isGeneratingPackaging || selectingAxis !== null}
-                      className={`mt-auto h-[30px] rounded-[6px] text-[11.5px] font-bold transition-colors disabled:opacity-50 ${
-                        isSelected
-                          ? 'bg-[#064E3B] text-[#A7F3D0] cursor-default'
-                          : 'bg-[#0284C7] hover:bg-[#0369A1] text-white'
-                      }`}
-                    >
-                      {isSelected
-                        ? '✓ 選択中 (サムネイル適用済)'
-                        : selectingAxis === pair.axis
-                        ? '⏳ 適用中...'
-                        : 'この候補を使う'}
-                    </button>
+                    {editingAxis === pair.axis && editDraft ? (
+                      <div className="p-2.5 rounded-[6px] bg-[#111827] border border-[#334155] flex flex-col gap-2 text-[11px]">
+                        <input
+                          type="text"
+                          value={editDraft.title}
+                          onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
+                          placeholder="動画タイトル"
+                          className="w-full h-[28px] bg-[#0B0F19] border border-[#334155] rounded px-2 text-[#F8FAFC]"
+                        />
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            value={editDraft.title_line1}
+                            onChange={(e) => setEditDraft({ ...editDraft, title_line1: e.target.value })}
+                            placeholder="サムネ1行目"
+                            className="h-[26px] bg-[#0B0F19] border border-[#334155] rounded px-2 text-[#F8FAFC]"
+                          />
+                          <input
+                            type="text"
+                            value={editDraft.title_line2}
+                            onChange={(e) => setEditDraft({ ...editDraft, title_line2: e.target.value })}
+                            placeholder="サムネ2行目"
+                            className="h-[26px] bg-[#0B0F19] border border-[#334155] rounded px-2 text-[#F8FAFC]"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="text"
+                            value={editDraft.badge}
+                            onChange={(e) => setEditDraft({ ...editDraft, badge: e.target.value })}
+                            placeholder="バッジ(空欄可)"
+                            className="h-[26px] bg-[#0B0F19] border border-[#334155] rounded px-2 text-[#F8FAFC]"
+                          />
+                          <select
+                            value={editDraft.emotion}
+                            onChange={(e) => setEditDraft({ ...editDraft, emotion: e.target.value })}
+                            className="h-[26px] bg-[#0B0F19] border border-[#334155] rounded px-1.5 text-[#F8FAFC]"
+                          >
+                            <option value="surprised">驚き</option>
+                            <option value="angry">怒り</option>
+                            <option value="happy">喜び</option>
+                            <option value="sad">悲しみ</option>
+                          </select>
+                          <select
+                            value={editDraft.layout}
+                            onChange={(e) => setEditDraft({ ...editDraft, layout: e.target.value })}
+                            className="h-[26px] bg-[#0B0F19] border border-[#334155] rounded px-1.5 text-[#F8FAFC]"
+                          >
+                            <option value="classic_split">3分割</option>
+                            <option value="editorial_spotlight">スポットライト</option>
+                          </select>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSaveEditPair}
+                            disabled={isUpdatingPair}
+                            className="flex-1 h-[26px] rounded bg-[#10B981] hover:bg-[#059669] text-white font-bold disabled:opacity-50"
+                          >
+                            {isUpdatingPair ? '⏳ 更新中...' : '✓ 再レンダリング'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setEditingAxis(null); setEditDraft(null); }}
+                            className="px-2.5 h-[26px] rounded bg-[#1E293B] text-[#94A3B8] font-bold"
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-auto flex items-center gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPackagingPair(pair)}
+                        disabled={isSelected || isGeneratingPackaging || selectingAxis !== null}
+                        className={`flex-1 h-[30px] rounded-[6px] text-[11.5px] font-bold transition-colors disabled:opacity-50 ${
+                          isSelected
+                            ? 'bg-[#064E3B] text-[#A7F3D0] cursor-default'
+                            : 'bg-[#0284C7] hover:bg-[#0369A1] text-white'
+                        }`}
+                      >
+                        {isSelected
+                          ? '✓ 選択中'
+                          : selectingAxis === pair.axis
+                          ? '⏳ 適用中...'
+                          : 'この候補を使う'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditPair(pair)}
+                        disabled={isUpdatingPair}
+                        className="h-[30px] px-2.5 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#CBD5E1] text-[11px] font-bold"
+                        title="タイトル・サムネ文言・表情をライブ編集"
+                      >
+                        ✏ 編集
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRecordFeedback(pair, true)}
+                        className="h-[30px] px-2 rounded-[6px] bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/50 text-emerald-300 text-[10.5px] font-bold"
+                        title="Test & Compare で勝利を記録"
+                      >
+                        +Win
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRecordFeedback(pair, false)}
+                        className="h-[30px] px-2 rounded-[6px] bg-rose-950/70 hover:bg-rose-900 border border-rose-700/50 text-rose-300 text-[10.5px] font-bold"
+                        title="Test & Compare で敗北を記録"
+                      >
+                        -Loss
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

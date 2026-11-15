@@ -287,3 +287,81 @@ export interface YoutubeAuthStatus {
     video_count?: number;
   };
 }
+
+export interface CorpusOutlier {
+  video_id: string;
+  channel_id: string;
+  channel_title: string;
+  title: string;
+  views: number;
+  baseline_mean_views: number;
+  ratio_vs_mean: number;
+  published_at: string;
+  duration_sec: number;
+  thumbnail_url: string;
+  thumbnail_file?: string;
+}
+
+export interface CorpusData {
+  generated_at?: string;
+  channels: Array<{
+    channel_id: string;
+    title: string;
+    handle: string;
+    baseline_mean_views: number;
+    baseline_median_views: number;
+    videos_fetched: number;
+    videos_eligible: number;
+  }>;
+  outliers: CorpusOutlier[];
+}
+
+export interface PatternTitleArchetype {
+  id: string;
+  axis: PackagingAxis;
+  label: string;
+  template: string;
+  weight: number;
+  wins: number;
+  losses: number;
+  hook_first: boolean;
+}
+
+export interface PatternLayoutArchetype {
+  id: string;
+  label: string;
+  use_badge: boolean;
+  max_elements: number;
+  weight: number;
+  wins: number;
+  losses: number;
+}
+
+export interface PatternLibrary {
+  version: number;
+  updated_at: string;
+  source_outliers_count: number;
+  bracket_tag_rate: number;
+  prefer_hook_first: boolean;
+  prefer_clean_badge_free: boolean;
+  avg_outlier_title_chars: number;
+  anti_slop_phrases: string[];
+  title_archetypes: PatternTitleArchetype[];
+  layout_archetypes: PatternLayoutArchetype[];
+  recent_outlier_hooks: Array<{
+    video_id: string;
+    title: string;
+    axis: string;
+    ratio_vs_mean: number;
+    views: number;
+    channel_title: string;
+  }>;
+}
+
+export interface CorpusResponse {
+  success: boolean;
+  corpus: CorpusData | null;
+  patterns: PatternLibrary;
+  channels: string[];
+  has_api_key?: boolean;
+}

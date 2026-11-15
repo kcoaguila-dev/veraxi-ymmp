@@ -4,7 +4,8 @@ import type {
   ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult,
   NotebooklmVerifyResult, DevPackResult, DevApplyStatus,
   ClipsState, ClipIngestStatus,
-  PackagingData, PackagingPair, PackagingAxis
+  PackagingData, PackagingPair, PackagingAxis,
+  CorpusResponse, PatternLibrary
 } from './types.ts';
 
 interface TauriInternals {
@@ -311,6 +312,35 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ axis })
   }),
+
+  updatePackagingPair: (
+    name: string,
+    axis: PackagingAxis,
+    payload: { title?: string; config?: Record<string, any> }
+  ) => fetchAPI<{ success: boolean; packaging: PackagingData }>(
+    `/api/projects/${encodeURIComponent(name)}/packaging/${encodeURIComponent(axis)}/update`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }
+  ),
+
+  getCorpus: () => fetchAPI<CorpusResponse>('/api/corpus'),
+
+  scanCorpus: (channels: string[], minRatio: number = 3.0) =>
+    fetchAPI<CorpusResponse>('/api/corpus/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channels, min_ratio: minRatio }),
+    }),
+
+  recordPatternFeedback: (payload: { axis: string; layout?: string; won: boolean; ctr?: number }) =>
+    fetchAPI<{ success: boolean; patterns: PatternLibrary }>('/api/corpus/patterns/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 
   uploadToYoutube: (name: string, payload: YoutubeUploadPayload) => fetchAPI<any>(`/api/projects/${encodeURIComponent(name)}/youtube`, {
     method: 'POST',

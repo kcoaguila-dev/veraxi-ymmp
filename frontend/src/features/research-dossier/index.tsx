@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api } from '../../shared/api';
-import type { SourcesResult, ClipsState, ClipIngestStatus } from '../../shared/types';
+import type { SourcesResult, ClipsState, ClipIngestStatus, PackagingData, PackagingAxis } from '../../shared/types';
 
 const ARCHETYPES: Array<{ key: string; label: string }> = [
   { key: 'post_mortem', label: 'Post-Mortem / 失敗の解剖' },
@@ -33,6 +33,36 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
   const [projectName, setProjectName] = useState('');
   const [dossier, setDossier] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [prePackaging, setPrePackaging] = useState<PackagingData | null>(null);
+  const [isPrePackaging, setIsPrePackaging] = useState(false);
+  const [prePkgMsg, setPrePkgMsg] = useState<string | null>(null);
+
+  const handlePreScriptPackaging = async () => {
+    if (!activeProjectName) return;
+    setIsPrePackaging(true);
+    setPrePkgMsg(null);
+    try {
+      const res = await api.generatePackaging(activeProjectName);
+      setPrePackaging(res.packaging);
+      setPrePkgMsg('3軸フックを生成しました。台本執筆前に軸をロックできます。');
+    } catch (e: any) {
+      setPrePkgMsg(e.data?.error || e.message || 'フック生成に失敗しました');
+    } finally {
+      setIsPrePackaging(false);
+    }
+  };
+
+  const handleLockPrePackaging = async (axis: PackagingAxis) => {
+    if (!activeProjectName) return;
+    try {
+      const res = await api.selectPackagingPair(activeProjectName, axis);
+      setPrePackaging((prev) => (prev ? { ...prev, selected_axis: axis } : prev));
+      setPrePkgMsg(`✓ 「${res.selected?.title}」を仮ロックしました（冒頭15秒で回収してください）`);
+      await refreshMedia();
+    } catch (e: any) {
+      setPrePkgMsg(e.data?.error || e.message || 'ロックに失敗しました');
+    }
+  };
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -466,6 +496,60 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        {/* Step 1.5: Pre-Script Packaging Hook */}
+        <section className="space-y-2 rounded-[10px] bg-[#0B0F19] border border-[#1E293B] p-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h3 className="text-[12.5px] font-extrabold text-[#38BDF8]">
+                Step 1.5 — パッケージ仮決め (台本前にフックをロック)
+              </h3>
+              <p className="text-[10.5px] text-[#94A3B8]">
+                ライバル分析パターンからタイトル+サムネ3案を先に作り、冒頭15秒の回収ゴールを固定します。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handlePreScriptPackaging}
+              disabled={isPrePackaging || !activeProjectName}
+              className="h-[30px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] text-[11.5px] font-bold disabled:opacity-50 whitespace-nowrap"
+            >
+              {isPrePackaging ? '⏳ 生成中...' : '🎨 フック3案を生成'}
+            </button>
+          </div>
+          {prePkgMsg && <div className="text-[11px] text-[#34D399] font-semibold">{prePkgMsg}</div>}
+          {prePackaging && (
+            <div className="grid grid-cols-1 gap-1.5 pt-1">
+              {prePackaging.pairs.map((p) => {
+                const locked = prePackaging.selected_axis === p.axis;
+                return (
+                  <div
+                    key={p.axis}
+                    className={`px-2.5 py-2 rounded-[6px] border flex items-center justify-between gap-2 text-[11px] ${
+                      locked ? 'bg-emerald-950/30 border-emerald-600/60' : 'bg-[#111827] border-[#1E293B]'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <span className="font-extrabold text-[#38BDF8] mr-1.5">[{p.axis}]</span>
+                      <span className="font-bold text-[#F8FAFC]">{p.title}</span>
+                      <span className="ml-2 text-[#94A3B8] font-mono">({p.total}/100)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleLockPrePackaging(p.axis)}
+                      disabled={locked}
+                      className={`px-2.5 py-1 rounded text-[10.5px] font-bold shrink-0 ${
+                        locked ? 'bg-emerald-700 text-white' : 'bg-[#0284C7] hover:bg-[#0369A1] text-white'
+                      }`}
+                    >
+                      {locked ? '✓ ロック済' : '仮ロック'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
 

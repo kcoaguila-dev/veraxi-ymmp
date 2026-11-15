@@ -216,6 +216,29 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             if path == '/api/voicevox/health':
                 return self.send_json(200, get_voicevox_health())
 
+            if path == '/api/corpus':
+                from veraxi_ymmp.app.studio_corpus_routes import handle_get_corpus
+                status_code, payload = handle_get_corpus()
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/corpus/thumbnails/([^/]+)$', path)
+            if match:
+                from veraxi_ymmp.app.studio_corpus_routes import resolve_corpus_thumbnail
+                fname = urllib.parse.unquote(match.group(1))
+                thumb = resolve_corpus_thumbnail(fname)
+                if thumb is None:
+                    self.send_error(404, "Not Found")
+                    return
+                content_type = self.guess_type(str(thumb))
+                thumb_bytes = thumb.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Content-Length', str(len(thumb_bytes)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(thumb_bytes)
+                return
+
             if path == '/api/youtube/auth/status':
                 from veraxi_ymmp.exporters.youtube_auth import get_auth_status
                 status = get_auth_status()
@@ -630,6 +653,24 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_json(200, {"success": True, "packaging": data})
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
+
+            if path == '/api/corpus/scan':
+                from veraxi_ymmp.app.studio_corpus_routes import handle_scan_corpus
+                status_code, payload = handle_scan_corpus(body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/corpus/patterns/feedback':
+                from veraxi_ymmp.app.studio_corpus_routes import handle_record_pattern_feedback
+                status_code, payload = handle_record_pattern_feedback(body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/packaging/([^/]+)/update$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                axis = urllib.parse.unquote(match.group(2))
+                from veraxi_ymmp.app.studio_corpus_routes import handle_update_packaging_pair
+                status_code, payload = handle_update_packaging_pair(project_name, axis, body)
+                return self.send_json(status_code, payload)
 
             match = re.match(r'^/api/projects/([^/]+)/packaging/select$', path)
             if match:

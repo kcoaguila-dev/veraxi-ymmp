@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageStat
 
 from veraxi_ymmp.core.logging import logger
+from veraxi_ymmp.graphics.packaging_patterns import is_generic_slop, load_patterns
 from veraxi_ymmp.graphics.thumbnail import (
     ThumbnailConfig,
     auto_extract_thumbnail_config,
@@ -184,7 +185,9 @@ def score_thumbnail_text(config: ThumbnailConfig) -> Tuple[int, List[str]]:
     if badge:
         score += 5 if len(badge) <= 10 else 3
     else:
-        issues.append("バッジが未設定です")
+        # Clean mobile-first 2-element thumbnails (no pill badge) are valid and
+        # reduce visual clutter in feed squint-tests.
+        score += 3
     return score, issues
 
 
@@ -272,15 +275,46 @@ def _fit_title(topic: str, suffix: str) -> str:
     return f"{TITLE_TAG}{topic}{suffix}"
 
 
-def build_axis_titles(topic: str, metric: str = "") -> Dict[str, str]:
+def build_axis_titles(
+    topic: str,
+    metric: str = "",
+    patterns: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
     """
     Three titles on different strategic axes. The result axis uses the
     caller-supplied metric verbatim; no number is ever invented here.
+
+    When ``patterns`` is supplied (from `patterns.json` / outlier mining),
+    titles adapt to live trend preferences (e.g., hook-first without the
+    9-char 【ずんだもん解説】 prefix when rivals win without bracket tags).
     """
     topic = (topic or "").strip()
     if not topic:
         raise ValueError("topic must not be empty")
     metric = re.sub(r"\s+", "", (metric or "").strip())
+
+    if patterns and patterns.get("prefer_hook_first"):
+        clean_topic = re.sub(r"\s+", "", topic).rstrip("。")
+        max_len = TITLE_IDEAL_MAX_CHARS
+        c_title = f"なぜ{clean_topic}は突然崩れたのか？"
+        if len(c_title) > max_len:
+            c_title = f"なぜ{clean_topic[: max(4, max_len - 10)]}は崩れたのか？"
+        l_title = f"知らないと危ない{clean_topic}の落とし穴"
+        if len(l_title) > max_len:
+            l_title = f"危ない{clean_topic[: max(4, max_len - 8)]}の落とし穴"
+        if metric:
+            r_title = f"{metric}の異常値…{clean_topic}に何が？"
+            if len(r_title) > max_len:
+                keep = max(4, max_len - len(metric) - 9)
+                r_title = f"{metric}の衝撃…{clean_topic[:keep]}の今"
+        else:
+            r_title = f"{clean_topic[: max(4, max_len - 11)]}の明暗を分けた一手"
+        return {
+            "curiosity": c_title[:max_len],
+            "result": r_title[:max_len],
+            "loss": l_title[:max_len],
+        }
+
     titles = {
         "curiosity": _fit_title(topic, "の正体とは？"),
         "loss": _fit_title(topic, "で知らないと損する真実"),
@@ -296,15 +330,40 @@ def build_axis_titles(topic: str, metric: str = "") -> Dict[str, str]:
     return titles
 
 
-def build_axis_configs(base: ThumbnailConfig, metric: str = "") -> Dict[str, ThumbnailConfig]:
+_AXIS_HOOK_COPY = {
+    "curiosity": ("なぜ崩れた？", "崩れた"),
+    "result": ("異常値の正体", "異常値"),
+    "loss": ("最大の落とし穴", "落とし穴"),
+}
+
+
+def build_axis_configs(
+    base: ThumbnailConfig,
+    metric: str = "",
+    patterns: Optional[Dict[str, Any]] = None,
+) -> Dict[str, ThumbnailConfig]:
     """Three thumbnail configs on different axes, derived from the base config."""
     base_dict = base.to_dict()
+    clean_badge_free = bool(patterns and patterns.get("prefer_clean_badge_free"))
+    has_subject = bool(base.subject_image_path or base.brand_logo_path)
     configs: Dict[str, ThumbnailConfig] = {}
     for axis in PACKAGING_AXES:
         data = dict(base_dict)
         data["theme"] = _AXIS_THEMES[axis]
         data["emotion"] = _AXIS_EMOTIONS[axis]
-        data["badge"] = _AXIS_BADGES[axis]
+        data["badge"] = "" if clean_badge_free else _AXIS_BADGES[axis]
+        if patterns is not None:
+            # Differentiate hook copy per axis so Test & Compare tests real angles,
+            # not just color/badge swaps.
+            hook_line2, hl_word = _AXIS_HOOK_COPY[axis]
+            if axis == "result" and metric:
+                data["title_line2"] = f"{metric.strip()}の衝撃"
+                data["highlight_word"] = metric.strip()
+            else:
+                data["title_line2"] = hook_line2
+                data["highlight_word"] = hl_word
+            if has_subject and axis in ("curiosity", "result"):
+                data["layout"] = "editorial_spotlight"
         if axis == "result" and metric:
             data["sub_hook"] = f"▶ {metric.strip()}"
             data["stat_callout"] = metric.strip()
@@ -345,7 +404,22 @@ def extract_packaging_inputs(project_dir: Union[str, Path]) -> Tuple[ThumbnailCo
     return base, topic, metric
 
 
-def generate_packaging(project_dir: Union[str, Path]) -> Dict[str, Any]:
+def _resolve_patterns_path(proj: Path, patterns_path: Optional[Union[str, Path]] = None) -> Optional[Path]:
+    if patterns_path is not None:
+        return Path(patterns_path)
+    for candidate in (
+        proj / "patterns.json",
+        proj.parent.parent / "artifacts" / "corpus" / "patterns.json",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def generate_packaging(
+    project_dir: Union[str, Path],
+    patterns_path: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
     """
     Render 3 Test & Compare pairs into <project>/packaging/ and write
     <project>/packaging.json with scorecards and the recommended axis.
@@ -354,9 +428,11 @@ def generate_packaging(project_dir: Union[str, Path]) -> Dict[str, Any]:
     proj = Path(project_dir).resolve()
     if not proj.is_dir():
         raise FileNotFoundError(f"Project directory '{project_dir}' not found.")
+    resolved_patterns = _resolve_patterns_path(proj, patterns_path)
+    patterns = load_patterns(resolved_patterns)
     base, topic, metric = extract_packaging_inputs(proj)
-    titles = build_axis_titles(topic, metric)
-    configs = build_axis_configs(base, metric)
+    titles = build_axis_titles(topic, metric, patterns=patterns)
+    configs = build_axis_configs(base, metric, patterns=patterns)
     out_dir = proj / "packaging"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -367,6 +443,8 @@ def generate_packaging(project_dir: Union[str, Path]) -> Dict[str, Any]:
         generate_thumbnail(cfg, img_path)
         image_qa = analyze_thumbnail_image(img_path)
         scores, total, issues = score_pair(titles[axis], cfg, topic, image_qa)
+        if is_generic_slop(cfg.title_line2, patterns.get("anti_slop_phrases")):
+            issues.append("サムネ2行目が汎用テンプレート表現です")
         pairs.append(
             PackagingPair(
                 axis=axis,
@@ -385,6 +463,7 @@ def generate_packaging(project_dir: Union[str, Path]) -> Dict[str, Any]:
         "metric": metric,
         "recommended_axis": recommended,
         "selected_axis": None,
+        "patterns_source": str(resolved_patterns) if resolved_patterns else "default",
         "score_note": "ヒューリスティックスコア(CTR予測ではありません)。YouTube Test & Compare の実測が最終判定です。",
         "pairs": [p.to_dict() for p in pairs],
     }
@@ -479,3 +558,78 @@ def select_packaging_pair(project_dir: Union[str, Path], axis: str) -> Dict[str,
 
     logger.info("Packaging pair '%s' selected for %s", axis, proj.name)
     return pair
+
+
+def update_packaging_pair(
+    project_dir: Union[str, Path],
+    axis: str,
+    title: Optional[str] = None,
+    config_patch: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Live-edit a single packaging candidate (title and/or ThumbnailConfig fields),
+    re-render its candidate thumbnail, recompute QA/scores, and persist packaging.json.
+    """
+    proj = Path(project_dir).resolve()
+    if axis not in PACKAGING_AXES:
+        raise ValueError(f"Unknown packaging axis '{axis}' (expected one of {PACKAGING_AXES})")
+    data = load_packaging(proj)
+    idx = next(
+        (i for i, p in enumerate(data["pairs"]) if isinstance(p, dict) and p.get("axis") == axis),
+        None,
+    )
+    if idx is None:
+        raise ValueError(f"Axis '{axis}' not present in packaging.json")
+
+    pair = dict(data["pairs"][idx])
+    new_title = str(title).strip() if title is not None else str(pair.get("title") or "")
+    cfg_dict = dict(pair.get("config") or {})
+    if isinstance(config_patch, dict):
+        allowed = {f.name for f in ThumbnailConfig.__dataclass_fields__.values()}
+        for k, v in config_patch.items():
+            if k in allowed:
+                cfg_dict[k] = v
+
+    cfg = ThumbnailConfig.from_dict(cfg_dict)
+    out_dir = proj / "packaging"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    img_path = out_dir / f"thumbnail_{axis}.png"
+    generate_thumbnail(cfg, img_path)
+    image_qa = analyze_thumbnail_image(img_path)
+    topic = str(data.get("topic") or "")
+    scores, total, issues = score_pair(new_title, cfg, topic, image_qa)
+
+    updated_pair = PackagingPair(
+        axis=axis,
+        title=new_title,
+        config=cfg.to_dict(),
+        thumbnail_file=f"packaging/thumbnail_{axis}.png",
+        scores=scores,
+        total=total,
+        issues=issues,
+        image_qa=image_qa,
+    ).to_dict()
+    data["pairs"][idx] = updated_pair
+    data["recommended_axis"] = max(data["pairs"], key=lambda p: p.get("total", 0)).get("axis")
+
+    pkg_dest = proj / "packaging.json"
+    tmp_pkg: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=proj,
+            prefix=".packaging.",
+            suffix=".json.tmp",
+            encoding="utf-8",
+            delete=False,
+        ) as pf:
+            tmp_pkg = Path(pf.name)
+            pf.write(json.dumps(data, ensure_ascii=False, indent=2))
+            pf.flush()
+        os.replace(tmp_pkg, pkg_dest)
+        tmp_pkg = None
+    finally:
+        if tmp_pkg is not None and tmp_pkg.exists():
+            tmp_pkg.unlink(missing_ok=True)
+
+    return data
