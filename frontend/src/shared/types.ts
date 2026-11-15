@@ -240,6 +240,37 @@ export interface DevApplyStatus {
   error?: string;
 }
 
+export type PackagingAxis = 'curiosity' | 'result' | 'loss';
+
+export interface PackagingPairScores {
+  title: number;
+  thumbnail_text: number;
+  complementarity: number;
+  emotion: number;
+  image?: number;
+  total: number;
+}
+
+export interface PackagingPair {
+  axis: PackagingAxis;
+  title: string;
+  config: Record<string, any>;
+  thumbnail_file: string;
+  scores: PackagingPairScores;
+  total: number;
+  issues: string[];
+  image_qa: Record<string, any>;
+}
+
+export interface PackagingData {
+  topic: string;
+  metric: string;
+  recommended_axis: PackagingAxis | null;
+  selected_axis: PackagingAxis | string | null;
+  score_note: string;
+  pairs: PackagingPair[];
+}
+
 export interface YoutubeAuthStatus {
   has_client_secrets: boolean;
   has_token: boolean;

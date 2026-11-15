@@ -55,6 +55,7 @@ class PipelineResult:
     qa_video_path: Optional[Path] = None
     final_video_path: Optional[Path] = None
     thumbnail_path: Optional[Path] = None
+    thumbnail_qa: Optional[Dict[str, Any]] = None
     srt_path: Optional[Path] = None
     upload_result: Optional[UploadResult] = None
     pacing_report: Optional[Any] = None
@@ -579,6 +580,37 @@ class ProjectPipeline:
                 generate_project_thumbnail(ctx.proj_dir, out_path=thumb_out)
                 ctx.result.thumbnail_path = thumb_out
                 logger.info(f"High-CTR YouTube thumbnail ready at: {thumb_out}")
+                # Visual QA: previously validate_thumbnail_visual_qa had
+                # no production caller, so oversize / dead-zone-violating /
+                # low-contrast thumbnails passed silently. An oversize file
+                # (>2MB) is a hard error because YouTube rejects the upload;
+                # other QA failures are logged and kept in
+                # result.thumbnail_qa (the fail-closed gate is cli_qa).
+                try:
+                    from veraxi_ymmp.graphics.thumbnail_composer import (
+                        validate_thumbnail_visual_qa,
+                    )
+
+                    ctx.result.thumbnail_qa = validate_thumbnail_visual_qa(thumb_out)
+                    _thumb_checks = ctx.result.thumbnail_qa.get("checks", {})
+                    if not _thumb_checks.get("file_size_valid", True):
+                        ctx.result.errors.append(
+                            "Thumbnail exceeds the 2MB YouTube limit: "
+                            f"{ctx.result.thumbnail_qa.get('file_size_bytes')} bytes"
+                        )
+                    elif not ctx.result.thumbnail_qa.get("passed", False):
+                        # Advisory only: the fail-closed gate is cli_qa.
+                        # Failing the whole run for a QA-imperfect (but
+                        # uploadable) thumbnail would block every other
+                        # stage's deliverables.
+                        failed = [k for k, ok in _thumb_checks.items() if not ok]
+                        logger.warning(
+                            "Thumbnail visual QA failed (score=%s): %s",
+                            ctx.result.thumbnail_qa.get("score"),
+                            ", ".join(failed),
+                        )
+                except Exception as qa_e:
+                    logger.warning(f"Thumbnail visual QA failed to run: {qa_e}")
             except Exception as e:
                 err_msg = f"Failed generating thumbnail: {e}"
                 logger.error(err_msg)

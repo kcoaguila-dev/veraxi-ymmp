@@ -3,7 +3,8 @@ import type {
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
   ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult,
   NotebooklmVerifyResult, DevPackResult, DevApplyStatus,
-  ClipsState, ClipIngestStatus
+  ClipsState, ClipIngestStatus,
+  PackagingData, PackagingPair, PackagingAxis
 } from './types.ts';
 
 interface TauriInternals {
@@ -300,6 +301,16 @@ export const api = {
   normalizeAudio: (name: string) => fetchAPI<LoudnessResult>(`/api/projects/${encodeURIComponent(name)}/normalize`, { method: 'POST' }),
 
   generateThumbnail: (name: string) => fetchAPI<any>(`/api/projects/${encodeURIComponent(name)}/thumbnail`, { method: 'POST' }),
+
+  getPackaging: (name: string) => fetchAPI<{ success: boolean; packaging: PackagingData | null }>(`/api/projects/${encodeURIComponent(name)}/packaging`),
+
+  generatePackaging: (name: string) => fetchAPI<{ success: boolean; packaging: PackagingData }>(`/api/projects/${encodeURIComponent(name)}/packaging`, { method: 'POST' }),
+
+  selectPackagingPair: (name: string, axis: PackagingAxis) => fetchAPI<{ success: boolean; selected: PackagingPair }>(`/api/projects/${encodeURIComponent(name)}/packaging/select`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ axis })
+  }),
 
   uploadToYoutube: (name: string, payload: YoutubeUploadPayload) => fetchAPI<any>(`/api/projects/${encodeURIComponent(name)}/youtube`, {
     method: 'POST',

@@ -586,7 +586,6 @@ FUNCTION_LENGTH_ALLOWLIST = {
     "veraxi_ymmp/graphics/thumbnail.py:generate_thumbnail",
     "veraxi_ymmp/graphics/thumbnail.py:auto_extract_thumbnail_config",
     "veraxi_ymmp/graphics/thumbnail_ab.py:evaluate_performance",
-    "veraxi_ymmp/graphics/thumbnail_composer.py:render_vs_duel_layout",
 }
 
 

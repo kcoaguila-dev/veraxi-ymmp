@@ -225,6 +225,19 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                         logger.debug(f"Could not fetch channel info: {ex}")
                 return self.send_json(200, status)
 
+            match = re.match(r'^/api/projects/([^/]+)/packaging$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                try:
+                    from veraxi_ymmp.graphics.packaging import load_packaging
+
+                    data = load_packaging(workspace_path(_project_rel_path(project_name)))
+                    return self.send_json(200, {"success": True, "packaging": data})
+                except FileNotFoundError:
+                    return self.send_json(200, {"success": False, "packaging": None})
+                except Exception as e:
+                    return self.send_json(500, {"error": str(e)})
+
             match = re.match(r'^/api/projects/([^/]+)$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -600,6 +613,41 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     thumb_path = generate_thumbnail_tool(_project_rel_path(project_name))
                     return self.send_json(200, {"success": True, "thumbnail_path": thumb_path})
+                except Exception as e:
+                    return self.send_json(500, {"error": str(e)})
+
+            match = re.match(r'^/api/projects/([^/]+)/packaging$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                try:
+                    from veraxi_ymmp.graphics.packaging import generate_packaging
+
+                    data = generate_packaging(workspace_path(_project_rel_path(project_name)))
+                    return self.send_json(200, {"success": True, "packaging": data})
+                except Exception as e:
+                    return self.send_json(500, {"error": str(e)})
+
+            match = re.match(r'^/api/projects/([^/]+)/packaging/select$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                try:
+                    from veraxi_ymmp.graphics.packaging import select_packaging_pair
+
+                    proj_path = workspace_path(_project_rel_path(project_name))
+                    pair = select_packaging_pair(proj_path, str(body.get("axis", "")))
+                    # Refresh the copy-paste metadata so the publish panel and
+                    # youtube_metadata.txt immediately carry the chosen title.
+                    try:
+                        from veraxi_ymmp.exporters.youtube_metadata import (
+                            generate_project_youtube_metadata,
+                        )
+
+                        generate_project_youtube_metadata(proj_path)
+                    except Exception as meta_e:
+                        logger.warning(f"Metadata refresh after packaging select failed: {meta_e}")
+                    return self.send_json(200, {"success": True, "selected": pair})
+                except (ValueError, FileNotFoundError) as e:
+                    return self.send_json(400, {"error": str(e)})
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
 
