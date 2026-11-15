@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "veraxi-ymmp"
-version = "0.2.2"
+version = "0.2.3"
 description = "Clean-architecture multi-target video production engine for YMM4 (.ymmp), Premiere Pro (FCPXML), After Effects (.jsx), MoviePy, B-Roll graphics, and YouTube thumbnails."
 readme = "README.md"
 requires-python = ">=3.10"
