@@ -1,11 +1,72 @@
-use std::sync::{mpsc, Mutex};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{Manager, RunEvent, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
-struct ApiState(Mutex<String>);
+#[derive(Clone)]
+struct ApiState {
+    inner: Arc<(Mutex<Option<Result<String, String>>>, Condvar)>,
+    error_shown: Arc<AtomicBool>,
+}
+
+impl ApiState {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new((Mutex::new(None), Condvar::new())),
+            error_shown: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn set_result(&self, res: Result<String, String>) {
+        let (lock, cvar) = &*self.inner;
+        if let Ok(mut guard) = lock.lock() {
+            if guard.is_none() {
+                *guard = Some(res);
+                cvar.notify_all();
+            }
+        }
+    }
+
+    fn wait_ready(&self, timeout: Duration) -> Result<String, String> {
+        let (lock, cvar) = &*self.inner;
+        let deadline = Instant::now() + timeout;
+        let mut guard = lock
+            .lock()
+            .map_err(|_| "Internal API state lock poisoned".to_string())?;
+        while guard.is_none() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err("Timed out waiting for Veraxi API sidecar readiness (30s).".to_string());
+            }
+            let (next_guard, wait_res) = cvar
+                .wait_timeout(guard, remaining)
+                .map_err(|_| "Internal API state wait failed".to_string())?;
+            guard = next_guard;
+            if wait_res.timed_out() && guard.is_none() {
+                return Err("Timed out waiting for Veraxi API sidecar readiness (30s).".to_string());
+            }
+        }
+        guard
+            .clone()
+            .unwrap_or_else(|| Err("Unknown sidecar state".to_string()))
+    }
+}
+
+fn show_startup_error_once(app: &tauri::AppHandle, state: &ApiState, err: &str) {
+    if !state.error_shown.swap(true, Ordering::SeqCst) {
+        app.dialog()
+            .message(format!(
+                "Veraxi Studio could not start its backend sidecar.\n\n{err}"
+            ))
+            .title("Veraxi Studio — Startup Error")
+            .kind(MessageDialogKind::Error)
+            .blocking_show();
+        app.exit(1);
+    }
+}
 
 struct SidecarGuard {
     child: Option<CommandChild>,
@@ -81,8 +142,21 @@ fn attach_kill_on_close_job(pid: u32) -> Option<isize> {
 }
 
 #[tauri::command]
-fn get_api_base_url(state: State<'_, ApiState>) -> String {
-    state.0.lock().map(|g| g.clone()).unwrap_or_default()
+async fn get_api_base_url(
+    app: tauri::AppHandle,
+    state: State<'_, ApiState>,
+) -> Result<String, String> {
+    let api_state = state.inner().clone();
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        api_state.wait_ready(Duration::from_secs(30))
+    })
+    .await
+    .map_err(|e| format!("Sidecar wait task failed: {e}"))?;
+
+    if let Err(ref err) = res {
+        show_startup_error_once(&app, state.inner(), err);
+    }
+    res
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -91,17 +165,16 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(ApiState(Mutex::new(String::new())))
+        .manage(ApiState::new())
         .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![get_api_base_url])
         .setup(|app| {
+            let api_state = app.state::<ApiState>().inner().clone();
             if cfg!(debug_assertions) {
                 if let Ok(dev_url) = std::env::var("VERAXI_DEV_API_URL") {
                     let trimmed = dev_url.trim().trim_end_matches('/').to_string();
                     if !trimmed.is_empty() {
-                        if let Ok(mut guard) = app.state::<ApiState>().0.lock() {
-                            *guard = trimmed;
-                        }
+                        api_state.set_result(Ok(trimmed));
                         return Ok(());
                     }
                 }
@@ -136,7 +209,7 @@ pub fn run() {
                 });
             }
 
-            let (tx, ready_rx) = mpsc::channel::<Result<String, String>>();
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut sent = false;
                 let mut stderr_tail: Vec<String> = Vec::new();
@@ -146,7 +219,7 @@ pub fn run() {
                             let line = String::from_utf8_lossy(&line_bytes);
                             if !sent {
                                 if let Some(rest) = line.trim().strip_prefix("VERAXI_API_READY ") {
-                                    let _ = tx.send(Ok(rest.trim().to_string()));
+                                    api_state.set_result(Ok(rest.trim().to_string()));
                                     sent = true;
                                 }
                             }
@@ -164,7 +237,9 @@ pub fn run() {
                         }
                         CommandEvent::Error(err) => {
                             if !sent {
-                                let _ = tx.send(Err(format!("Sidecar error: {err}")));
+                                let msg = format!("Sidecar error: {err}");
+                                api_state.set_result(Err(msg.clone()));
+                                show_startup_error_once(&app_handle, &api_state, &msg);
                                 sent = true;
                             }
                         }
@@ -175,10 +250,12 @@ pub fn run() {
                                 } else {
                                     format!("\n\nSidecar output:\n{}", stderr_tail.join("\n"))
                                 };
-                                let _ = tx.send(Err(format!(
+                                let msg = format!(
                                     "Sidecar exited prematurely (code: {:?}){detail}",
                                     payload.code
-                                )));
+                                );
+                                api_state.set_result(Err(msg.clone()));
+                                show_startup_error_once(&app_handle, &api_state, &msg);
                                 sent = true;
                             }
                             break;
@@ -187,28 +264,6 @@ pub fn run() {
                     }
                 }
             });
-
-            let base_url = match ready_rx
-                .recv_timeout(Duration::from_secs(30))
-                .map_err(|_| "Timed out waiting for Veraxi API sidecar readiness (30s).".to_string())
-                .and_then(|res| res)
-            {
-                Ok(url) => url,
-                Err(err) => {
-                    app.dialog()
-                        .message(format!(
-                            "Veraxi Studio could not start its backend sidecar.\n\n{err}"
-                        ))
-                        .title("Veraxi Studio — Startup Error")
-                        .kind(MessageDialogKind::Error)
-                        .blocking_show();
-                    return Err(err.into());
-                }
-            };
-
-            if let Ok(mut guard) = app.state::<ApiState>().0.lock() {
-                *guard = base_url;
-            }
 
             Ok(())
         })
