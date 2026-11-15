@@ -108,7 +108,7 @@ export const WorkspaceToolbar: React.FC = () => {
   const vvOnline = !!voicevoxHealth?.available;
 
   return (
-    <header className="h-[60px] px-6 bg-[#111827] border-b border-[#1E293B] flex items-center justify-between text-[#F8FAFC] shrink-0">
+    <header className="min-h-[60px] px-6 py-2 bg-[#111827] border-b border-[#1E293B] flex flex-wrap items-center gap-x-3 gap-y-2 justify-between text-[#F8FAFC] shrink-0">
       {/* Left: Brand + Project Selector + Voicevox Pill */}
       <div className="flex items-center gap-3.5">
         <div className="flex items-center gap-2.5">
@@ -162,7 +162,7 @@ export const WorkspaceToolbar: React.FC = () => {
             type="button"
             onClick={() => setUseTts(!useTts)}
             title="クリックしてTTSモードを切り替え"
-            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide transition-colors ${
+            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide whitespace-nowrap transition-colors ${
               useTts
                 ? 'bg-[#064E3B] text-[#A7F3D0] border border-[#10B981]/30'
                 : 'bg-[#1E293B] text-[#94A3B8] border border-[#475569]'
@@ -176,7 +176,7 @@ export const WorkspaceToolbar: React.FC = () => {
             type="button"
             onClick={() => setUseTts(!useTts)}
             title="VOICEVOX Engine (127.0.0.1:50021) が見つかりません。VOICEVOXを起動するか、クリックしてNo-TTSモードに切り替えてください。"
-            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide transition-colors ${
+            className={`h-[24px] px-3 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold tracking-wide whitespace-nowrap transition-colors ${
               useTts
                 ? 'bg-[#4C0519] text-[#FECDD3] border border-[#F43F5E]/40'
                 : 'bg-[#78350F]/80 text-[#FDE68A] border border-[#F59E0B]/40'
@@ -190,7 +190,7 @@ export const WorkspaceToolbar: React.FC = () => {
         {!backendReady ? (
           <span
             title="Pythonバックエンドの起動を待機中..."
-            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold bg-[#1E293B] text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse"
+            className="h-[24px] px-2.5 rounded-full flex items-center gap-1.5 text-[10.5px] font-bold whitespace-nowrap bg-[#1E293B] text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse"
           >
             API 接続中...
           </span>
@@ -250,7 +250,7 @@ export const WorkspaceToolbar: React.FC = () => {
         <button
           onClick={handleYMM4}
           disabled={loadingYMM}
-          className={`h-[36px] px-3.5 rounded-[8px] border text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors ${
+          className={`h-[36px] px-3.5 rounded-[8px] border text-[12.5px] font-bold flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors ${
             ymmSuccess
               ? 'bg-[#064E3B] border-[#10B981] text-[#A7F3D0]'
               : 'bg-[#1E293B] hover:bg-[#334155] border-[#475569] text-[#E2E8F0]'
@@ -264,7 +264,7 @@ export const WorkspaceToolbar: React.FC = () => {
         <button
           onClick={handlePremiere}
           disabled={loadingPrem}
-          className="h-[36px] px-3.5 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[12.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+          className="h-[36px] px-3.5 rounded-[8px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] text-[12.5px] font-bold flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors"
         >
           <span>{loadingPrem ? '⏳' : '📄'}</span>
           <span>Premiere書き出し</span>

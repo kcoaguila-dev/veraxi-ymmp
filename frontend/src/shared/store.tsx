@@ -97,7 +97,10 @@ export const StudioProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         try {
           const status = await api.getPipelineStatus(activeProjectName);
           setPipelineStatus(status);
-          if (status.status === 'complete') {
+          if (status.status === 'complete' || status.status === 'error') {
+            // Refresh on error too: a run can fail late (e.g. YMM4 export)
+            // after producing qa_test.mp4/thumbnail, and those artifacts
+            // should become visible next to the failure banner.
             await refreshMedia();
           }
         } catch (e) {
