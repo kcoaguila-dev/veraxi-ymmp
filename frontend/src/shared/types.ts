@@ -174,6 +174,35 @@ export interface QaResult {
   video_duration_sec?: number | null;
 }
 
+export interface NotebooklmVerifyResult {
+  success: boolean;
+  passed?: boolean;
+  supported_count?: number;
+  flagged_rows?: Array<Record<string, string>>;
+  reprompt_block?: string;
+  gate_blockers?: Array<{ claim_id: string; verdict: string; reason: string }>;
+  claims_count?: number;
+  error?: string;
+}
+
+export interface DevPackResult {
+  success: boolean;
+  pack_id?: string;
+  bundle?: string;
+  chars?: number;
+  files?: string[];
+  mode?: string;
+  error?: string;
+}
+
+export interface DevApplyStatus {
+  success: boolean;
+  status?: 'running' | 'done';
+  exit_code?: number | null;
+  output?: string;
+  error?: string;
+}
+
 export interface YoutubeAuthStatus {
   has_client_secrets: boolean;
   has_token: boolean;

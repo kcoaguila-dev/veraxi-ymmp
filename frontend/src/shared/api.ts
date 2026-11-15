@@ -1,7 +1,8 @@
 import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
-  ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult
+  ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult,
+  NotebooklmVerifyResult, DevPackResult, DevApplyStatus
 } from './types.ts';
 
 interface TauriInternals {
@@ -185,6 +186,42 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
+  }),
+
+  generateNotebooklmPrompt: (name: string) => fetchAPI<{ success: boolean; prompt?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/notebooklm/prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  verifyNotebooklm: (name: string, auditMd: string) => fetchAPI<NotebooklmVerifyResult>(`/api/projects/${encodeURIComponent(name)}/notebooklm/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_md: auditMd })
+  }),
+
+  devSessionStart: () => fetchAPI<{ success: boolean; text?: string; error?: string }>('/api/dev/session-start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }),
+
+  devPack: (payload: { task: string; files: string[]; mode: 'full' | 'edit'; test?: string }) => fetchAPI<DevPackResult>('/api/dev/pack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  devApply: (payload: { reply: string; mode: 'full' | 'edit'; pack_id?: string; allow_tests?: boolean; test?: string }) => fetchAPI<{ success: boolean; job_id?: string; error?: string }>('/api/dev/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }),
+
+  devApplyStatus: (jobId: string) => fetchAPI<DevApplyStatus>('/api/dev/apply/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
   }),
 
   getAIPrompt: () => fetchAPI<{ prompt_markdown: string; json_schema: any }>('/api/ai-prompt'),

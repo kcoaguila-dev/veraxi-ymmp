@@ -191,6 +191,12 @@ export const StoryboardScript: React.FC = () => {
   const [isApplyingEdit, setIsApplyingEdit] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [showAuditDetails, setShowAuditDetails] = useState(false);
+  const [showNlm, setShowNlm] = useState(false);
+  const [nlmPrompt, setNlmPrompt] = useState('');
+  const [nlmTable, setNlmTable] = useState('');
+  const [nlmResult, setNlmResult] = useState<import('../../shared/types').NotebooklmVerifyResult | null>(null);
+  const [nlmBusy, setNlmBusy] = useState<'prompt' | 'verify' | null>(null);
+  const [nlmError, setNlmError] = useState<string | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
 
   const jumpToCut = (cutIndex: number) => {
@@ -248,6 +254,49 @@ export const StoryboardScript: React.FC = () => {
       // The running flag belongs to this mounted component, so it must be
       // cleared even when the result was dropped as stale.
       setIsValidating(false);
+    }
+  };
+
+  const handleNlmPrompt = async () => {
+    if (!activeProjectName) return;
+    const projectAtStart = activeProjectName;
+    setNlmBusy('prompt');
+    setNlmError(null);
+    try {
+      const res = await api.generateNotebooklmPrompt(projectAtStart);
+      if (activeProjectRef.current !== projectAtStart) return;
+      if (!res.success || !res.prompt) {
+        setNlmError(res.error || 'プロンプト生成に失敗しました');
+        return;
+      }
+      setNlmPrompt(res.prompt);
+    } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmError(e?.data?.error || e?.message || 'プロンプト生成に失敗しました');
+    } finally {
+      setNlmBusy(null);
+    }
+  };
+
+  const handleNlmVerify = async () => {
+    if (!activeProjectName || !nlmTable.trim()) return;
+    const projectAtStart = activeProjectName;
+    setNlmBusy('verify');
+    setNlmError(null);
+    setNlmResult(null);
+    try {
+      const res = await api.verifyNotebooklm(projectAtStart, nlmTable);
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmResult(res);
+      if (res.success) {
+        // claims.json changed; refresh the local audit badges to match.
+        await handleValidate();
+      }
+    } catch (e: any) {
+      if (activeProjectRef.current !== projectAtStart) return;
+      setNlmError(e?.data?.error || e?.message || 'NotebookLM照合に失敗しました');
+    } finally {
+      setNlmBusy(null);
     }
   };
 
@@ -839,6 +888,103 @@ export const StoryboardScript: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Step 3b: NotebookLM post-script audit round-trip (verify-notebooklm) */}
+      <div className="border-b border-[#1E293B] bg-[#0B0F19] px-5 py-2.5 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowNlm(!showNlm)}
+            className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+            title="NotebookLMへ台本監査プロンプトを渡し、7列監査表を貼り戻して claims.json へ照合します (verify-notebooklm)"
+          >
+            📓 NotebookLM照合 (Step 3b) {showNlm ? '▲' : '▼'}
+          </button>
+          <span className="text-[11px] text-[#64748B]">
+            プロンプト生成 → NotebookLMへ貼付 → 7列監査表を貼り戻して照合
+          </span>
+          {nlmResult?.success && (
+            <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ${nlmResult.passed ? 'bg-[#064E3B] text-[#A7F3D0]' : 'bg-[#4C0519] text-[#FECDD3]'}`}>
+              {nlmResult.passed
+                ? `✓ 全${nlmResult.supported_count}件 SUPPORTED・ゲート通過`
+                : `⚠ 要修正 ${(nlmResult.flagged_rows?.length ?? 0) + (nlmResult.gate_blockers?.length ?? 0)}件`}
+            </span>
+          )}
+        </div>
+        {showNlm && (
+          <div className="mt-2.5 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleNlmPrompt}
+                disabled={nlmBusy !== null}
+                className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-[#312E81] hover:bg-[#3730A3] border border-[#6366F1]/40 text-[#C7D2FE] whitespace-nowrap disabled:opacity-50"
+              >
+                {nlmBusy === 'prompt' ? '⏳ 生成中...' : '1. 監査プロンプトを生成'}
+              </button>
+              {nlmPrompt && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(nlmPrompt)}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+                >
+                  📋 プロンプトをコピー
+                </button>
+              )}
+            </div>
+            {nlmPrompt && (
+              <pre className="bg-[#111827] border border-[#1E293B] rounded-[6px] p-2.5 text-[10.5px] text-[#94A3B8] max-h-36 overflow-y-auto whitespace-pre-wrap">{nlmPrompt}</pre>
+            )}
+            <textarea
+              value={nlmTable}
+              onChange={(e) => setNlmTable(e.target.value)}
+              placeholder="2. NotebookLMの7列監査表 (Markdown) をここに貼り付け"
+              aria-label="NotebookLM監査表"
+              className="w-full h-24 bg-[#111827] border border-[#334155] rounded-[6px] p-2.5 text-[11px] text-[#E2E8F0] placeholder:text-[#475569]"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleNlmVerify}
+                disabled={nlmBusy !== null || !nlmTable.trim()}
+                className="text-[11px] font-extrabold px-2.5 py-1 rounded-[6px] bg-gradient-to-br from-[#10B981] to-[#059669] text-white whitespace-nowrap disabled:opacity-50"
+              >
+                {nlmBusy === 'verify' ? '⏳ 照合中...' : '3. 照合を実行 (claims.jsonへ反映)'}
+              </button>
+              {nlmError && <span className="text-[11.5px] font-semibold text-[#FECDD3]">⚠ {nlmError}</span>}
+              {nlmResult && !nlmResult.success && (
+                <span className="text-[11.5px] font-semibold text-[#FECDD3]">⚠ {nlmResult.error}</span>
+              )}
+            </div>
+            {nlmResult?.success && !nlmResult.passed && (
+              <div className="space-y-1.5">
+                {(nlmResult.flagged_rows ?? []).map((row, i) => (
+                  <p key={i} className="text-[11.5px] text-[#FDE68A]">
+                    [{row.verdict}] {row.item_id}: {row.discrepancy || row.assertion}
+                  </p>
+                ))}
+                {(nlmResult.gate_blockers ?? []).map((b, i) => (
+                  <p key={`gate-${i}`} className="text-[11.5px] text-[#FECDD3]">
+                    [GATE {b.verdict}] {b.claim_id}: {b.reason}
+                  </p>
+                ))}
+                {nlmResult.reprompt_block && (
+                  <>
+                    <pre className="bg-[#111827] border border-[#78350F]/60 rounded-[6px] p-2.5 text-[10.5px] text-[#FDE68A] max-h-36 overflow-y-auto whitespace-pre-wrap">{nlmResult.reprompt_block}</pre>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(nlmResult.reprompt_block || '')}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] border border-[#475569] text-[#E2E8F0] whitespace-nowrap"
+                    >
+                      📋 再プロンプトをコピー
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Scrollable Scene Blocks Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3.5">

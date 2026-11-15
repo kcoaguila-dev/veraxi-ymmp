@@ -4,6 +4,7 @@ import { StoryboardScript } from '../features/storyboard-script'
 import { VideoPreview } from '../features/video-preview'
 import { YoutubePublish } from '../features/youtube-publish'
 import { ResearchDossier } from '../features/research-dossier'
+import { DevFallback } from '../features/dev-fallback'
 
 const WORKFLOW_STEPS = [
   '1. リサーチ & 素材',
@@ -63,6 +64,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
 export const App: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0)
+  const [showDev, setShowDev] = useState(false)
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-full bg-[#0B0F19] text-[#F8FAFC] font-sans select-none">
@@ -73,7 +75,7 @@ export const App: React.FC = () => {
             <React.Fragment key={label}>
               <button
                 type="button"
-                onClick={() => setActiveStep(idx)}
+                onClick={() => { setShowDev(false); setActiveStep(idx); }}
                 className={`h-[28px] px-3.5 rounded-full text-[12px] font-extrabold transition-colors ${
                   activeStep === idx
                     ? 'bg-gradient-to-br from-[#10B981] to-[#059669] text-white'
@@ -85,7 +87,24 @@ export const App: React.FC = () => {
               {idx < WORKFLOW_STEPS.length - 1 && <span className="text-[#475569] text-xs">→</span>}
             </React.Fragment>
           ))}
+          <button
+            type="button"
+            onClick={() => setShowDev(!showDev)}
+            className={`ml-auto h-[28px] px-3.5 rounded-full text-[12px] font-extrabold transition-colors whitespace-nowrap ${
+              showDev
+                ? 'bg-gradient-to-br from-[#6366F1] to-[#4F46E5] text-white'
+                : 'bg-[#1E293B] text-[#94A3B8] hover:text-white border border-[#334155]'
+            }`}
+            title="Webチャット開発フォールバック (session-start / pack / apply)"
+          >
+            🛠 開発フォールバック
+          </button>
         </nav>
+        {showDev ? (
+          <main className="flex-1 overflow-hidden p-4 xl:p-5">
+            <DevFallback />
+          </main>
+        ) : (
         <main className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(480px,46%)_1fr] gap-5 p-4 xl:p-5 overflow-hidden">
           {/* LEFT WORKSPACE: Step 1-2 RESEARCH PANEL or STORYBOARD & WEB-AI COPY-PASTE BRIDGE */}
           <section className="h-full overflow-hidden rounded-[14px] bg-[#111827] border border-[#1E293B] shadow-[0_6px_20px_rgba(0,0,0,0.4)] flex flex-col">
@@ -103,6 +122,7 @@ export const App: React.FC = () => {
             <YoutubePublish />
           </section>
         </main>
+        )}
       </div>
     </ErrorBoundary>
   )

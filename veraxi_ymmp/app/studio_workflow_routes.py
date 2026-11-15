@@ -526,3 +526,88 @@ def handle_qa(project_name: str) -> Tuple[int, Dict[str, Any]]:
         "total_cuts": report.get("total_cuts"),
         "video_duration_sec": report.get("video_duration_sec"),
     }
+
+
+def handle_notebooklm_prompt(
+    project_name: str,
+) -> Tuple[int, Dict[str, Any]]:
+    """Step 3b: build the post-script NotebookLM audit prompt (CLI parity).
+
+    Mirrors ``veraxi-ymmp verify-notebooklm <project>`` without a reply:
+    writes ``notebooklm_audit_prompt.md`` into the project and returns the
+    prompt text so the GUI can offer it as a copy-paste bridge.
+    """
+    from veraxi_ymmp.editorial.notebooklm_verify import (
+        build_post_script_audit_prompt,
+    )
+
+    try:
+        proj_dir = _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    if not proj_dir.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+    if not (proj_dir / "script.json").is_file():
+        return 400, {
+            "success": False,
+            "error": "script.json not found; ingest a script first",
+        }
+    try:
+        prompt = build_post_script_audit_prompt(proj_dir)
+    except (ValueError, FileNotFoundError) as exc:
+        return 400, {"success": False, "error": str(exc)}
+    (proj_dir / "notebooklm_audit_prompt.md").write_text(prompt, encoding="utf-8")
+    return 200, {"success": True, "prompt": prompt}
+
+
+def handle_notebooklm_verify(
+    project_name: str, body: Dict[str, Any]
+) -> Tuple[int, Dict[str, Any]]:
+    """Step 3b: reconcile a pasted NotebookLM audit table into claims.json.
+
+    Same fail-closed semantics as the CLI: a reply with no valid 7-column
+    rows is rejected with nothing written, flagged rows produce the
+    re-prompt block, and the epistemic gate is re-run afterwards.
+    """
+    from veraxi_ymmp.editorial.notebooklm_verify import (
+        reconcile_notebooklm_audit,
+    )
+
+    try:
+        proj_dir = _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    if not proj_dir.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+    audit_md = body.get("audit_md")
+    if not isinstance(audit_md, str) or not audit_md.strip():
+        return 400, {"success": False, "error": "audit_md is required"}
+    script_path = proj_dir / "script.json"
+    if not script_path.is_file():
+        return 400, {
+            "success": False,
+            "error": "script.json not found; ingest a script first",
+        }
+    try:
+        res = reconcile_notebooklm_audit(proj_dir, audit_md)
+    except ValueError as exc:
+        return 200, {"success": False, "passed": False, "error": str(exc)}
+
+    outcome = audit_project_facts(script_path)
+    gate_blockers = [
+        {
+            "claim_id": fail.claim.id,
+            "verdict": fail.verdict.value,
+            "reason": fail.reason,
+        }
+        for fail in outcome.blockers
+    ]
+    return 200, {
+        "success": True,
+        "passed": bool(res.passed and not outcome.blockers),
+        "supported_count": res.supported_count,
+        "flagged_rows": res.flagged_rows,
+        "reprompt_block": res.reprompt_block,
+        "gate_blockers": gate_blockers,
+        "claims_count": len(res.updated_claims),
+    }

@@ -399,6 +399,48 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 status_code, payload = handle_qa(project_name)
                 return self.send_json(status_code, payload)
 
+            match = re.match(r'^/api/projects/([^/]+)/notebooklm/prompt$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_notebooklm_prompt,
+                )
+                status_code, payload = handle_notebooklm_prompt(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/notebooklm/verify$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_notebooklm_verify,
+                )
+                status_code, payload = handle_notebooklm_verify(project_name, body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/session-start':
+                from veraxi_ymmp.app.studio_dev_routes import (
+                    handle_dev_session_start,
+                )
+                status_code, payload = handle_dev_session_start()
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/pack':
+                from veraxi_ymmp.app.studio_dev_routes import handle_dev_pack
+                status_code, payload = handle_dev_pack(body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/apply':
+                from veraxi_ymmp.app.studio_dev_routes import handle_dev_apply_start
+                status_code, payload = handle_dev_apply_start(body)
+                return self.send_json(status_code, payload)
+
+            if path == '/api/dev/apply/status':
+                from veraxi_ymmp.app.studio_dev_routes import (
+                    handle_dev_apply_status,
+                )
+                status_code, payload = handle_dev_apply_status(body)
+                return self.send_json(status_code, payload)
+
             if path == '/api/voicevox/audition':
                 text = body.get("text", "")
                 character = body.get("character", "unknown")
