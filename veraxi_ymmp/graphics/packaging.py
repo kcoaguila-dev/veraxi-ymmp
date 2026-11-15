@@ -364,7 +364,9 @@ def build_axis_configs(
                 data["highlight_word"] = hl_word
             if has_subject and axis in ("curiosity", "result"):
                 data["layout"] = "editorial_spotlight"
-        if axis == "result" and metric:
+            elif base.bg_path and clean_badge_free:
+                data["layout"] = "rival_fullbleed"
+        if axis == "result" and metric and not clean_badge_free:
             data["sub_hook"] = f"▶ {metric.strip()}"
             data["stat_callout"] = metric.strip()
         configs[axis] = ThumbnailConfig.from_dict(data)

@@ -345,3 +345,78 @@ def _draw_editorial_headline(
                 draw_fukuro_text(draw, (cx, y_line2), suffix, f2, fill_color=(255, 75, 75, 255), stroke_w=sw2)
         else:
             draw_fukuro_text(draw, (70, y_line2), t2, f2, fill_color=(250, 204, 21, 255), stroke_w=sw2)
+
+
+def render_rival_fullbleed_layout(
+    config: Any,
+    font_path: Optional[str],
+    font_index: int,
+) -> Image.Image:
+    """
+    Renders the 'rival_fullbleed' layout modeled after top Japanese Zundamon
+    finance/tech channels:
+    1. Bright, unblurred full-bleed scene background (subtle bottom scrim only)
+    2. Single high-emotion mascot sticker on the right (timestamp safe-zone clear)
+    3. Massive 1-2 line yellow/white Fukuro headline strictly auto-fitted so it
+       never collides with the character, with zero pill badges or small text.
+    """
+    from veraxi_ymmp.graphics.thumbnail import (
+        draw_fukuro_text,
+        fit_font_to_width,
+        resolve_character_face,
+    )
+    from veraxi_ymmp.graphics.thumbnail_composer import render_character_sticker
+
+    w, h = config.width, config.height
+    bg_str = getattr(config, "bg_path", None)
+    if bg_str and Path(bg_str).exists():
+        canvas = Image.open(bg_str).convert("RGBA").resize((w, h), Image.Resampling.LANCZOS)
+    else:
+        canvas = create_editorial_backdrop(w, h, accent_rgb=(220, 38, 38), danger_rgb=(234, 179, 8))
+
+    # Subtle bottom-only gradient scrim so lower headline pops without darkening the scene
+    scrim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    sdraw = ImageDraw.Draw(scrim)
+    scrim_top = int(h * 0.52)
+    for row in range(scrim_top, h):
+        alpha = int(145 * ((row - scrim_top) / max(1, h - scrim_top)))
+        sdraw.line([(0, row), (w, row)], fill=(5, 8, 16, alpha))
+    canvas = Image.alpha_composite(canvas, scrim)
+
+    # Right-side expressive mascot (no thick sticker rim over full-bleed scenes)
+    char_name = getattr(config, "character", "ずんだもん") or "ずんだもん"
+    char_emo = getattr(config, "emotion", "surprised") or "surprised"
+    char_mouth = getattr(config, "mouth_open", True)
+    char_path = resolve_character_face(char_name, char_emo, char_mouth)
+
+    if char_path and char_path.exists():
+        sticker = render_character_sticker(
+            char_path,
+            target_h=int(1280 * getattr(config, "character_scale", 1.0)),
+            stroke_width=0,
+            flip=False,
+        )
+        if sticker:
+            cx = w - sticker["width"] + 90
+            cy = 45
+            canvas.paste(sticker["shadow"], (cx - 10, cy + 14), sticker["shadow"])
+            canvas.paste(sticker["resized"], (cx, cy), sticker["resized"])
+
+    draw = ImageDraw.Draw(canvas)
+    # Span nearly full-width across the lower frame (in front of character's lower body)
+    # so the headline stays massive and legible at mobile postage-stamp size.
+    headline_max_w = w - 130
+    t1 = (getattr(config, "title_line1", "") or "").strip()
+    t2 = (getattr(config, "title_line2", "") or "").strip()
+
+    if t1 and t2:
+        f1, s1 = fit_font_to_width(t1, 165, headline_max_w, font_path, font_index)
+        f2, s2 = fit_font_to_width(t2, 200, headline_max_w, font_path, font_index)
+        draw_fukuro_text(draw, (65, 565), t1, f1, fill_color=(255, 255, 255, 255), stroke_w=max(14, int(s1 * 0.14)))
+        draw_fukuro_text(draw, (65, 765), t2, f2, fill_color=(250, 204, 21, 255), stroke_w=max(16, int(s2 * 0.14)))
+    elif t1 or t2:
+        single = t1 or t2
+        f, s = fit_font_to_width(single, 240, headline_max_w, font_path, font_index)
+        draw_fukuro_text(draw, (65, 745), single, f, fill_color=(250, 204, 21, 255), stroke_w=max(18, int(s * 0.14)))
+
+    return canvas

@@ -113,6 +113,8 @@ Every video project MUST be executed continuously through all 5 steps without ha
 3. **Epistemic Fact Audit & Retention Pacing Gate:**
    `veraxi-ymmp validate projects/<slug>/script.json --audit-facts --audit-pacing`
 4. **Full Multi-Target Compilation & Loudness Normalization:**
+   `veraxi-ymmp thumbnail projects/<slug>/ --packaging`
+   `veraxi-ymmp thumbnail projects/<slug>/ --select <curiosity|result|loss>`
    `veraxi-ymmp run projects/<slug>/`
    `veraxi-ymmp normalize <video.mp4> -p youtube`
 5. **Autonomous Multimodal QA & Visual Inspection Gate (Fail-Closed Delivery Invariant):**

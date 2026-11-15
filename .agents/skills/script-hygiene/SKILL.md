@@ -78,7 +78,10 @@ NEVER structure videos as boring corporate lectures with generic bullet lists (`
 - **Primary Authority Citations:** Anchor scripts to verifiable primary data sources (Technical RFC/CVE specs, PubMed/arXiv, Court dockets, FRED, SEC filings, government statistics).
 - **4-Phase Domino Causality:** Structure narrative as a mechanistic chain reaction:
   *Consensus Illusion $\to$ Primary Evidence Fracture $\to$ Structural Domino Cascade $\to$ Cold Survival Verdict*.
-- **High-Stakes Packaging:** Titles and thumbnails MUST NEVER use passive match-up cliches (e.g. bare `「勝つのはどっち！？」` is banned). Deploy high-tension curiosity gaps with concrete stakes (e.g. `「【全員騙されていた】60兆円AIバブルの罠…生き残る真の1社」` or `「【脆弱性CVE-2024】99%のエンジニアが見落とす致命的欠陥」`).
+- **High-Stakes Packaging (The 1–2 Punch):** Titles and thumbnails MUST NEVER use passive match-up cliches (e.g. bare `「勝つのはどっち！？」` is banned) and MUST NEVER duplicate the exact same phrasing across both.
+  - **Thumbnail (`title_line1`, `title_line2`, `sub_hook`):** 2–4 punchy emotional/curiosity words max (readable in `<0.5s` on mobile). Never use `【...】` brackets in prose fields (`title_line1`, `title_line2`, `sub_hook`); `【...】` is reserved strictly for the `badge` / genre tag.
+  - **YouTube Title:** Completes the curiosity gap with concrete stakes and context (e.g. `「【ずんだもん解説】60兆円AIバブルの罠…生き残る真の1社」`).
+  - **A/B Test & Compare:** Generate contrasting packaging variants (`curiosity` vs `result` vs `loss` via `packaging.py` / `auto_extract_variant_configs`) rather than relying on a single-shot thumbnail.
 
 ---
 
@@ -92,7 +95,7 @@ NEVER structure videos as boring corporate lectures with generic bullet lists (`
 - **Grounded Staging:** NEVER use cartoon `"jump"` in commentary/technical videos. Characters remain grounded (`"motion": "none"` or subtle `"nod"`).
 - **Clean Audio:** NEVER inject slapstick cartoon SFX (`pon.wav` banned). Use only clean non-vocal instrumental BGM ducked to balanced levels ($\le 0.18$ volume for -16 LUFS speech).
 - **Pro Dark Slate B-Roll:** Background `#0F172A` / `#1E293B`. 1-Slide-1-Impact: Total characters across slide $\le 100$. Maximum 6 text elements. Zero nested bullets.
-- **YouTube Thumbnail:** 3-Split layout (character reaction right, high-contrast headline left, bottom-right timestamp safe zone protected).
+- **YouTube Thumbnail:** Full-bleed non-AI visual (`rival_fullbleed` or `editorial_spotlight`: real screenshots, official brand logos, or programmatic data charts—**NEVER** AI-generated images/illustrations), massive bottom-left/full-width Fukuro headline (2–4 words), expressive character right, bottom-right timestamp safe zone protected.
 
 
 ---

@@ -74,7 +74,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
 - This automatically:
   1. Verifies 100% of dialogue cuts have synthesized VOICEVOX audio in `<project_dir>/audio/`.
   2. Ensures preview video duration covers all cast members (including 3rd speaker debut).
-  3. Audits thumbnail config against banned robotic brackets (`【...】`).
+  3. Audits thumbnail config prose fields (`title_line1`, `title_line2`, `sub_hook`) against banned robotic brackets (`【...】`; `badge` genre tags are exempt) and runs `validate_thumbnail_visual_qa` (dimensions, 2MB limit, timestamp dead-zone, mobile contrast).
   4. Extracts 5 narrative milestone keyframe PNGs to `<project_dir>/qa_frames/`:
      - `01_cold_open.png` (Hook confrontation)
      - `02_first_slide.png` (First B-roll slide)
@@ -89,7 +89,7 @@ When asked to generate a video, you MUST follow this autonomous pipeline. Do NOT
   - Are speech bubble colors correctly themed? (Green for Zundamon, Pink for Metan, Orange for Tsumugi).
   - Does B-roll pop up with characters shifted to the presenter spot without clipping?
   - Are subtitles readable, concentric, and $\le 2$ lines per speech bubble?
-  - **Thumbnail Checklist**: 3-split layout, white sticker rim cutout, no robotic brackets (`【...】`), and bottom-right duration safe zone clear.
+  - **Thumbnail Checklist**: **Zero AI-generated images** (only real-world screenshots/logos or programmatic data charts), massive 2–4 word Fukuro headline legible at **mobile feed size (~320px width)**, no robotic brackets (`【...】`) in `title_line1`/`title_line2`/`sub_hook`, bottom-right duration safe zone clear, and **Title ≠ Thumbnail** (no duplicated phrasing).
 
 ### 5. Revision Loop & Delivery Invariant
 - **Continuous Execution**: You MUST perform steps 1 through 4 continuously in the same production turn sequence.

@@ -369,10 +369,18 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
     w, h = config.width, config.height
     theme_colors = THEMES.get(config.theme, THEMES["gold"])
 
-    if config.layout == "editorial_spotlight":
-        from veraxi_ymmp.graphics.thumbnail_editorial import render_editorial_spotlight_layout
+    if config.layout in ("editorial_spotlight", "rival_fullbleed"):
+        from veraxi_ymmp.graphics.thumbnail_editorial import (
+            render_editorial_spotlight_layout,
+            render_rival_fullbleed_layout,
+        )
         font_path, font_index = find_best_font_path()
-        canvas = render_editorial_spotlight_layout(config, font_path, font_index)
+        renderer = (
+            render_rival_fullbleed_layout
+            if config.layout == "rival_fullbleed"
+            else render_editorial_spotlight_layout
+        )
+        canvas = renderer(config, font_path, font_index)
         canvas.save(out_file, "PNG")
         return out_file
 
