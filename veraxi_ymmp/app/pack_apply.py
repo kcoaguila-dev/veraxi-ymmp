@@ -665,11 +665,18 @@ def build_pack_bundle(
             "same file; they are applied in order. Each SEARCH text must "
             "occur EXACTLY ONCE in its file: zero matches or more than "
             "one match rejects the whole reply and nothing is applied. "
-            "Include enough surrounding context lines to make every "
-            "SEARCH unique. Do not retype whole files, and do not use "
-            "diffs or line numbers — the SEARCH text is the anchor.",
+            "Keep each SEARCH/REPLACE block minimal and surgical: include "
+            "only the changed line(s) plus 1-2 surrounding context lines "
+            "to make SEARCH unique (for JSON like script.json, never "
+            "retype unchanged fields or whole cut objects when only "
+            "'text' changes). Do not use diffs or line numbers — the "
+            "SEARCH text is the anchor.",
             "",
-            "The closing line inside the code block MUST be:",
+            "Output budget & batching: if a task requires many edits "
+            "(e.g. >15 cuts), do NOT risk hitting the output token limit "
+            "mid-reply. Send a complete, self-contained batch (~10-15 "
+            "cuts) inside the single fenced block with NO prose before "
+            "or after the fence, ending cleanly with:",
             END_MARKER,
             "A truncated or marker-less reply is rejected without "
             "applying anything.",

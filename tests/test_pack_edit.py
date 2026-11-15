@@ -1251,3 +1251,50 @@ def test_pack_edit_bundle_instructs_four_backtick_wrapper():
     )
     assert "````text" in bundle
     assert "FOUR backticks" in bundle
+    assert "minimal and surgical" in bundle
+    assert "Output budget & batching" in bundle
+
+
+def test_format_parse_reprompt_guides_recovery_on_truncation(tmp_path):
+    truncated = (
+        "### Edit: `a.py`\n"
+        "<<<<<<< SEARCH\n"
+        "old = 1\n"
+        "=======\n"
+        "new = 2\n"
+    )
+    msgs = []
+    code = pe.apply_edit_reply(truncated, tmp_path, output_fn=msgs.append)
+    assert code == 1
+    out = "\n".join(msgs)
+    assert "LLM RE-PROMPT BLOCK" in out
+    assert "Do NOT explain this error" in out
+    assert "SMALLER batch" in out
+    assert pa.END_MARKER in out
+
+
+def test_format_parse_reprompt_guides_recovery_on_prose_outside_fence():
+    block = pe.format_parse_reprompt("unexpected line outside an edit block: 'Here you go:'")
+    assert "LLM RE-PROMPT BLOCK" in block
+    assert "Do NOT explain this error" in block
+    assert "NO prose before or after the fence" in block
+    assert pa.END_MARKER in block
+
+
+def test_api_handle_apply_edit_returns_structured_reprompt_on_truncation(tmp_path, monkeypatch):
+    from veraxi_ymmp.app import api_server
+
+    proj = tmp_path / "projects" / "demo"
+    proj.mkdir(parents=True)
+    (proj / "script.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(api_server, "get_workspace_root", lambda: tmp_path)
+
+    status, body = api_server._handle_apply_edit(
+        "demo",
+        "### Edit: `projects/demo/script.json`\n<<<<<<< SEARCH\n[]\n=======\n",
+    )
+    assert status == 422
+    assert body["success"] is False
+    assert "LLM RE-PROMPT BLOCK" in body["reprompt_block"]
+    assert "Do NOT explain this error" in body["reprompt_block"]
+    assert "SMALLER batch" in body["reprompt_block"]

@@ -91,7 +91,9 @@ def _handle_pack_edit(project_name: str, task: str) -> Tuple[int, Dict[str, Any]
 
     effective_task = task.strip() or (
         "Make the Japanese dialogue sound more natural and conversational while keeping "
-        "every number, factual claim, <=40-char cut limit, and {Kanji|ruby} rule intact."
+        "every number, factual claim, <=40-char cut limit, and {Kanji|ruby} rule intact. "
+        "Keep each SEARCH/REPLACE block minimal (only changed lines + 1-2 context lines), "
+        "and if >15 cuts change, output only the first batch (~15 cuts) ending with ===END OF REPLY===."
     )
     bundle = pa.build_pack_bundle(
         task=effective_task,
@@ -120,7 +122,9 @@ def _handle_apply_edit(project_name: str, reply_text: str) -> Tuple[int, Dict[st
     if not parsed.complete or not parsed.blocks:
         return 422, {
             "success": False,
-            "reprompt_block": f"Error: edit reply rejected — {parsed.problem}. No files modified.",
+            "reprompt_block": pe.format_parse_reprompt(
+                parsed.problem or "invalid edit reply"
+            ),
         }
 
     expected_prefix = f"{rel_dir}/"

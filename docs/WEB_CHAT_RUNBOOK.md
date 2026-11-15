@@ -105,9 +105,12 @@ Outcomes:
   - *SEARCH matches 0 / N places* (edit mode) — the anchor text does
     not match the file exactly once. Re-prompt with the re-prompt
     block; the model must quote the file's current text verbatim.
-  - *unclosed wrapper / incomplete reply* — the paste was truncated.
-    Re-copy the reply from the chat in full and apply again; if the
-    chat itself truncated it, ask the model to split the reply.
+  - *unclosed wrapper / incomplete reply* — the paste was truncated
+    (common when editing 40+ cuts of `script.json` in one turn). Copy
+    the `LLM RE-PROMPT BLOCK` into the chat so the model resends a
+    smaller batch (~10–15 cuts) with minimal `SEARCH`/`REPLACE` spans
+    (only changed lines + 1–2 context lines) ending with
+    `===END OF REPLY===`.
 
 ### 2.4 Continue or finish
 

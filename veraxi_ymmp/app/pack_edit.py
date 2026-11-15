@@ -367,6 +367,43 @@ def validate_staged_projects(staged: Dict[str, str], root: Path) -> List[str]:
     return []
 
 
+def format_parse_reprompt(problem: str) -> str:
+    """Actionable re-prompt block when an edit reply is truncated or malformed."""
+    lower = problem.lower()
+    is_truncated = any(
+        hint in lower
+        for hint in ("truncated", "end of reply", ">>>>>>> replace", "=======")
+    )
+    lines = [
+        "================ LLM RE-PROMPT BLOCK (COPY & PASTE TO AI) "
+        "================",
+        f"Error: edit reply rejected — {problem}. No files modified.",
+        "",
+        "Do NOT explain this error. Immediately resend a valid edit reply:",
+    ]
+    if is_truncated:
+        lines.extend([
+            "  1. Your previous reply was cut off before finishing.",
+            "  2. Send a SMALLER batch (max ~10-15 cuts or blocks per reply) "
+            "so it finishes well under your output token limit.",
+            "  3. Keep each SEARCH/REPLACE block minimal (only changed lines "
+            "+ 1-2 unique context lines; never repeat unchanged JSON fields).",
+        ])
+    else:
+        lines.extend([
+            "  1. Wrap your ENTIRE reply in ONE fenced code block "
+            "(````text ... ````) with NO prose before or after the fence.",
+            "  2. Inside, include only `### Edit: <path>` + "
+            "`<<<<<<< SEARCH` / `=======` / `>>>>>>> REPLACE` blocks.",
+        ])
+    lines.append(
+        f"  - End the reply inside the fence with a line containing only: "
+        f"{pa.END_MARKER}"
+    )
+    lines.append("=" * 74)
+    return "\n".join(lines)
+
+
 def format_edit_reprompt(problems: List[str]) -> str:
     """Re-prompt block for edit replies rejected before any write."""
     lines = [
@@ -404,10 +441,7 @@ def apply_edit_reply(
     """
     parsed = parse_edit_reply(reply_text)
     if not parsed.complete or not parsed.blocks:
-        output_fn(
-            f"Error: edit reply rejected — {parsed.problem}. "
-            "No files modified."
-        )
+        output_fn(format_parse_reprompt(parsed.problem or "invalid edit reply"))
         return 1
     path_errors = pa.validate_target_paths(
         [(block.path, block.replace) for block in parsed.blocks],
@@ -506,7 +540,10 @@ def build_project_pack_rules(rel_files: Sequence[str]) -> str:
         "`domino` (`<= 140`), `architecture` (`<= 180`), `matrix` (`<= 200`). Max 6–20 elements per slide.\n"
         "- **Epistemic & Scale Gate:**\n"
         "  - Every quantitative figure in `script.json`, `broll_manifest.json`, or `thumbnail_config.json` "
-        "must match `evidence.md` or existing verified cuts (`$1B = 10億ドル`; never introduce ungrounded numbers)."
+        "must match `evidence.md` or existing verified cuts (`$1B = 10億ドル`; never introduce ungrounded numbers).\n"
+        "- **Minimal JSON Edits (Anti-Truncation):**\n"
+        "  - Anchor on only the changed field(s) (e.g. `\"text\"`) plus 1–2 adjacent lines; "
+        "never copy all 12 cut fields when only dialogue changes, and batch large edits (~10–15 cuts per reply)."
     )
 
 
