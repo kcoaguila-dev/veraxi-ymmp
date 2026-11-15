@@ -174,6 +174,43 @@ export interface QaResult {
   video_duration_sec?: number | null;
 }
 
+export interface ClipInboxItem {
+  name: string;
+  size: number;
+}
+
+export interface IngestedClip {
+  id: string;
+  source: string;
+  file: string;
+  duration_sec: number;
+  width: number;
+  height: number;
+  fps: number;
+  has_audio: boolean;
+}
+
+export interface ClipsState {
+  success: boolean;
+  inbox: ClipInboxItem[];
+  clips: IngestedClip[];
+  error?: string;
+}
+
+export interface ClipIngestStatus {
+  success: boolean;
+  status?: 'running' | 'done';
+  ok?: boolean;
+  error?: string;
+  result?: {
+    clips: IngestedClip[];
+    rejected: Array<{ source: string; reason: string }>;
+    matching_aborted: boolean;
+    ingest_aborted: boolean;
+    from_manifest?: string | null;
+  };
+}
+
 export interface NotebooklmVerifyResult {
   success: boolean;
   passed?: boolean;

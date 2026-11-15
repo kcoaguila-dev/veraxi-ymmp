@@ -8,10 +8,13 @@ workspace and a temporary git repo.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import shutil
 import socket
 import subprocess
+import subprocess as _sp
 import threading
 import time
 from http.server import HTTPServer
@@ -282,5 +285,121 @@ def test_dev_apply_rejects_garbage_reply_fail_closed(
 def test_dev_apply_status_unknown_job_404(api_server: str, dev_repo: Path) -> None:
     res = requests.post(
         f"{api_server}/api/dev/apply/status", json={"job_id": "deadbeef0000"}
+    )
+    assert res.status_code == 404
+
+
+# --- Clip ingest (Step 1b) ----------------------------------------------
+
+
+def _make_clip_bytes(tmp_path: Path, name: str = "clip_a.mp4") -> bytes:
+    src = tmp_path / name
+    _sp.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+         "-i", "color=c=blue:s=320x180:d=1", "-pix_fmt", "yuv420p", str(src)],
+        check=True, capture_output=True,
+    )
+    return src.read_bytes()
+
+
+def _poll_clips(api_server: str, project: str, job_id: str) -> Dict[str, Any]:
+    for _ in range(200):
+        res = requests.post(
+            f"{api_server}/api/projects/{project}/clips/ingest/status",
+            json={"job_id": job_id},
+        )
+        payload = res.json()
+        if payload.get("status") == "done":
+            return payload
+        time.sleep(0.2)
+    raise AssertionError("clip ingest job did not finish")
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
+def test_clips_upload_and_inbox_ingest(
+    api_server: str, workspace: Path, tmp_path: Path
+) -> None:
+    proj = workspace / "projects" / "clip_proj"
+    proj.mkdir(parents=True)
+    raw = _make_clip_bytes(tmp_path)
+    b64 = base64.b64encode(raw).decode()
+
+    res = requests.post(
+        f"{api_server}/api/projects/clip_proj/clips/upload",
+        json={"filename": "notes.txt", "content_base64": b64},
+    )
+    assert res.status_code == 400
+    res = requests.post(
+        f"{api_server}/api/projects/clip_proj/clips/upload",
+        json={"filename": "../evil.mp4", "content_base64": b64},
+    )
+    assert res.status_code == 400
+
+    res = requests.post(
+        f"{api_server}/api/projects/clip_proj/clips/upload",
+        json={"filename": "clip_a.mp4", "content_base64": b64},
+    )
+    assert res.status_code == 200
+    assert [c["name"] for c in res.json()["inbox"]] == ["clip_a.mp4"]
+
+    res = requests.post(
+        f"{api_server}/api/projects/clip_proj/clips/ingest", json={}
+    )
+    assert res.status_code == 200
+    payload = _poll_clips(api_server, "clip_proj", res.json()["job_id"])
+    assert payload["ok"] is True
+    clips = payload["result"]["clips"]
+    assert len(clips) == 1
+    assert clips[0]["source"] == "clip_a.mp4"
+    assert (proj / "clips" / "manifest.json").is_file()
+    assert (proj / "clips" / clips[0]["file"]).is_file()
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
+def test_clips_manifest_mode_aborts_on_undeclared_stray(
+    api_server: str, workspace: Path, tmp_path: Path
+) -> None:
+    proj = workspace / "projects" / "clip_manifest_proj"
+    proj.mkdir(parents=True)
+    for name in ("clip_a.mp4", "stray.mp4"):
+        raw = _make_clip_bytes(tmp_path, name)
+        res = requests.post(
+            f"{api_server}/api/projects/clip_manifest_proj/clips/upload",
+            json={"filename": name, "content_base64": base64.b64encode(raw).decode()},
+        )
+        assert res.status_code == 200
+
+    manifest = json.dumps([{"clip_id": "intro", "filename": "clip_a.mp4"}])
+    res = requests.post(
+        f"{api_server}/api/projects/clip_manifest_proj/clips/ingest",
+        json={"manifest_text": manifest},
+    )
+    payload = _poll_clips(api_server, "clip_manifest_proj", res.json()["job_id"])
+    assert payload["result"]["matching_aborted"] is True
+    assert payload["ok"] is False
+    assert not (proj / "clips" / "manifest.json").exists()
+
+    manifest = json.dumps([
+        {"clip_id": "intro", "filename": "clip_a.mp4"},
+        {"clip_id": "stray-ok", "filename": "stray.mp4"},
+    ])
+    res = requests.post(
+        f"{api_server}/api/projects/clip_manifest_proj/clips/ingest",
+        json={"manifest_text": manifest},
+    )
+    payload = _poll_clips(api_server, "clip_manifest_proj", res.json()["job_id"])
+    assert payload["ok"] is True
+    assert [c["id"] for c in payload["result"]["clips"]] == ["intro", "stray-ok"]
+
+
+def test_clips_ingest_empty_inbox_400(api_server: str, workspace: Path) -> None:
+    (workspace / "projects" / "no_clips").mkdir(parents=True)
+    res = requests.post(
+        f"{api_server}/api/projects/no_clips/clips/ingest", json={}
+    )
+    assert res.status_code == 400
+    res = requests.post(
+        f"{api_server}/api/projects/no_clips/clips/ingest/status",
+        json={"job_id": "deadbeef0000"},
     )
     assert res.status_code == 404

@@ -2,7 +2,8 @@ import type {
   ProjectSummary, ProjectData, PipelineStatus, LoudnessResult,
   YoutubeUploadPayload, VoicevoxHealth, DirectorScriptEntry, YoutubeAuthStatus,
   ApiHealth, IdeateResult, SourcesResult, IngestResult, ValidateResult, QaResult,
-  NotebooklmVerifyResult, DevPackResult, DevApplyStatus
+  NotebooklmVerifyResult, DevPackResult, DevApplyStatus,
+  ClipsState, ClipIngestStatus
 } from './types.ts';
 
 interface TauriInternals {
@@ -186,6 +187,26 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
+  }),
+
+  getClips: (name: string) => fetchAPI<ClipsState>(`/api/projects/${encodeURIComponent(name)}/clips`),
+
+  uploadClip: (name: string, filename: string, contentBase64: string) => fetchAPI<ClipsState>(`/api/projects/${encodeURIComponent(name)}/clips/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 })
+  }),
+
+  startClipIngest: (name: string, manifestText?: string) => fetchAPI<{ success: boolean; job_id?: string; mode?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/clips/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manifest_text: manifestText || undefined })
+  }),
+
+  clipIngestStatus: (name: string, jobId: string) => fetchAPI<ClipIngestStatus>(`/api/projects/${encodeURIComponent(name)}/clips/ingest/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
   }),
 
   generateNotebooklmPrompt: (name: string) => fetchAPI<{ success: boolean; prompt?: string; error?: string }>(`/api/projects/${encodeURIComponent(name)}/notebooklm/prompt`, {

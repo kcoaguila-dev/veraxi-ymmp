@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api } from '../../shared/api';
-import type { SourcesResult } from '../../shared/types';
+import type { SourcesResult, ClipsState, ClipIngestStatus } from '../../shared/types';
 
 const ARCHETYPES: Array<{ key: string; label: string }> = [
   { key: 'post_mortem', label: 'Post-Mortem / 失敗の解剖' },
@@ -66,6 +66,89 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
   useEffect(() => {
     reloadSources();
   }, [reloadSources]);
+
+  const [clips, setClips] = useState<ClipsState | null>(null);
+  const [clipManifest, setClipManifest] = useState('');
+  const [clipBusy, setClipBusy] = useState(false);
+  const [clipMsg, setClipMsg] = useState<string | null>(null);
+  const [clipError, setClipError] = useState<string | null>(null);
+  const [clipResult, setClipResult] = useState<ClipIngestStatus | null>(null);
+  const clipFileInputRef = useRef<HTMLInputElement>(null);
+  const clipsRequestRef = useRef(0);
+
+  const reloadClips = useCallback(async () => {
+    if (!activeProjectName) {
+      setClips(null);
+      return;
+    }
+    const requestId = ++clipsRequestRef.current;
+    try {
+      const res = await api.getClips(activeProjectName);
+      if (clipsRequestRef.current === requestId) setClips(res);
+    } catch {
+      if (clipsRequestRef.current === requestId) setClips(null);
+    }
+  }, [activeProjectName]);
+
+  useEffect(() => {
+    reloadClips();
+  }, [reloadClips]);
+
+  const uploadClipFiles = async (files: FileList | File[]) => {
+    if (!activeProjectName) return;
+    setClipError(null);
+    setClipMsg(null);
+    try {
+      for (const file of Array.from(files)) {
+        const b64 = await fileToBase64(file);
+        await api.uploadClip(activeProjectName, file.name, b64);
+      }
+      await reloadClips();
+      setClipMsg('✓ クリップを clip_inbox へアップロードしました');
+    } catch (e: any) {
+      setClipError(e?.data?.error || e?.message || 'クリップのアップロードに失敗しました');
+    }
+  };
+
+  const handleClipIngest = async () => {
+    if (!activeProjectName || clipBusy) return;
+    const projectAtStart = activeProjectName;
+    setClipBusy(true);
+    setClipError(null);
+    setClipMsg(null);
+    setClipResult(null);
+    try {
+      const start = await api.startClipIngest(
+        projectAtStart,
+        clipManifest.trim() ? clipManifest : undefined
+      );
+      if (!start.success || !start.job_id) {
+        setClipError(start.error || 'クリップ取込を開始できませんでした');
+        setClipBusy(false);
+        return;
+      }
+      const jobId = start.job_id;
+      const poll = async () => {
+        try {
+          const status = await api.clipIngestStatus(projectAtStart, jobId);
+          if (status.status === 'done') {
+            setClipResult(status);
+            setClipBusy(false);
+            await reloadClips();
+          } else {
+            window.setTimeout(poll, 1500);
+          }
+        } catch (e: any) {
+          setClipError(e?.data?.error || e?.message || 'クリップ取込状況の取得に失敗しました');
+          setClipBusy(false);
+        }
+      };
+      void poll();
+    } catch (e: any) {
+      setClipError(e?.data?.error || e?.message || 'クリップ取込を開始できませんでした');
+      setClipBusy(false);
+    }
+  };
 
   // Evidence/dialogue drafts are scoped to (workspace, project): stash them
   // under the previous scope on switch and restore the new scope's drafts,
@@ -292,6 +375,97 @@ export const ResearchDossier: React.FC<ResearchDossierProps> = ({ onIngestDone }
                 </p>
               )}
             </>
+          )}
+        </section>
+
+        {/* Step 1b: External AI clip ingest (ingest-clips) */}
+        <section className="space-y-2.5">
+          <h3 className="text-[13px] font-extrabold text-[#34D399]">外部AIクリップ取込 (clips/)</h3>
+          <p className="text-[11px] text-[#64748B]">
+            Web AI等で生成した動画クリップを clip_inbox へ入れ、プロジェクト規格 (1920x1080/60fps) へ正規化して取り込みます。
+            マニフェスト (JSON) を貼ると宣言されたクリップだけを厳密に照合し、未宣言ファイルがあれば<strong className="text-[#FDE68A]">何も書かずに中断</strong>します。空欄なら inbox 全件を自動IDで取り込みます。
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              ref={clipFileInputRef}
+              type="file"
+              accept="video/*,.mkv"
+              multiple
+              className="hidden"
+              aria-label="クリップファイルをアップロード"
+              onChange={(e) => {
+                if (e.target.files) void uploadClipFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => clipFileInputRef.current?.click()}
+              disabled={!activeProjectName}
+              className="h-[30px] px-3 rounded-[7px] bg-[#1E293B] border border-[#475569] text-[11.5px] font-bold disabled:opacity-50"
+            >
+              🎬 クリップを追加
+            </button>
+            {clips && clips.inbox.length > 0 && (
+              <span className="text-[11px] text-[#94A3B8]">
+                inbox: {clips.inbox.map((c) => `${c.name} (${Math.max(1, Math.round(c.size / 1024))}KB)`).join(', ')}
+              </span>
+            )}
+          </div>
+          <textarea
+            value={clipManifest}
+            onChange={(e) => setClipManifest(e.target.value)}
+            rows={4}
+            placeholder={'クリップマニフェスト (任意・JSON): [{"clip_id": "intro", "filename": "clip_a.mp4"}]'}
+            aria-label="クリップマニフェスト"
+            className="w-full bg-[#0B0F19] border border-[#334155] rounded-[8px] px-3 py-2 text-[12px] font-mono focus:outline-none focus:border-[#10B981]"
+          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleClipIngest}
+              disabled={clipBusy || !activeProjectName || !clips || clips.inbox.length === 0}
+              className="h-[34px] px-4 rounded-[8px] bg-gradient-to-br from-[#10B981] to-[#059669] text-white text-[12.5px] font-extrabold disabled:opacity-50"
+            >
+              {clipBusy ? '⏳ 取込中 (正規化しています)...' : '🎞 クリップ取込 (Ingest Clips)'}
+            </button>
+            {clipMsg && <span className="text-[11.5px] text-[#34D399] font-semibold">{clipMsg}</span>}
+            {clipError && <span className="text-[11.5px] text-[#FECDD3] font-semibold">⚠ {clipError}</span>}
+          </div>
+          {clipResult?.status === 'done' && (
+            <div className="space-y-1.5">
+              {clipResult.error && (
+                <p className="text-[11.5px] font-semibold text-[#FECDD3]">⚠ {clipResult.error}</p>
+              )}
+              {clipResult.result && (
+                <>
+                  <p className={`text-[11.5px] font-extrabold ${clipResult.ok ? 'text-[#34D399]' : 'text-[#FDE68A]'}`}>
+                    {clipResult.ok
+                      ? `✓ ${clipResult.result.clips.length}件のクリップを取り込みました`
+                      : clipResult.result.matching_aborted
+                        ? '✗ マニフェスト照合で中断 — 何も取り込まれていません'
+                        : clipResult.result.ingest_aborted
+                          ? '✗ 正規化に失敗し中断 — 何も取り込まれていません'
+                          : '⚠ 取込結果を確認してください'}
+                  </p>
+                  {clipResult.result.rejected.map((r, i) => (
+                    <p key={i} className="text-[11.5px] text-[#FECDD3]">
+                      ✗ {r.source}: {r.reason}
+                    </p>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+          {clips && clips.clips.length > 0 && (
+            <ul className="space-y-1">
+              {clips.clips.map((c) => (
+                <li key={c.id} className="text-[11.5px] font-mono text-[#CBD5E1] bg-[#0B0F19] border border-[#1E293B] rounded-[6px] px-2.5 py-1.5 flex justify-between gap-2">
+                  <span className="truncate">{c.id} ← {c.source}</span>
+                  <span className="text-[#64748B] shrink-0">{c.duration_sec.toFixed(1)}s · {c.width}x{c.height}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
 

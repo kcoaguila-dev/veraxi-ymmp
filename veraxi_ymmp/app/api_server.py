@@ -237,6 +237,13 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 status_code, payload = handle_list_sources(project_name)
                 return self.send_json(status_code, payload)
 
+            match = re.match(r'^/api/projects/([^/]+)/clips$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_list_clips
+                status_code, payload = handle_list_clips(project_name)
+                return self.send_json(status_code, payload)
+
             match = re.match(r'^/api/projects/([^/]+)/history$', path)
             if match:
                 project_name = urllib.parse.unquote(match.group(1))
@@ -397,6 +404,31 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 project_name = urllib.parse.unquote(match.group(1))
                 from veraxi_ymmp.app.studio_workflow_routes import handle_qa
                 status_code, payload = handle_qa(project_name)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/upload$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import handle_upload_clip
+                status_code, payload = handle_upload_clip(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/ingest$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_ingest_clips_start,
+                )
+                status_code, payload = handle_ingest_clips_start(project_name, body)
+                return self.send_json(status_code, payload)
+
+            match = re.match(r'^/api/projects/([^/]+)/clips/ingest/status$', path)
+            if match:
+                project_name = urllib.parse.unquote(match.group(1))
+                from veraxi_ymmp.app.studio_workflow_routes import (
+                    handle_ingest_clips_status,
+                )
+                status_code, payload = handle_ingest_clips_status(project_name, body)
                 return self.send_json(status_code, payload)
 
             match = re.match(r'^/api/projects/([^/]+)/notebooklm/prompt$', path)

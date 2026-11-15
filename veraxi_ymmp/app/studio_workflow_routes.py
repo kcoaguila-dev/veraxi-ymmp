@@ -28,7 +28,9 @@ import base64
 import binascii
 import dataclasses
 import json
+import threading
 import urllib.parse
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +41,11 @@ from veraxi_ymmp.app.cli_ideate import (
     generate_dossier_markdown,
 )
 from veraxi_ymmp.app.cli_qa import run_project_qa
+from veraxi_ymmp.app.clip_ingest import (
+    VIDEO_EXTENSIONS,
+    ingest_clips,
+    ingest_clips_from_manifest,
+)
 from veraxi_ymmp.core.utils import get_workspace_root
 from veraxi_ymmp.epistemic.fact_audit import (
     audit_project_facts,
@@ -611,3 +618,188 @@ def handle_notebooklm_verify(
         "gate_blockers": gate_blockers,
         "claims_count": len(res.updated_claims),
     }
+
+
+# --- Step 1b: external AI clip ingest (ingest-clips parity) --------------
+#
+# Clips are uploaded into <project>/clip_inbox/ and ingested into
+# <project>/clips/ by the same library functions as the CLI
+# (clip_ingest.ingest_clips / ingest_clips_from_manifest), so the WP8
+# all-or-nothing manifest matching and the atomic publish apply in the
+# GUI exactly as on the command line. Ingest re-encodes with ffmpeg and
+# can take minutes, so it runs as a polled job, not a synchronous POST.
+
+_MAX_CLIP_BYTES = 100 * 1024 * 1024
+_clip_jobs: Dict[str, Dict[str, Any]] = {}
+_clip_jobs_lock = threading.Lock()
+
+
+def _clips_state(proj_dir: Path) -> Dict[str, Any]:
+    inbox_dir = proj_dir / "clip_inbox"
+    inbox: List[Dict[str, Any]] = []
+    if inbox_dir.is_dir():
+        for entry in sorted(inbox_dir.iterdir()):
+            if entry.is_file() and entry.suffix.lower() in VIDEO_EXTENSIONS:
+                inbox.append(
+                    {"name": entry.name, "size": entry.stat().st_size}
+                )
+    clips: List[Dict[str, Any]] = []
+    manifest_path = proj_dir / "clips" / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                clips = list(data.get("clips", []))
+        except (OSError, json.JSONDecodeError):
+            clips = []
+    return {"inbox": inbox, "clips": clips}
+
+
+def handle_list_clips(project_name: str) -> Tuple[int, Dict[str, Any]]:
+    """Step 1b: current clip inbox contents + ingested clips manifest."""
+    try:
+        proj_dir = _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    if not proj_dir.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+    return 200, {"success": True, **_clips_state(proj_dir)}
+
+
+def handle_upload_clip(
+    project_name: str, body: Dict[str, Any]
+) -> Tuple[int, Dict[str, Any]]:
+    """Step 1b: upload one clip file (base64) into the project's clip inbox."""
+    try:
+        proj_dir = _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    if not proj_dir.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+    filename = body.get("filename")
+    content_b64 = body.get("content_base64")
+    if not isinstance(filename, str) or not filename:
+        return 400, {"success": False, "error": "filename is required"}
+    if not isinstance(content_b64, str) or not content_b64:
+        return 400, {"success": False, "error": "content_base64 is required"}
+    safe_name = Path(filename).name
+    if safe_name != filename or safe_name in ("", ".", ".."):
+        return 400, {"success": False, "error": "filename must be a bare file name"}
+    if Path(safe_name).suffix.lower() not in VIDEO_EXTENSIONS:
+        return 400, {
+            "success": False,
+            "error": f"unsupported clip type: {Path(safe_name).suffix} "
+            f"(allowed: {', '.join(sorted(VIDEO_EXTENSIONS))})",
+        }
+    try:
+        raw = base64.b64decode(content_b64, validate=True)
+    except (binascii.Error, ValueError):
+        return 400, {"success": False, "error": "content_base64 is not valid base64"}
+    if len(raw) > _MAX_CLIP_BYTES:
+        return 400, {
+            "success": False,
+            "error": f"clip exceeds the {_MAX_CLIP_BYTES // (1024 * 1024)}MB "
+            "upload limit; place it in the project clip_inbox folder directly "
+            "and ingest from there",
+        }
+    inbox_dir = (proj_dir / "clip_inbox").resolve()
+    if inbox_dir.parent != proj_dir.resolve():
+        return 400, {"success": False, "error": "Invalid clip inbox path"}
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    target = inbox_dir / safe_name
+    if target.resolve().parent != inbox_dir:
+        return 400, {"success": False, "error": "Invalid clip file name"}
+    target.write_bytes(raw)
+    return 200, {"success": True, **_clips_state(proj_dir)}
+
+
+def handle_ingest_clips_start(
+    project_name: str, body: Dict[str, Any]
+) -> Tuple[int, Dict[str, Any]]:
+    """Step 1b: start a clip ingest job (manifest mode when text is given)."""
+    try:
+        proj_dir = _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    if not proj_dir.is_dir():
+        return 404, {"success": False, "error": f"Project not found: {project_name}"}
+    inbox_dir = proj_dir / "clip_inbox"
+    if not inbox_dir.is_dir() or not any(inbox_dir.iterdir()):
+        return 400, {
+            "success": False,
+            "error": "clip inbox is empty; upload at least one clip first",
+        }
+    manifest_text = body.get("manifest_text")
+    if manifest_text is not None and not isinstance(manifest_text, str):
+        return 400, {"success": False, "error": "manifest_text must be a string"}
+    use_manifest = bool(manifest_text and manifest_text.strip())
+
+    with _clip_jobs_lock:
+        if any(j["status"] == "running" for j in _clip_jobs.values()):
+            return 409, {
+                "success": False,
+                "error": "a clip ingest job is already running",
+            }
+        job_id = uuid.uuid4().hex[:12]
+        _clip_jobs[job_id] = {"status": "running", "result": None, "error": None}
+
+    def _run() -> None:
+        result: Optional[Dict[str, Any]] = None
+        error: Optional[str] = None
+        try:
+            out_dir = proj_dir / "clips"
+            if use_manifest:
+                manifest_path = proj_dir / "clip-manifest.json"
+                manifest_path.write_text(manifest_text or "", encoding="utf-8")
+                result = ingest_clips_from_manifest(
+                    inbox_dir, manifest_path, output_dir=out_dir
+                )
+            else:
+                result = ingest_clips(inbox_dir, output_dir=out_dir)
+        except ValueError as exc:
+            error = str(exc)
+        except Exception as exc:  # ffmpeg missing etc.: surface, don't 500
+            error = f"clip ingest failed: {exc}"
+        with _clip_jobs_lock:
+            _clip_jobs[job_id] = {
+                "status": "done",
+                "result": result,
+                "error": error,
+            }
+
+    threading.Thread(target=_run, daemon=True).start()
+    return 200, {"success": True, "job_id": job_id, "mode": "manifest" if use_manifest else "inbox"}
+
+
+def handle_ingest_clips_status(
+    project_name: str, body: Dict[str, Any]
+) -> Tuple[int, Dict[str, Any]]:
+    """Step 1b: poll a clip ingest job started for this project."""
+    try:
+        _project_dir(project_name)
+    except ValueError:
+        return 400, {"success": False, "error": "Invalid project name"}
+    job_id = body.get("job_id")
+    if not isinstance(job_id, str) or not job_id:
+        return 400, {"success": False, "error": "job_id is required"}
+    with _clip_jobs_lock:
+        job = _clip_jobs.get(job_id)
+        if job is None:
+            return 404, {"success": False, "error": f"unknown job_id: {job_id}"}
+        payload: Dict[str, Any] = {"success": True, "status": job["status"]}
+        if job["status"] == "done":
+            if job["error"]:
+                payload["error"] = job["error"]
+            else:
+                result = job["result"] or {}
+                payload["result"] = {
+                    "clips": result.get("clips", []),
+                    "rejected": result.get("rejected", []),
+                    "matching_aborted": bool(result.get("matching_aborted", False)),
+                    "ingest_aborted": bool(result.get("ingest_aborted", False)),
+                    "from_manifest": result.get("from_manifest"),
+                }
+                payload["ok"] = bool(result.get("clips")) and not (
+                    result.get("matching_aborted") or result.get("ingest_aborted")
+                )
+        return 200, payload
