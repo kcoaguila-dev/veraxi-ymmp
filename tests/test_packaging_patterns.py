@@ -121,3 +121,74 @@ def test_update_packaging_pair_rerenders_and_persists(tmp_path: Path):
     assert pair["config"]["badge"] == ""
     with Image.open(proj / pair["thumbnail_file"]) as im:
         assert im.size == (1920, 1080)
+
+
+def _weights(patterns: dict) -> dict:
+    return {a["axis"]: a["weight"] for a in patterns["title_archetypes"]}
+
+
+def test_extract_patterns_is_idempotent():
+    """Re-mining the same corpus must not compound archetype weights.
+
+    Regression: extraction used the previously stored weight as its base,
+    so every Rival Radar scan drifted weights toward the 2.5 cap even
+    when the corpus was unchanged.
+    """
+    now = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    lib = extract_patterns_from_corpus(_sample_corpus(), now_dt=now)
+    first = _weights(lib)
+    for _ in range(3):
+        lib = extract_patterns_from_corpus(_sample_corpus(), existing=lib, now_dt=now)
+        assert _weights(lib) == first
+
+
+def test_extract_patterns_preserves_feedback(tmp_path: Path):
+    """Test & Compare feedback (incl. the CTR bonus) survives re-mining."""
+    now = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    p_path = tmp_path / "patterns.json"
+    save_patterns(default_pattern_library(), p_path)
+    apply_feedback_to_patterns(p_path, axis="curiosity", won=True, ctr=7.5)  # delta = +0.20
+
+    base = _weights(extract_patterns_from_corpus(_sample_corpus(), now_dt=now))
+    lib = extract_patterns_from_corpus(_sample_corpus(), existing=load_patterns(p_path), now_dt=now)
+    assert _weights(lib)["curiosity"] == round(base["curiosity"] + 0.20, 3)
+    # ... and re-mining again does not compound the feedback either.
+    lib = extract_patterns_from_corpus(_sample_corpus(), existing=lib, now_dt=now)
+    assert _weights(lib)["curiosity"] == round(base["curiosity"] + 0.20, 3)
+
+
+def test_extract_patterns_reconstructs_legacy_feedback():
+    """Libraries with wins/losses but no feedback_adj keep the count-derived offset."""
+    now = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    base = _weights(extract_patterns_from_corpus(_sample_corpus(), now_dt=now))
+    legacy = default_pattern_library()
+    for arch in legacy["title_archetypes"]:
+        arch.pop("feedback_adj", None)
+        if arch["axis"] == "loss":
+            arch["wins"] = 1
+            arch["losses"] = 1
+    lib = extract_patterns_from_corpus(_sample_corpus(), existing=legacy, now_dt=now)
+    assert _weights(lib)["loss"] == round(base["loss"] + 0.05, 3)  # 0.15*1 - 0.10*1
+
+
+def test_extract_patterns_empty_corpus_keeps_weights():
+    now = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    lib = extract_patterns_from_corpus(_sample_corpus(), now_dt=now)
+    again = extract_patterns_from_corpus({"outliers": []}, existing=lib, now_dt=now)
+    assert _weights(again) == _weights(lib)
+
+
+def test_extract_patterns_unknown_archetype_is_stable():
+    """A custom archetype id falls back to its axis default and stays stable."""
+    now = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    lib = default_pattern_library()
+    lib["title_archetypes"].append(
+        {"id": "custom_x", "axis": "curiosity", "label": "custom", "template": "{entity}",
+         "weight": 9.9, "wins": 0, "losses": 0, "hook_first": True}
+    )
+    first = extract_patterns_from_corpus(_sample_corpus(), existing=lib, now_dt=now)
+    custom_first = next(a["weight"] for a in first["title_archetypes"] if a["id"] == "custom_x")
+    assert custom_first <= 2.5
+    second = extract_patterns_from_corpus(_sample_corpus(), existing=first, now_dt=now)
+    custom_second = next(a["weight"] for a in second["title_archetypes"] if a["id"] == "custom_x")
+    assert custom_second == custom_first

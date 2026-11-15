@@ -138,6 +138,24 @@ def _recency_weight(published_at: str, now_dt: datetime) -> float:
         return 0.6
 
 
+def _feedback_adjustment(arch: Dict[str, Any]) -> float:
+    """Test & Compare feedback offset to preserve across corpus re-mining.
+
+    ``apply_feedback_to_patterns`` records its delta in ``feedback_adj``.
+    Libraries written before that field existed only carry wins/losses,
+    so reconstruct the offset from the counts (the CTR bonus is not
+    recoverable there and is dropped on the first re-mine).
+    """
+    if "feedback_adj" in arch:
+        try:
+            return float(arch.get("feedback_adj") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+    wins = int(arch.get("wins", 0) or 0)
+    losses = int(arch.get("losses", 0) or 0)
+    return 0.15 * wins - 0.10 * losses
+
+
 def _classify_title_trigger(title: str) -> str:
     """Classify an outlier title into one of the core curiosity axes."""
     if any(tok in title for tok in ("危険", "損", "落とし穴", "末路", "崩壊", "罠", "NG", "注意")):
@@ -198,11 +216,22 @@ def extract_patterns_from_corpus(
         lib["avg_outlier_title_chars"] = round(len_w / total_w, 1)
 
     max_aw = max(axis_weights.values()) if axis_weights else 1.0
+    default_by_id = {a["id"]: float(a["weight"]) for a in DEFAULT_TITLE_ARCHETYPES}
+    default_by_axis = {a["axis"]: float(a["weight"]) for a in DEFAULT_TITLE_ARCHETYPES}
     for arch in lib.get("title_archetypes", []):
         ax = arch.get("axis", "curiosity")
         norm = (axis_weights.get(ax, 0.0) / max_aw) if max_aw > 0 else 0.5
-        base_w = float(arch.get("weight", 1.0))
-        arch["weight"] = round(max(0.5, min(2.5, 0.7 * base_w + 0.6 * (0.8 + norm))), 3)
+        # Anchor the corpus-derived weight to the *default* archetype weight,
+        # never to the weight a previous extraction stored: using the stored
+        # weight as the base compounds on every scan, so repeated Rival Radar
+        # scans drifted every weight toward the 2.5 cap even when the corpus
+        # was unchanged. Test & Compare feedback is preserved separately via
+        # the feedback adjustment, so re-mining stays idempotent.
+        base_w = default_by_id.get(arch.get("id"), default_by_axis.get(ax, 1.0))
+        feedback_adj = _feedback_adjustment(arch)
+        arch["feedback_adj"] = round(feedback_adj, 3)
+        corpus_w = 0.7 * base_w + 0.6 * (0.8 + norm)
+        arch["weight"] = round(max(0.5, min(2.5, corpus_w + feedback_adj)), 3)
 
     lib["source_outliers_count"] = len(outliers)
     lib["recent_outlier_hooks"] = hooks
@@ -261,9 +290,14 @@ def apply_feedback_to_patterns(
 
     for arch in patterns.get("title_archetypes", []):
         if arch.get("axis") == axis:
+            # Capture the pre-update adjustment first: for a legacy library
+            # without feedback_adj it is reconstructed from the *old*
+            # wins/losses, so this event is not double-counted.
+            adj_base = _feedback_adjustment(arch)
             arch["wins"] = int(arch.get("wins", 0)) + (1 if won else 0)
             arch["losses"] = int(arch.get("losses", 0)) + (0 if won else 1)
             arch["weight"] = round(max(0.4, min(3.0, float(arch.get("weight", 1.0)) + delta)), 3)
+            arch["feedback_adj"] = round(adj_base + delta, 3)
 
     if layout:
         for l_arch in patterns.get("layout_archetypes", []):
