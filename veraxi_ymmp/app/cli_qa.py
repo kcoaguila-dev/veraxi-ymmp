@@ -168,7 +168,16 @@ def _extract_milestone_frames(
 
 
 def _audit_thumbnail(proj: Path) -> List[str]:
-    """Validate thumbnail image presence and config against banned brackets."""
+    """Validate thumbnail presence, config brackets, and rendered-image QA.
+
+    The badge field is exempt from the bracket ban: it is a genre tag by
+    design (every preset badge and the required YouTube title tag use
+    【...】). Title lines and the sub-hook are prose, so brackets there
+    are the AI-slop cliche the gate exists to catch. The rendered image
+    itself is checked with validate_thumbnail_visual_qa (dimensions,
+    2MB limit, timestamp dead-zone, mobile contrast) — previously that
+    QA existed but had no production caller.
+    """
     thumb_path = proj / "thumbnail.png"
     thumb_issues: List[str] = []
     if not thumb_path.exists():
@@ -179,7 +188,7 @@ def _audit_thumbnail(proj: Path) -> List[str]:
     if thumb_cfg_path.exists():
         try:
             cfg = json.loads(thumb_cfg_path.read_text(encoding="utf-8"))
-            for field in ("badge", "title_line1", "title_line2", "sub_hook"):
+            for field in ("title_line1", "title_line2", "sub_hook"):
                 val = str(cfg.get(field, ""))
                 if "【" in val or "】" in val:
                     thumb_issues.append(
@@ -187,6 +196,18 @@ def _audit_thumbnail(proj: Path) -> List[str]:
                     )
         except Exception as e:
             thumb_issues.append(f"Failed parsing thumbnail_config.json: {e}")
+
+    try:
+        from veraxi_ymmp.graphics.thumbnail_composer import validate_thumbnail_visual_qa
+
+        qa = validate_thumbnail_visual_qa(thumb_path)
+        if not qa.get("passed", False):
+            failed = [k for k, ok in qa.get("checks", {}).items() if not ok]
+            thumb_issues.append(
+                f"Thumbnail visual QA failed (score={qa.get('score')}): {', '.join(failed)}"
+            )
+    except Exception as e:
+        thumb_issues.append(f"Failed thumbnail visual QA: {e}")
     return thumb_issues
 
 

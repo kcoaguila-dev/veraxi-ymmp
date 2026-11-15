@@ -214,11 +214,41 @@ def _cmd_thumbnail(argv: List[str]) -> None:
     )
     parser.add_argument("project_dir", type=str, help="Path to project directory")
     parser.add_argument("-o", "--output", type=str, default=None, help="Output PNG path")
+    parser.add_argument(
+        "--packaging",
+        action="store_true",
+        help="Generate 3 Test & Compare title+thumbnail pairs (packaging.json) instead of a single thumbnail",
+    )
+    parser.add_argument(
+        "--select",
+        type=str,
+        default=None,
+        choices=["curiosity", "result", "loss"],
+        help="Promote a generated packaging pair to thumbnail.png",
+    )
 
     args = parser.parse_args(argv)
     proj_path = Path(args.project_dir)
-    out_path = Path(args.output) if args.output else proj_path / "thumbnail.png"
     try:
+        if args.select:
+            from veraxi_ymmp.graphics.packaging import select_packaging_pair
+
+            pair = select_packaging_pair(proj_path, args.select)
+            print(f"Selected packaging pair '{args.select}': {pair.get('title')}")
+            print(f"Thumbnail promoted to: {proj_path / 'thumbnail.png'}")
+            return
+        if args.packaging:
+            from veraxi_ymmp.graphics.packaging import generate_packaging
+
+            data = generate_packaging(proj_path)
+            for pair in data["pairs"]:
+                mark = " (recommended)" if pair["axis"] == data["recommended_axis"] else ""
+                print(f"[{pair['axis']}] score={pair['total']} {pair['title']}{mark}")
+                for issue in pair["issues"]:
+                    print(f"    - {issue}")
+            print(f"Packaging written to: {proj_path / 'packaging.json'}")
+            return
+        out_path = Path(args.output) if args.output else proj_path / "thumbnail.png"
         res = generate_project_thumbnail(proj_path, out_path=out_path)
         print(f"Thumbnail generated at: {res}")
     except Exception as e:

@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStudioStore } from '../../shared/store';
 import { api, apiUrl } from '../../shared/api';
-import type { YoutubeAuthStatus } from '../../shared/types';
+import type { YoutubeAuthStatus, PackagingData, PackagingPair, PackagingAxis } from '../../shared/types';
+
+const PACKAGING_AXIS_LABELS: Record<PackagingAxis, string> = {
+  curiosity: '好奇心',
+  result: '実績・数字',
+  loss: '損失回避',
+};
 
 const DEFAULT_TITLES: Record<string, string> = {
   '01_costco_business_model': '【完全解説】なぜコストコは激安でも儲かるのか？最強のビジネスモデル',
@@ -30,6 +36,17 @@ export const YoutubePublish: React.FC = () => {
   const [isRegeneratingThumb, setIsRegeneratingThumb] = useState(false);
   const [thumbLoadFailed, setThumbLoadFailed] = useState(false);
 
+  // Packaging (Test & Compare) candidates state
+  const [packaging, setPackaging] = useState<PackagingData | null>(null);
+  const [isGeneratingPackaging, setIsGeneratingPackaging] = useState(false);
+  const [selectingAxis, setSelectingAxis] = useState<PackagingAxis | null>(null);
+  const [packagingError, setPackagingError] = useState<string | null>(null);
+  const [packagingImgFailed, setPackagingImgFailed] = useState<Record<string, boolean>>({});
+  const [packagingImgRev, setPackagingImgRev] = useState(0);
+  const activeProjectRef = useRef<string | null>(activeProjectName);
+  activeProjectRef.current = activeProjectName;
+  const packagingOpIdRef = useRef(0);
+
   const fetchAuthStatus = async () => {
     try {
       const res = await api.getYoutubeAuthStatus(true);
@@ -46,6 +63,11 @@ export const YoutubePublish: React.FC = () => {
   useEffect(() => {
     if (activeProjectName) {
       setTitle(DEFAULT_TITLES[activeProjectName] || activeProjectName);
+    }
+  }, [activeProjectName]);
+
+  useEffect(() => {
+    if (activeProjectName) {
       setThumbLoadFailed(false);
     }
   }, [activeProjectName, mediaCacheBust]);
@@ -107,6 +129,92 @@ export const YoutubePublish: React.FC = () => {
       alert('サムネイル再生成に失敗しました');
     }
     setIsRegeneratingThumb(false);
+  };
+
+  const isStalePackagingOp = (reqProject: string, opId: number) =>
+    activeProjectRef.current !== reqProject || packagingOpIdRef.current !== opId;
+
+  const fetchPackaging = async (name: string, opId?: number) => {
+    const id = opId ?? ++packagingOpIdRef.current;
+    try {
+      const res = await api.getPackaging(name);
+      if (isStalePackagingOp(name, id)) return;
+      const pkg = res.success ? res.packaging : null;
+      setPackaging(pkg);
+      if (pkg?.selected_axis) {
+        const selectedPair = pkg.pairs.find((p) => p.axis === pkg.selected_axis);
+        if (selectedPair?.title) {
+          setTitle(selectedPair.title);
+        }
+      }
+    } catch (e) {
+      if (isStalePackagingOp(name, id)) return;
+      console.debug('Failed to fetch packaging candidates:', e);
+      setPackaging(null);
+    }
+  };
+
+  useEffect(() => {
+    const opId = ++packagingOpIdRef.current;
+    setPackaging(null);
+    setPackagingError(null);
+    setPackagingImgFailed({});
+    setIsGeneratingPackaging(false);
+    setSelectingAxis(null);
+    if (activeProjectName) {
+      fetchPackaging(activeProjectName, opId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectName]);
+
+  const handleGeneratePackaging = async () => {
+    const reqProject = activeProjectName;
+    if (!reqProject) return;
+    const opId = ++packagingOpIdRef.current;
+    setIsGeneratingPackaging(true);
+    setPackagingError(null);
+    try {
+      const res = await api.generatePackaging(reqProject);
+      if (isStalePackagingOp(reqProject, opId)) return;
+      setPackaging(res.packaging);
+      setPackagingImgFailed({});
+      setPackagingImgRev((r) => r + 1);
+    } catch (e: any) {
+      if (isStalePackagingOp(reqProject, opId)) return;
+      console.error(e);
+      setPackagingError(e.data?.error || e.message || '候補の生成に失敗しました');
+    } finally {
+      if (!isStalePackagingOp(reqProject, opId)) {
+        setIsGeneratingPackaging(false);
+      }
+    }
+  };
+
+  const handleSelectPackagingPair = async (pair: PackagingPair) => {
+    const reqProject = activeProjectName;
+    if (!reqProject) return;
+    const opId = ++packagingOpIdRef.current;
+    setSelectingAxis(pair.axis);
+    setPackagingError(null);
+    try {
+      const res = await api.selectPackagingPair(reqProject, pair.axis);
+      if (isStalePackagingOp(reqProject, opId)) return;
+      // The chosen pair becomes thumbnail.png and its title is the publish
+      // title (backend also refreshes youtube_metadata.txt).
+      setTitle(res.selected?.title || pair.title);
+      setThumbLoadFailed(false);
+      await fetchPackaging(reqProject, opId);
+      if (isStalePackagingOp(reqProject, opId)) return;
+      await refreshMedia();
+    } catch (e: any) {
+      if (isStalePackagingOp(reqProject, opId)) return;
+      console.error(e);
+      setPackagingError(e.data?.error || e.message || '候補の選択に失敗しました');
+    } finally {
+      if (!isStalePackagingOp(reqProject, opId)) {
+        setSelectingAxis(null);
+      }
+    }
   };
 
   const handlePublish = async () => {
@@ -450,6 +558,143 @@ export const YoutubePublish: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Packaging Candidates (YouTube Test & Compare) */}
+      <div className="px-4 lg:px-5 pb-4 lg:pb-5 pt-4 border-t border-[#1E293B] flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-[13px] font-extrabold text-[#F8FAFC]">
+              パッケージ候補 (Test &amp; Compare)
+            </h3>
+            <span className="text-[10.5px] font-semibold text-[#94A3B8]">
+              タイトル + サムネイルを3軸 (好奇心 / 実績・数字 / 損失回避) で比較
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleGeneratePackaging}
+            disabled={isGeneratingPackaging || selectingAxis !== null || !activeProjectName}
+            className="h-[28px] px-3 rounded-[6px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] text-[11.5px] font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {isGeneratingPackaging ? '⏳ 生成中... (3案レンダリング中)' : '🎨 候補を生成'}
+          </button>
+        </div>
+
+        <p className="text-[10.5px] text-[#64748B] font-medium -mt-1">
+          {packaging?.score_note || 'ヒューリスティックスコア(CTR予測ではありません)'}
+        </p>
+
+        {packagingError && (
+          <div className="px-3 py-1.5 rounded-[6px] text-xs font-medium bg-rose-950/50 border border-rose-800/60 text-rose-300">
+            エラー: {packagingError}
+          </div>
+        )}
+
+        {!packaging ? (
+          <p className="text-[11.5px] text-[#94A3B8]">
+            候補はまだ生成されていません。「候補を生成」で、YouTube Test &amp; Compare 用の3案を作成します (生成には少し時間がかかります)。
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {packaging.pairs.map((pair) => {
+              const isRecommended = packaging.recommended_axis === pair.axis;
+              const isSelected = packaging.selected_axis === pair.axis;
+              const thumbText = [pair.config?.title_line1, pair.config?.title_line2].filter(Boolean).join(' ');
+              return (
+                <div
+                  key={pair.axis}
+                  className={`rounded-[8px] bg-[#0B0F19] border flex flex-col overflow-hidden ${
+                    isSelected ? 'border-emerald-500/70' : isRecommended ? 'border-amber-500/60' : 'border-[#1E293B]'
+                  }`}
+                >
+                  <div className="aspect-video bg-[#111827] relative shrink-0">
+                    {packagingImgFailed[pair.axis] ? (
+                      <div className="w-full h-full flex items-center justify-center text-[11px] text-[#94A3B8] font-semibold px-2 text-center">
+                        候補画像を読み込めませんでした
+                      </div>
+                    ) : (
+                      <img
+                        src={apiUrl(`/api/projects/${encodeURIComponent(activeProjectName!)}/media/${pair.thumbnail_file}?t=${mediaCacheBust}&pkgRev=${packagingImgRev}`)}
+                        alt={`${PACKAGING_AXIS_LABELS[pair.axis] || pair.axis} サムネイル候補`}
+                        className="w-full h-full object-cover"
+                        onError={() => setPackagingImgFailed((prev) => ({ ...prev, [pair.axis]: true }))}
+                      />
+                    )}
+                    <div className="absolute top-1.5 left-1.5 flex gap-1">
+                      {isRecommended && (
+                        <span className="px-1.5 py-0.5 rounded-[4px] bg-amber-500 text-[#0B0F19] text-[10px] font-extrabold">
+                          おすすめ
+                        </span>
+                      )}
+                      {isSelected && (
+                        <span className="px-1.5 py-0.5 rounded-[4px] bg-emerald-500 text-[#0B0F19] text-[10px] font-extrabold">
+                          選択中
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 flex flex-col gap-1.5 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[11.5px] font-extrabold text-[#38BDF8]">
+                        {PACKAGING_AXIS_LABELS[pair.axis] || pair.axis}
+                      </span>
+                      <span className="text-[13px] font-black text-[#F8FAFC]">
+                        {pair.total}
+                        <span className="text-[10px] font-bold text-[#94A3B8]"> / 100</span>
+                      </span>
+                    </div>
+
+                    <p className="text-[11.5px] font-bold text-[#F8FAFC] leading-snug">
+                      {pair.title}
+                    </p>
+                    {thumbText && (
+                      <p className="text-[10.5px] text-[#94A3B8] leading-snug">
+                        サムネ文言: {thumbText}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-1 text-[10px] font-semibold text-[#94A3B8]">
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#1E293B]">タイトル {pair.scores.title}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#1E293B]">サムネ文言 {pair.scores.thumbnail_text}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#1E293B]">補完性 {pair.scores.complementarity}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#1E293B]">感情 {pair.scores.emotion}</span>
+                      {typeof pair.scores.image === 'number' && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-[#1E293B]">画像 {pair.scores.image}</span>
+                      )}
+                    </div>
+
+                    {pair.issues.length > 0 && (
+                      <ul className="text-[10px] text-amber-300/90 leading-snug list-disc pl-3.5">
+                        {pair.issues.map((issue, i) => (
+                          <li key={i}>{issue}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPackagingPair(pair)}
+                      disabled={isSelected || isGeneratingPackaging || selectingAxis !== null}
+                      className={`mt-auto h-[30px] rounded-[6px] text-[11.5px] font-bold transition-colors disabled:opacity-50 ${
+                        isSelected
+                          ? 'bg-[#064E3B] text-[#A7F3D0] cursor-default'
+                          : 'bg-[#0284C7] hover:bg-[#0369A1] text-white'
+                      }`}
+                    >
+                      {isSelected
+                        ? '✓ 選択中 (サムネイル適用済)'
+                        : selectingAxis === pair.axis
+                        ? '⏳ 適用中...'
+                        : 'この候補を使う'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

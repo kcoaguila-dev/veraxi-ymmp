@@ -262,14 +262,34 @@ def generate_project_youtube_metadata(
         str(broll_manifest[0].get("title", "")).strip() if broll_manifest else proj_dir.name
     )
 
-    # Titles: curated in youtube_config.json; the fallback is a short, rule-compliant
-    # title built from the first slide only (never a copy of the thumbnail text).
+    # Titles: curated in youtube_config.json wins; next, a packaging pair
+    # selected in Studio (packaging.json selected_axis) — its title becomes
+    # primary and all pair titles become the Test & Compare variants; the
+    # fallback is a short, rule-compliant title built from the first slide
+    # only (never a copy of the thumbnail text).
+    pkg_titles: List[str] = []
+    pkg_selected_title = ""
+    pkg_path = proj_dir / "packaging.json"
+    if pkg_path.is_file():
+        try:
+            pkg_data = json.loads(pkg_path.read_text(encoding="utf-8-sig"))
+            pairs = [pr for pr in pkg_data.get("pairs", []) if isinstance(pr, dict)]
+            pkg_titles = [str(pr.get("title", "")).strip() for pr in pairs if pr.get("title")]
+            sel = pkg_data.get("selected_axis")
+            for pr in pairs:
+                if pr.get("axis") == sel and pr.get("title"):
+                    pkg_selected_title = str(pr["title"])
+        except Exception as exc:
+            logger.warning("Failed to read packaging.json in %s: %s", proj_dir, exc)
+
     if yt_cfg.get("title"):
         primary_title = str(yt_cfg["title"])
+    elif pkg_selected_title:
+        primary_title = pkg_selected_title
     else:
         primary_title = f"【ずんだもん解説】{first_slide_title}"
 
-    title_variants = list(yt_cfg.get("title_variants") or [primary_title])
+    title_variants = list(yt_cfg.get("title_variants") or pkg_titles or [primary_title])
     if primary_title not in title_variants:
         title_variants.insert(0, primary_title)
     thumb_texts = tuple(x for x in (t_line1, t_line2, sub_hook) if x)
