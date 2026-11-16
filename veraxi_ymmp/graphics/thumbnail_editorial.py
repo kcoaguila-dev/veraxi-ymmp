@@ -234,7 +234,7 @@ def render_editorial_spotlight_layout(
     if bg_str and Path(bg_str).exists():
         with Image.open(bg_str) as bg_raw:
             canvas = crop_portrait_focus(bg_raw, w, h, focus_y=0.45)
-        canvas = ImageEnhance.Brightness(canvas).enhance(0.55)
+        canvas = ImageEnhance.Brightness(canvas).enhance(0.75)
         scrim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         sdraw = ImageDraw.Draw(scrim)
         for gx in range(0, int(w * 0.72)):
