@@ -290,13 +290,16 @@ class TestThumbnailUploadAndValidation:
         adapter = MockYouTubeAdapter()
         assert adapter.upload_thumbnail("vid_2mb", thumb) is True
 
-    def test_thumbnail_exceeding_2mb_raises_valueerror(self, tmp_path: Path) -> None:
+    def test_thumbnail_exceeding_desktop_limit_raises_valueerror(self, tmp_path: Path) -> None:
         thumb = tmp_path / "oversized.png"
-        thumb.write_bytes(b"\x00" * (THUMBNAIL_MAX_SIZE_BYTES + 1))
+        # Sparse write: only the size is stat'ed, don't materialize 50MB.
+        with open(thumb, "wb") as f:
+            f.seek(THUMBNAIL_MAX_SIZE_BYTES)
+            f.write(b"\0")
         adapter = MockYouTubeAdapter()
         with pytest.raises(ValueError) as exc_info:
             adapter.upload_thumbnail("vid_oversized", thumb)
-        assert "2MB" in str(exc_info.value)
+        assert "50MB" in str(exc_info.value)
 
     def test_missing_thumbnail_file_raises_filenotfound(self, tmp_path: Path) -> None:
         adapter = MockYouTubeAdapter()
