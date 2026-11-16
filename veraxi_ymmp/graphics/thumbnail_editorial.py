@@ -78,6 +78,48 @@ def prepare_brand_logo(
         return None
 
 
+def compose_dual_brand_logo(
+    left_logo: Path,
+    right_logo: Path,
+    out_path: Path,
+    target_h: int = 90,
+) -> Optional[Path]:
+    """Combine two official brand PNGs side-by-side ('left vs right') for dark-slate thumbnails."""
+    if not left_logo.exists() or not right_logo.exists():
+        return None
+
+    def _dark_mode(im: Image.Image) -> Image.Image:
+        im = im.convert("RGBA")
+        px = im.load()
+        for y in range(im.height):
+            for x in range(im.width):
+                r, g, b, a = px[x, y]
+                if a > 20 and max(r, g, b) < 150 and (max(r, g, b) - min(r, g, b)) < 25:
+                    px[x, y] = (245, 248, 255, a)
+        bbox = im.getbbox()
+        return im.crop(bbox) if bbox else im
+
+    with Image.open(left_logo) as l_raw, Image.open(right_logo) as r_raw:
+        l_im = _dark_mode(l_raw)
+        r_im = _dark_mode(r_raw)
+    l_r = l_im.resize((max(1, int(l_im.width * target_h / max(1, l_im.height))), target_h), Image.Resampling.LANCZOS)
+    r_r = r_im.resize((max(1, int(r_im.width * target_h / max(1, r_im.height))), target_h), Image.Resampling.LANCZOS)
+    gap, vs_w = 36, 80
+    canvas = Image.new("RGBA", (l_r.width + r_r.width + vs_w + gap * 2, target_h + 24), (0, 0, 0, 0))
+    canvas.paste(l_r, (0, 6), l_r)
+    draw = ImageDraw.Draw(canvas)
+    try:
+        font = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 46)
+    except Exception:
+        font = ImageFont.load_default()
+    vs_x = l_r.width + gap
+    draw.text((vs_x + 8, 22), "vs", font=font, fill=(250, 204, 21, 255))
+    canvas.paste(r_r, (vs_x + vs_w + gap, 14), r_r)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(out_path, "PNG")
+    return out_path
+
+
 def create_editorial_backdrop(
     w: int = 1920,
     h: int = 1080,
