@@ -230,7 +230,19 @@ def render_editorial_spotlight_layout(
 
     w, h = config.width, config.height
     accent = (217, 119, 87)  # Anthropic terracotta coral
-    canvas = create_editorial_backdrop(w, h, accent_rgb=accent, danger_rgb=(220, 38, 38))
+    bg_str = getattr(config, "bg_path", None)
+    if bg_str and Path(bg_str).exists():
+        with Image.open(bg_str) as bg_raw:
+            canvas = crop_portrait_focus(bg_raw, w, h, focus_y=0.45)
+        canvas = ImageEnhance.Brightness(canvas).enhance(0.55)
+        scrim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        sdraw = ImageDraw.Draw(scrim)
+        for gx in range(0, int(w * 0.72)):
+            alpha = int(165 * (1.0 - gx / (w * 0.72)))
+            sdraw.line([(gx, 0), (gx, h)], fill=(8, 12, 22, alpha))
+        canvas = Image.alpha_composite(canvas, scrim)
+    else:
+        canvas = create_editorial_backdrop(w, h, accent_rgb=accent, danger_rgb=(220, 38, 38))
 
     # 1. Optional subtle brand symbol watermark behind center-left
     symbol_path_str = getattr(config, "brand_symbol_path", None)
