@@ -433,13 +433,13 @@ class TestMockYouTubeAdapterAdversarial:
         assert len(adapter.thumbnail_history) == 1
         assert adapter.uploaded_thumbnails[video_id] == good_thumb
 
-        # Oversized file attempt (> 2MB)
+        # Oversized file attempt (> 50MB desktop limit)
         huge_thumb = tmp_path / "huge.png"
         with open(huge_thumb, "wb") as f:
             f.seek(THUMBNAIL_MAX_SIZE_BYTES)
             f.write(b"\0")
 
-        with pytest.raises(ValueError, match="exceeds YouTube 2MB limit"):
+        with pytest.raises(ValueError, match="exceeds YouTube 50MB desktop limit"):
             adapter.upload_thumbnail(video_id, huge_thumb)
 
         assert len(adapter.thumbnail_history) == 1
