@@ -605,8 +605,10 @@ class ProjectPipeline:
                 # Visual QA: previously validate_thumbnail_visual_qa had
                 # no production caller, so oversize / dead-zone-violating /
                 # low-contrast thumbnails passed silently. An oversize file
-                # (>2MB) is a hard error because YouTube rejects the upload;
-                # other QA failures are logged and kept in
+                # (>50MB, the desktop / Data API limit since Oct 2025) is a
+                # hard error because YouTube rejects the upload; exceeding
+                # the 2MB mobile-app limit is a warning only. Other QA
+                # failures are logged and kept in
                 # result.thumbnail_qa (the fail-closed gate is cli_qa).
                 try:
                     from veraxi_ymmp.graphics.thumbnail_composer import (
@@ -617,7 +619,7 @@ class ProjectPipeline:
                     _thumb_checks = ctx.result.thumbnail_qa.get("checks", {})
                     if not _thumb_checks.get("file_size_valid", True):
                         ctx.result.errors.append(
-                            "Thumbnail exceeds the 2MB YouTube limit: "
+                            "Thumbnail exceeds the 50MB YouTube desktop limit: "
                             f"{ctx.result.thumbnail_qa.get('file_size_bytes')} bytes"
                         )
                         ctx.result.thumbnail_path = None
@@ -632,6 +634,8 @@ class ProjectPipeline:
                             ctx.result.thumbnail_qa.get("score"),
                             ", ".join(failed),
                         )
+                    for _thumb_warning in ctx.result.thumbnail_qa.get("warnings", []):
+                        logger.warning("Thumbnail advisory: %s", _thumb_warning)
                 except Exception as qa_e:
                     logger.warning(f"Thumbnail visual QA failed to run: {qa_e}")
             except Exception as e:

@@ -310,7 +310,11 @@ class TestFeature2MultiVariantRendering:
 
         oversized_file = tmp_path / "oversized.png"
         oversized_file.write_bytes(b"x" * (2097152 + 1))
-        assert validate_thumbnail_file_size(oversized_file) is False
+        # Over the 2MB mobile-app limit it is still valid under the
+        # default 50MB desktop limit; the mobile limit only rejects
+        # when passed explicitly.
+        assert validate_thumbnail_file_size(oversized_file) is True
+        assert validate_thumbnail_file_size(oversized_file, max_bytes=2097152) is False
 
         nonexistent_file = tmp_path / "nonexistent.png"
         assert validate_thumbnail_file_size(nonexistent_file) is False

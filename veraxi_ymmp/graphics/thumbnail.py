@@ -18,6 +18,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+from veraxi_ymmp.core.constants import (
+    THUMBNAIL_DESKTOP_MAX_BYTES,
+    THUMBNAIL_MOBILE_MAX_BYTES,
+)
 from veraxi_ymmp.core.logging import logger
 from veraxi_ymmp.graphics.thumbnail_composer import validate_thumbnail_visual_qa  # noqa: F401
 
@@ -772,8 +776,8 @@ def generate_project_thumbnail(
     return generate_thumbnail(config or auto_extract_thumbnail_config(p_dir), final_out)
 
 
-def validate_thumbnail_file_size(file_path: Union[str, Path], max_bytes: int = 2097152) -> bool:
-    """Check that a thumbnail file exists and does not exceed max_bytes (default 2MB)."""
+def validate_thumbnail_file_size(file_path: Union[str, Path], max_bytes: int = THUMBNAIL_DESKTOP_MAX_BYTES) -> bool:
+    """Check that a thumbnail file exists and does not exceed max_bytes (default 50MB desktop limit)."""
     p = Path(file_path)
     return p.is_file() and p.stat().st_size <= max_bytes
 
@@ -805,7 +809,7 @@ def generate_thumbnail_variants(
     output_dir: Path,
     variant_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Path]:
-    """Generate distinct thumbnail variants, enforcing safe-zones and the <=2MB size limit."""
+    """Generate distinct thumbnail variants, enforcing safe-zones and the <=50MB desktop size limit."""
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     is_cfg_dict = isinstance(project_dir_or_config, dict) and all(isinstance(v, ThumbnailConfig) for v in project_dir_or_config.values())
@@ -819,7 +823,9 @@ def generate_thumbnail_variants(
         v_path = out_dir / f"thumbnail_{vid.lower()}.png"
         generate_thumbnail(cfg, v_path)
         if not validate_thumbnail_file_size(v_path):
-            logger.warning("Thumbnail variant %s (%s) exceeds 2MB limit: %d bytes", vid, v_path, v_path.stat().st_size)
+            logger.warning("Thumbnail variant %s (%s) exceeds the 50MB YouTube desktop limit: %d bytes", vid, v_path, v_path.stat().st_size)
+        elif not validate_thumbnail_file_size(v_path, max_bytes=THUMBNAIL_MOBILE_MAX_BYTES):
+            logger.warning("Thumbnail variant %s (%s) exceeds the 2MB mobile-app limit (desktop limit 50MB): %d bytes", vid, v_path, v_path.stat().st_size)
         results[vid] = v_path
     if "A" in results:
         p_dir = Path(project_dir_or_config).resolve() if isinstance(project_dir_or_config, (str, Path)) else None

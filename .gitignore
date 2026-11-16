@@ -91,6 +91,7 @@ client_secret*.json
 *youtube_token*.json
 .veraxi-ymmp/
 qa_reports/
+corpus/
 node_modules/
 dist/
 frontend/node_modules/

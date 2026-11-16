@@ -116,3 +116,69 @@ def test_variant_configs_are_generic(tmp_path: Path):
     assert variants["B"].layout != "vs_duel"
     assert variants["A"].theme == "gold"
     assert variants["B"].theme == "red"
+
+
+def test_visual_qa_above_mobile_limit_passes_with_warning(tmp_path: Path):
+    """A >2MB but <50MB master is uploadable on desktop/API (Oct 2025 rules).
+
+    Regression: the visual QA gate hard-failed any file over the old 2MB
+    limit, which is now only the mobile-app upload limit.
+    """
+    import random
+
+    random.seed(11)
+    img = Image.effect_noise((1920, 1080), 80).convert("RGB")
+    out_img = tmp_path / "big_master.png"
+    img.save(out_img)
+    size = out_img.stat().st_size
+    assert 2 * 1024 * 1024 < size < 50 * 1024 * 1024
+
+    report = validate_thumbnail_visual_qa(out_img)
+    assert report["checks"]["file_size_valid"] is True
+    assert any("mobile" in w for w in report["warnings"])
+
+
+def test_visual_qa_over_desktop_limit_fails(tmp_path: Path):
+    """The 50MB desktop limit remains a hard QA failure."""
+    img = Image.new("RGB", (1920, 1080), color=(10, 10, 10))
+    out_img = tmp_path / "small.png"
+    img.save(out_img)
+
+    report = validate_thumbnail_visual_qa(out_img, max_bytes=1024)
+    assert report["checks"]["file_size_valid"] is False
+    assert report["passed"] is False
+
+
+def test_generate_thumbnail_variants_logs_distinct_mobile_and_desktop_warnings(
+    tmp_path: Path, monkeypatch, caplog
+):
+    """Variant generation logs mobile advisory (>2MB) and desktop warning (>50MB) separately."""
+    import os
+    from veraxi_ymmp.core.constants import THUMBNAIL_DESKTOP_MAX_BYTES, THUMBNAIL_MOBILE_MAX_BYTES
+    from veraxi_ymmp.graphics import thumbnail as thumb_mod
+
+    cfg_a = ThumbnailConfig(title_line1="Test A", title_line2="Line 2")
+    cfg_b = ThumbnailConfig(title_line1="Test B", title_line2="Line 2")
+
+    def _fake_generate(cfg: ThumbnailConfig, out_path: Path) -> Path:
+        out_path.write_bytes(b"\0")
+        return out_path
+
+    orig_stat = Path.stat
+
+    def _fake_stat(self: Path, *args, **kwargs):
+        res = orig_stat(self, *args, **kwargs)
+        if self.name == "thumbnail_a.png":
+            return os.stat_result((res.st_mode, *res[1:6], THUMBNAIL_MOBILE_MAX_BYTES + 1024, *res[7:]))
+        if self.name == "thumbnail_b.png":
+            return os.stat_result((res.st_mode, *res[1:6], THUMBNAIL_DESKTOP_MAX_BYTES + 1024, *res[7:]))
+        return res
+
+    monkeypatch.setattr(thumb_mod, "generate_thumbnail", _fake_generate)
+    monkeypatch.setattr(Path, "stat", _fake_stat)
+    with caplog.at_level("WARNING"):
+        thumb_mod.generate_thumbnail_variants({"A": cfg_a, "B": cfg_b}, tmp_path)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("2MB mobile-app limit" in m and "variant A" in m for m in messages)
+    assert any("50MB YouTube desktop limit" in m and "variant B" in m for m in messages)

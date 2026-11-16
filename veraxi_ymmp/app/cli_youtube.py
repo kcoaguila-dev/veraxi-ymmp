@@ -488,7 +488,7 @@ def run(argv: List[str]) -> None:
     parser_upload.add_argument("--tags", type=str, default="", help="Comma-separated video tags")
     parser_upload.add_argument("--category-id", type=str, default="22", help="YouTube category ID (default: 22 / People & Blogs)")
     parser_upload.add_argument("--privacy", choices=["private", "unlisted", "public"], default="private", help="Video privacy status")
-    parser_upload.add_argument("--thumbnail", type=str, default=None, help="Path to custom thumbnail image (PNG/JPEG <= 2MB)")
+    parser_upload.add_argument("--thumbnail", type=str, default=None, help="Path to custom thumbnail image (PNG/JPEG <= 50MB; mobile app uploads <= 2MB)")
     parser_upload.add_argument("--publish-at", type=str, default=None, help="Scheduled publish time (ISO 8601 string, requires privacy=private)")
     parser_upload.add_argument("--mock", action="store_true", help="Run with MockYouTubeAdapter in offline mode")
 
