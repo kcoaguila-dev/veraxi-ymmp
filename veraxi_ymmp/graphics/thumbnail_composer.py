@@ -237,14 +237,20 @@ def audit_thumbnail_rule_of_three(config: Any) -> Dict[str, Any]:
 
 
 def discover_project_brand_logo(project_dir: Optional[Path]) -> Optional[str]:
-    """Find a brand logo asset in `sources/assets/` for automatic 3-element thumbnails."""
+    """Find a brand logo (or auto-compose 2 logos into a VS header) in `sources/assets/`."""
     if not project_dir or not project_dir.is_dir():
         return None
     assets_dir = project_dir / "sources" / "assets"
     if not assets_dir.is_dir():
         return None
     for pattern in ("*logo*.png", "*logo*.webp", "*logo*.jpg", "*symbol*.png"):
-        matches = sorted(assets_dir.glob(pattern))
+        matches = [m for m in sorted(assets_dir.glob(pattern)) if m.name != "_dual_vs_logo.png"]
+        if len(matches) >= 2 and pattern == "*logo*.png":
+            from veraxi_ymmp.graphics.thumbnail_editorial import compose_dual_brand_logo
+
+            dual_out = assets_dir / "_dual_vs_logo.png"
+            if compose_dual_brand_logo(matches[0], matches[1], dual_out):
+                return str(dual_out)
         if matches:
             return str(matches[0])
     return None
@@ -252,10 +258,13 @@ def discover_project_brand_logo(project_dir: Optional[Path]) -> Optional[str]:
 
 def audit_thumbnail_title_pairing(config: Any, youtube_title: str) -> Dict[str, Any]:
     """Check that thumbnail text complements the YouTube title instead of repeating it."""
-    get = (lambda k: config.get(k)) if isinstance(config, dict) else (lambda k: getattr(config, k, None))
-    t1 = str(get("title_line1") or "").strip()
-    t2 = str(get("title_line2") or "").strip()
-    thumb_text = f"{t1}{t2}".strip()
+    if isinstance(config, str):
+        thumb_text = config.strip()
+    else:
+        get = (lambda k: config.get(k)) if isinstance(config, dict) else (lambda k: getattr(config, k, None))
+        t1 = str(get("title_line1") or "").strip()
+        t2 = str(get("title_line2") or "").strip()
+        thumb_text = f"{t1}{t2}".strip()
     clean_title = youtube_title.strip()
 
     warnings: List[str] = []

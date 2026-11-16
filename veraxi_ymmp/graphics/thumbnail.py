@@ -778,6 +778,7 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
             theme="red",
             layout="editorial_spotlight",
             brand_logo_path=logo_path,
+            invert_brand_logo=not logo_path.endswith("_dual_vs_logo.png"),
         )
 
     return ThumbnailConfig(
