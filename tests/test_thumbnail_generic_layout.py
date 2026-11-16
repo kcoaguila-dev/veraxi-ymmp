@@ -116,3 +116,34 @@ def test_variant_configs_are_generic(tmp_path: Path):
     assert variants["B"].layout != "vs_duel"
     assert variants["A"].theme == "gold"
     assert variants["B"].theme == "red"
+
+
+def test_visual_qa_above_mobile_limit_passes_with_warning(tmp_path: Path):
+    """A >2MB but <50MB master is uploadable on desktop/API (Oct 2025 rules).
+
+    Regression: the visual QA gate hard-failed any file over the old 2MB
+    limit, which is now only the mobile-app upload limit.
+    """
+    import random
+
+    random.seed(11)
+    img = Image.effect_noise((1920, 1080), 80).convert("RGB")
+    out_img = tmp_path / "big_master.png"
+    img.save(out_img)
+    size = out_img.stat().st_size
+    assert 2 * 1024 * 1024 < size < 50 * 1024 * 1024
+
+    report = validate_thumbnail_visual_qa(out_img)
+    assert report["checks"]["file_size_valid"] is True
+    assert any("mobile" in w for w in report["warnings"])
+
+
+def test_visual_qa_over_desktop_limit_fails(tmp_path: Path):
+    """The 50MB desktop limit remains a hard QA failure."""
+    img = Image.new("RGB", (1920, 1080), color=(10, 10, 10))
+    out_img = tmp_path / "small.png"
+    img.save(out_img)
+
+    report = validate_thumbnail_visual_qa(out_img, max_bytes=1024)
+    assert report["checks"]["file_size_valid"] is False
+    assert report["passed"] is False
