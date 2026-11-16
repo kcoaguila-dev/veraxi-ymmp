@@ -2,7 +2,8 @@
 YouTube Thumbnail Composition Helpers for Veraxi YMMP
 Generic, topic-agnostic primitives shared by the thumbnail layouts:
 character sticker compositing (white rim + shadow) and the deterministic
-visual QA gate (dimensions, 2MB limit, timestamp dead-zone, mobile contrast).
+visual QA gate (dimensions, 50MB desktop size limit with a 2MB mobile-app
+advisory, timestamp dead-zone, mobile contrast).
 
 Clean Architecture compliant: Zero external API dependencies, zero hardcoded user paths.
 """
@@ -13,6 +14,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from PIL import Image, ImageFont, ImageFilter
 
+from veraxi_ymmp.core.constants import (
+    THUMBNAIL_DESKTOP_MAX_BYTES,
+    THUMBNAIL_MOBILE_MAX_BYTES,
+)
 from veraxi_ymmp.core.logging import logger
 
 FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
@@ -68,13 +73,15 @@ def render_character_sticker(
 
 def validate_thumbnail_visual_qa(
     image_path_or_img: Union[str, Path, Image.Image],
-    max_bytes: int = 2097152,
+    max_bytes: int = THUMBNAIL_DESKTOP_MAX_BYTES,
+    mobile_max_bytes: int = THUMBNAIL_MOBILE_MAX_BYTES,
 ) -> Dict[str, Any]:
     """
     Automated Visual Quality & Compliance Sentinel for YouTube Thumbnails.
     Performs rigorous checks:
     - 16:9 Aspect Ratio & Resolution (1920x1080)
-    - File Size <= 2MB
+    - File Size <= 50MB (YouTube desktop / Data API limit since Oct 2025);
+      exceeding the 2MB mobile-app limit is reported as a warning only
     - Bottom-Right Timestamp Dead-Zone (x: 1580..1920, y: 920..1080)
     - Mobile 150px Legibility & Edge Contrast
     - Mascot Visibility
@@ -106,13 +113,25 @@ def validate_thumbnail_visual_qa(
         score -= 25
         details.append(f"Invalid dimensions: {w}x{h} (expected 1920x1080 or 1280x720)")
 
-    # 2. File Size Check
+    # 2. File Size Check: the hard limit is the desktop / Data API limit
+    # (50MB). The 2MB mobile-app limit is advisory only — it must not
+    # fail the QA gate for a desktop/API-published master, so it is
+    # reported under "warnings" and never enters "checks" or the score.
+    warnings: List[str] = []
     if file_size <= max_bytes:
         checks["file_size_valid"] = True
     else:
         checks["file_size_valid"] = False
         score -= 30
-        details.append(f"File size {file_size} exceeds 2MB limit ({max_bytes})")
+        details.append(
+            f"File size {file_size} exceeds the {max_bytes // (1024 * 1024)}MB "
+            f"YouTube desktop limit ({max_bytes})"
+        )
+    if file_size > mobile_max_bytes:
+        warnings.append(
+            f"File size {file_size} exceeds the 2MB YouTube mobile-app "
+            "upload limit; desktop / API uploads accept up to 50MB"
+        )
 
     # 3. Timestamp Dead-Zone Safety Check
     # YouTube places duration banner in bottom-right corner (width ~340, height ~160)
@@ -153,6 +172,7 @@ def validate_thumbnail_visual_qa(
         "passed": passed,
         "checks": checks,
         "details": details,
+        "warnings": warnings,
         "resolution": f"{w}x{h}",
         "file_size_bytes": file_size,
     }
