@@ -175,7 +175,7 @@ def _audit_thumbnail(proj: Path) -> List[str]:
     【...】). Title lines and the sub-hook are prose, so brackets there
     are the AI-slop cliche the gate exists to catch. The rendered image
     itself is checked with validate_thumbnail_visual_qa (dimensions,
-    2MB limit, timestamp dead-zone, mobile contrast) — previously that
+    50MB desktop limit with 2MB mobile advisory, timestamp dead-zone, mobile contrast) — previously that
     QA existed but had no production caller.
     """
     thumb_path = proj / "thumbnail.png"
