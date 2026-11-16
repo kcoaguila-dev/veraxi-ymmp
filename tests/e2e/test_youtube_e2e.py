@@ -909,7 +909,7 @@ class TestTier2Feature3ThumbnailValidationBoundaries:
         adapter = MockYouTubeAdapter()
         with pytest.raises(ValueError) as exc:
             adapter.upload_thumbnail("vid_too_big", thumb_oversized)
-        assert "2MB" in str(exc.value)
+        assert "50MB" in str(exc.value)
 
     @pytest.mark.skip(reason='m2')
     def test_t2_f3_thumbnail_zero_byte_file(self, tmp_path: Path) -> None:
