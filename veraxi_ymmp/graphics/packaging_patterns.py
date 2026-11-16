@@ -104,6 +104,14 @@ def default_pattern_library() -> Dict[str, Any]:
         "anti_slop_phrases": list(DEFAULT_ANTI_SLOP_PHRASES),
         "title_archetypes": [dict(a) for a in DEFAULT_TITLE_ARCHETYPES],
         "layout_archetypes": [dict(a) for a in DEFAULT_LAYOUT_ARCHETYPES],
+        "thumbnail_visual_benchmark": {
+            "source_channels": ["ずんだMarket", "ずんだもんの企業栄枯盛衰"],
+            "scene_grounded_bg": True,
+            "recommended_thumb_chars": 8,
+            "zero_badge_overlay": True,
+            "dominant_text_colors": ["yellow", "white"],
+            "note": "Derived from inspecting top long-form Zundamon finance outliers (24k-42k views).",
+        },
         "recent_outlier_hooks": [],
     }
 
@@ -165,6 +173,39 @@ def _classify_title_trigger(title: str) -> str:
     return "curiosity"
 
 
+def _is_short_entry(row: Dict[str, Any]) -> bool:
+    """Return True if an outlier row is a YouTube Short (#shorts or <=60s)."""
+    if row.get("is_short"):
+        return True
+    title = str(row.get("title") or "").lower()
+    if "#shorts" in title or "#short" in title:
+        return True
+    dur = row.get("duration_sec")
+    return isinstance(dur, (int, float)) and 0 < dur <= 60
+
+
+def analyze_thumbnail_visuals(image_path: Path) -> Dict[str, Any]:
+    """Compute basic visual telemetry (luminance, saturation, edge density) for a rival thumbnail."""
+    from PIL import Image, ImageFilter, ImageStat
+
+    with Image.open(image_path) as img:
+        rgb = img.convert("RGB")
+        hsv = rgb.convert("HSV")
+        gray = rgb.convert("L")
+        edges = gray.filter(ImageFilter.FIND_EDGES)
+        mean_luma = round(float(ImageStat.Stat(gray).mean[0]), 1)
+        mean_sat = round(float(ImageStat.Stat(hsv).mean[1]), 1)
+        edge_density = round(float(ImageStat.Stat(edges).mean[0]), 1)
+        return {
+            "width": rgb.width,
+            "height": rgb.height,
+            "mean_luminance": mean_luma,
+            "mean_saturation": mean_sat,
+            "edge_density": edge_density,
+            "scene_rich": edge_density >= 18.0 and mean_luma >= 45.0,
+        }
+
+
 def extract_patterns_from_corpus(
     corpus: Dict[str, Any],
     existing: Optional[Dict[str, Any]] = None,
@@ -173,10 +214,12 @@ def extract_patterns_from_corpus(
     """Mine title & packaging trend signals from an outlier corpus dict."""
     now = now_dt or datetime.now(timezone.utc)
     lib = json.loads(json.dumps(existing)) if isinstance(existing, dict) else default_pattern_library()
-    outliers = [o for o in (corpus.get("outliers") or []) if isinstance(o, dict)]
-    if not outliers:
+    all_outliers = [o for o in (corpus.get("outliers") or []) if isinstance(o, dict)]
+    if not all_outliers:
         lib["updated_at"] = now.isoformat()
         return lib
+    longform = [o for o in all_outliers if not _is_short_entry(o)]
+    outliers = longform if longform else all_outliers
 
     total_w = 0.0
     bracket_w = 0.0

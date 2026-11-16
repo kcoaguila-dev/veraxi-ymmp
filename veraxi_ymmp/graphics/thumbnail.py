@@ -23,7 +23,12 @@ from veraxi_ymmp.core.constants import (
     THUMBNAIL_MOBILE_MAX_BYTES,
 )
 from veraxi_ymmp.core.logging import logger
-from veraxi_ymmp.graphics.thumbnail_composer import validate_thumbnail_visual_qa  # noqa: F401
+from veraxi_ymmp.graphics.thumbnail_composer import (  # noqa: F401
+    audit_thumbnail_rule_of_three,
+    audit_thumbnail_title_pairing,
+    discover_project_brand_logo,
+    validate_thumbnail_visual_qa,
+)
 
 
 FontType = Union[ImageFont.FreeTypeFont, ImageFont.ImageFont]
@@ -369,6 +374,10 @@ def generate_thumbnail(config: ThumbnailConfig, out_path: Union[str, Path]) -> P
     """
     out_file = Path(out_path).resolve()
     out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    r3 = audit_thumbnail_rule_of_three(config)
+    for w_msg in r3["warnings"]:
+        logger.warning(w_msg)
 
     w, h = config.width, config.height
     theme_colors = THEMES.get(config.theme, THEMES["gold"])
@@ -738,23 +747,44 @@ def auto_extract_thumbnail_config(project_dir_or_script: Union[str, Path, list])
                 **extra_keys,
             )
 
-    # General Fallback
+    # General Fallback (prefer 3-element editorial_spotlight when brand logo exists)
     title1 = "ヤバすぎる"
     title2 = "衝撃の真実！？"
     highlight = "衝撃の真実"
-    sub_hook = ""
-
-    if dir_name:
+    if broll_manifest:
+        first_slide = broll_manifest[0]
+        s_title = str(first_slide.get("title") or "").strip()
+        s_hero = str(first_slide.get("hero_metric") or "").strip()
+        if s_title and len(s_title) <= 10:
+            title1 = s_title
+        if s_hero and len(s_hero) <= 12:
+            title2 = s_hero
+            highlight = s_hero
+    elif dir_name:
         clean_name = dir_name.replace("_", " ").title()
-        title1 = clean_name[:6]
+        title1 = clean_name[:8]
         title2 = "徹底解明！？"
         highlight = "徹底解明"
+
+    logo_path = discover_project_brand_logo(proj_dir)
+    if logo_path:
+        return ThumbnailConfig(
+            title_line1=title1,
+            title_line2=title2,
+            highlight_word=highlight,
+            badge="",
+            character=lead_char,
+            emotion=best_emotion,
+            theme="red",
+            layout="editorial_spotlight",
+            brand_logo_path=logo_path,
+        )
 
     return ThumbnailConfig(
         title_line1=title1,
         title_line2=title2,
         highlight_word=highlight,
-        sub_hook=sub_hook,
+        sub_hook="",
         badge="【完全解説】",
         character=lead_char,
         emotion=best_emotion,
@@ -772,8 +802,20 @@ def generate_project_thumbnail(
     p_dir = Path(project_dir).resolve()
     if not p_dir.exists():
         raise FileNotFoundError(f"Project directory '{project_dir}' not found.")
+    final_cfg = config or auto_extract_thumbnail_config(p_dir)
+    yt_meta = p_dir / "youtube_metadata.json"
+    if yt_meta.exists():
+        try:
+            meta = json.loads(yt_meta.read_text(encoding="utf-8-sig"))
+            yt_title = str(meta.get("title") or "").strip()
+            if yt_title:
+                pairing = audit_thumbnail_title_pairing(final_cfg, yt_title)
+                for w_msg in pairing["warnings"]:
+                    logger.warning(w_msg)
+        except Exception:
+            pass
     final_out = Path(out_path) if out_path else p_dir / "thumbnail.png"
-    return generate_thumbnail(config or auto_extract_thumbnail_config(p_dir), final_out)
+    return generate_thumbnail(final_cfg, final_out)
 
 
 def validate_thumbnail_file_size(file_path: Union[str, Path], max_bytes: int = THUMBNAIL_DESKTOP_MAX_BYTES) -> bool:

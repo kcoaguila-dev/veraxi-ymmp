@@ -136,7 +136,8 @@ Inspect the generated frames in `projects/<slug>/qa_frames/` and `projects/<slug
   - Multi-entity temporal parity via `CanonicalPeriod`
 - **Editorial Typography & Retention Linting (`editorial/`):**
   - Google `budoux` Japanese phrase segmentation that protects inline `{Kanji|ruby}` tags (`<= 40` visible chars/cut, `<= 2` lines/bubble)
-  - Retention pacing linter targeting `>= 80/100`: zero-greeting cold open, `image: null` in Cuts `0..2`, 50/30/20 cast ratio (`四国めたん` / `ずんだもん` / `春日部つむぎ`) with mid-roll 3rd-speaker entrance (`30%–50%`), and `>= 5%` micro-reaction cuts (`<= 12` chars)
+  - Retention pacing linter targeting `>= 80/100`: zero-greeting cold open, `image: null` in Cuts `0..2`, 50/30/20 cast ratio (`四国めたん` / `ずんだもん` / `春日部つむぎ`) with mid-roll 3rd-speaker entrance (`30%–50%`), `>= 5%` micro-reaction cuts (`<= 12` chars), and a **numeric-density cognitive-load gate** (flags `> 25%`–`35%` numeric cuts, `> 4` consecutive data lines, and multi-number bubbles)
+  - Free, open-source **Rival Transcript Benchmarking** (`veraxi-ymmp benchmark`) comparing your script's numeric density and hook latency against rival `.srt`/`.vtt` subtitles or YouTube URLs
 - **Audio, Phonetics & Loudness (`audio/`):**
   - VOICEVOX TTS synthesis with `hatsuon` pitch-accent and reading overrides
   - FFmpeg EBU R128 loudness normalization (`-14.0 LUFS` YouTube, `-13.0 LUFS` TikTok/Instagram, broadcast targets)
@@ -356,6 +357,36 @@ veraxi-ymmp youtube ab commit --project projects/<slug>/ --video-id <VIDEO_ID>
 
 ---
 
+## Rival Benchmarking & Cognitive-Load Check (Free / Open-Source)
+
+Avoid overloading viewers with back-to-back financial figures by benchmarking against top-performing rival videos using free, open-source tools (no paid SaaS subscriptions required):
+
+1. **Find outlier rival videos (free YouTube Data API v3):**
+   ```bash
+   veraxi-ymmp corpus --channels @RivalChannel1,@RivalChannel2 --out tmp/corpus
+   ```
+   Computes each channel's baseline views and ranks outlier videos (`>= 3x`–`5x` above baseline) alongside their thumbnails.
+
+2. **Pull rival transcripts (with `yt-dlp` or `youtube-transcript-api`):**
+   ```bash
+   yt-dlp --skip-download --write-sub --write-auto-sub --sub-format srt "https://www.youtube.com/watch?v=<VIDEO_ID>" -o "tmp/%(id)s.%(ext)s"
+   ```
+
+3. **Benchmark rival pacing & numeric density against your project:**
+   ```bash
+   veraxi-ymmp benchmark tmp/*.srt --project projects/<slug>/
+   ```
+   Or pass YouTube URLs/IDs directly when `youtube-transcript-api` or `yt-dlp` is installed:
+   ```bash
+   veraxi-ymmp benchmark "https://www.youtube.com/watch?v=<VIDEO_ID>" --project projects/<slug>/
+   ```
+   Outputs a side-by-side table comparing **% of cuts with numbers**, **numbers per minute**, **max consecutive numeric streak**, **first-number hook latency (seconds)**, and **30s hook previews**.
+
+4. **Automatic script lint:**
+   `veraxi-ymmp validate projects/<slug>/script.json --audit-pacing` automatically flags `NUMERIC_OVERLOAD` (`> 25%` warning, `> 35%` error), `NUMERIC_STREAK_FATIGUE` (`> 4` consecutive data cuts), and `MULTI_NUMBER_BUBBLES`.
+
+---
+
 ## CLI Reference
 
 | Command | Usage | Description |
@@ -377,6 +408,8 @@ veraxi-ymmp youtube ab commit --project projects/<slug>/ --video-id <VIDEO_ID>
 | `veraxi-ymmp apply` | `veraxi-ymmp apply <reply.md> --manifest <manifest.json>` | Applies full-file web-chat replies with safety guards. |
 | `veraxi-ymmp apply-edit` | `veraxi-ymmp apply-edit <reply.md>` | Applies anchored `SEARCH/REPLACE` web-chat edit blocks atomically. |
 | `veraxi-ymmp youtube` | `veraxi-ymmp youtube <auth\|channel\|upload\|status\|stats\|qa\|ab>` | YouTube OAuth, upload, analytics, retention QA, and A/B testing. |
+| `veraxi-ymmp corpus` | `veraxi-ymmp corpus --channels @handle --out <dir>` | Builds a local outlier video + thumbnail corpus via YouTube Data API v3. |
+| `veraxi-ymmp benchmark` | `veraxi-ymmp benchmark <srt\|url...> [--project <dir>]` | Benchmarks rival transcripts' numeric density and hook latency vs. a project. |
 | `veraxi-ymmp export-spec` | `veraxi-ymmp export-spec` | Exports schema and prompt templates for LLM consumption. |
 | `veraxi-ymmp capture` / `capture-sec` | `veraxi-ymmp capture ...` | Screen and SEC filing capture utilities. |
 | `veraxi-ymmp-mcp` | `veraxi-ymmp-mcp` | Starts the MCP server over STDIO. |

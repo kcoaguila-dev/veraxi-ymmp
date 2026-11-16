@@ -821,6 +821,12 @@ def audit_script_pacing(
                 )
             )
 
+    from veraxi_ymmp.editorial.rival_benchmark import audit_script_numeric_density
+
+    _, numeric_violations = audit_script_numeric_density(dialogue_entries)
+    for nv in numeric_violations:
+        violations.append(PacingRuleViolation(**nv))
+
     # Calculate overall retention health score (100 base, subtract penalties)
     score = 100
     for v in violations:

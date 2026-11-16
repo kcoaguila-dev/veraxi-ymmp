@@ -201,32 +201,35 @@ def render_editorial_spotlight_layout(
             sym_faded = Image.merge("RGBA", (r, g, b, a))
             canvas.paste(sym_faded, (780, 170), sym_faded)
 
-    # 2. Right-side Mascot Sticker (single high-emotion reaction)
+    subject_str = getattr(config, "subject_image_path", None)
+    has_subject = bool(subject_str and Path(subject_str).exists())
+
+    # 2. Right-side Mascot Sticker (single high-emotion close-up reaction)
     char_name = getattr(config, "character", "ずんだもん") or "ずんだもん"
     char_emo = getattr(config, "emotion", "surprised") or "surprised"
     char_mouth = getattr(config, "mouth_open", True)
     char_path = resolve_character_face(char_name, char_emo, char_mouth)
-    char_left_x = w - 580
+    char_left_x = w - 620
 
     if char_path and char_path.exists():
+        base_h = 1380 if has_subject else 1880
         sticker = render_character_sticker(
             char_path,
-            target_h=int(1380 * getattr(config, "character_scale", 1.0)),
-            stroke_width=20,
+            target_h=int(base_h * getattr(config, "character_scale", 1.0)),
+            stroke_width=22,
             flip=False,
         )
         if sticker:
-            cx = w - sticker["width"] + 140
-            cy = 70
+            cx = w - sticker["width"] + (140 if has_subject else 220)
+            cy = 70 if has_subject else 30
             canvas.paste(sticker["shadow"], (cx - 14, cy + 20), sticker["shadow"])
             canvas.paste(sticker["rim"], (cx, cy), sticker["rim"])
             canvas.paste(sticker["resized"], (cx, cy), sticker["resized"])
-            char_left_x = max(1120, cx + 60)
+            char_left_x = max(1060, cx + 60)
 
     # 3. Left-top Subject Anchor Card (CEO Portrait / Real Subject Photo)
-    subject_str = getattr(config, "subject_image_path", None)
     card_x, card_y, card_w, card_h = 70, 65, 500, 470
-    if subject_str and Path(subject_str).exists():
+    if has_subject:
         _draw_rounded_card_photo(
             canvas,
             Path(subject_str),
@@ -238,15 +241,15 @@ def render_editorial_spotlight_layout(
             font_index=font_index,
         )
 
-    # 4. Brand Logo & Stat Callout Panel (top-center next to portrait)
-    panel_x = card_x + card_w + 42 if (subject_str and Path(subject_str).exists()) else 70
+    # 4. Brand Logo & Stat Callout Panel (top-center next to portrait, or top-left)
+    panel_x = card_x + card_w + 42 if has_subject else 70
     panel_max_w = max(360, char_left_x - panel_x - 30)
     draw = ImageDraw.Draw(canvas)
-    _draw_brand_and_badges(canvas, draw, config, panel_x, panel_max_w, font_path, font_index)
+    _draw_brand_and_badges(canvas, draw, config, panel_x, panel_max_w, font_path, font_index, compact=has_subject)
 
-    # 5. Colossal 2-Line Power Hook (Lower-Left, strictly auto-fitted so ZERO clipping)
+    # 5. Colossal 2-Line Power Hook (auto-fitted, fills left canvas when no subject card)
     headline_max_w = max(500, char_left_x - 70 - 30)
-    _draw_editorial_headline(draw, config, headline_max_w, font_path, font_index)
+    _draw_editorial_headline(draw, config, headline_max_w, font_path, font_index, has_subject=has_subject)
     return canvas
 
 
@@ -258,17 +261,18 @@ def _draw_brand_and_badges(
     panel_max_w: int,
     font_path: Optional[str],
     font_index: int,
+    compact: bool = True,
 ) -> None:
     """Renders the brand wordmark, eyebrow pill, and optional stat callout."""
     from veraxi_ymmp.graphics.thumbnail import fit_font_to_width
 
-    cur_y = 75
+    cur_y = 75 if compact else 95
     brand_str = getattr(config, "brand_logo_path", None)
     if brand_str and Path(brand_str).exists():
         logo_img = prepare_brand_logo(
             Path(brand_str),
-            max_w=min(560, panel_max_w),
-            max_h=88,
+            max_w=min(560 if compact else 760, panel_max_w),
+            max_h=88 if compact else 140,
             invert_to_white=bool(getattr(config, "invert_brand_logo", True)),
         )
         if logo_img:
@@ -313,6 +317,7 @@ def _draw_editorial_headline(
     headline_max_w: int,
     font_path: Optional[str],
     font_index: int,
+    has_subject: bool = True,
 ) -> None:
     """Renders the 2-line auto-fitted Fukuro headline with keyword jump-rate."""
     from veraxi_ymmp.graphics.thumbnail import draw_fukuro_text, fit_font_to_width
@@ -321,15 +326,17 @@ def _draw_editorial_headline(
     t2 = getattr(config, "title_line2", "") or ""
     hl = (getattr(config, "highlight_word", "") or "").strip()
 
-    y_line1 = 560
+    y_line1 = 560 if has_subject else 340
+    max_s1 = 170 if has_subject else 260
     if t1:
-        f1, s1 = fit_font_to_width(t1, 170, headline_max_w, font_path, font_index)
+        f1, s1 = fit_font_to_width(t1, max_s1, headline_max_w, font_path, font_index)
         sw1 = max(14, int(s1 * 0.14))
         draw_fukuro_text(draw, (70, y_line1), t1, f1, fill_color=(255, 255, 255, 255), stroke_w=sw1)
 
-    y_line2 = 760
+    y_line2 = 760 if has_subject else 620
+    max_s2 = 200 if has_subject else 290
     if t2:
-        f2, s2 = fit_font_to_width(t2, 200, headline_max_w, font_path, font_index, hl_word=hl)
+        f2, s2 = fit_font_to_width(t2, max_s2, headline_max_w, font_path, font_index, hl_word=hl)
         sw2 = max(16, int(s2 * 0.14))
         if hl and hl in t2:
             prefix, suffix = t2.split(hl, 1)

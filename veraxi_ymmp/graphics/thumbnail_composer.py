@@ -176,3 +176,121 @@ def validate_thumbnail_visual_qa(
         "resolution": f"{w}x{h}",
         "file_size_bytes": file_size,
     }
+
+
+def audit_thumbnail_rule_of_three(config: Any) -> Dict[str, Any]:
+    """Enforce the YouTube Thumbnail Rule of 3 (<= 3 foreground visual elements).
+
+    Counts distinct foreground elements in a ThumbnailConfig or dict:
+    1. character cutout
+    2. headline text block (title_line1 / title_line2)
+    3. subject_image_path (extra face/object)
+    4. subject_caption
+    5. brand_logo_path
+    6. brand_symbol_path
+    7. eyebrow_text / badge
+    8. sub_hook / stat_callout / metric_highlight
+    """
+    get = (lambda k: config.get(k)) if isinstance(config, dict) else (lambda k: getattr(config, k, None))
+    elements: List[str] = []
+    if str(get("character") or "").strip():
+        elements.append("character")
+    if str(get("title_line1") or "").strip() or str(get("title_line2") or "").strip():
+        elements.append("headline")
+    if str(get("subject_image_path") or "").strip():
+        elements.append("subject_image")
+    if str(get("subject_caption") or "").strip():
+        elements.append("subject_caption")
+    if str(get("brand_logo_path") or "").strip():
+        elements.append("brand_logo")
+    if str(get("brand_symbol_path") or "").strip():
+        elements.append("brand_symbol")
+
+    layout = str(get("layout") or "classic_split")
+    has_eyebrow = bool(str(get("eyebrow_text") or "").strip())
+    has_badge = bool(str(get("badge") or "").strip()) and layout != "editorial_spotlight"
+    if has_eyebrow or has_badge:
+        elements.append("eyebrow_or_badge")
+
+    if any(str(get(k) or "").strip() for k in ("sub_hook", "stat_callout", "metric_highlight")):
+        elements.append("sub_hook_or_stat")
+
+    headline_chars = len(str(get("title_line1") or "").strip()) + len(str(get("title_line2") or "").strip())
+    passed = len(elements) <= 3
+    warnings: List[str] = []
+    if not passed:
+        warnings.append(
+            f"Thumbnail Rule-of-3 violated: {len(elements)} foreground elements ({', '.join(elements)}). "
+            "Strip logos, captions, and extra badges down to <= 3 elements for mobile CTR."
+        )
+    if headline_chars > 16:
+        warnings.append(
+            f"Thumbnail headline is {headline_chars} chars (recommended <= 16 chars for 0.5s mobile readability)."
+        )
+    return {
+        "passed": passed,
+        "element_count": len(elements),
+        "elements": elements,
+        "headline_chars": headline_chars,
+        "warnings": warnings,
+    }
+
+
+def discover_project_brand_logo(project_dir: Optional[Path]) -> Optional[str]:
+    """Find a brand logo asset in `sources/assets/` for automatic 3-element thumbnails."""
+    if not project_dir or not project_dir.is_dir():
+        return None
+    assets_dir = project_dir / "sources" / "assets"
+    if not assets_dir.is_dir():
+        return None
+    for pattern in ("*logo*.png", "*logo*.webp", "*logo*.jpg", "*symbol*.png"):
+        matches = sorted(assets_dir.glob(pattern))
+        if matches:
+            return str(matches[0])
+    return None
+
+
+def audit_thumbnail_title_pairing(config: Any, youtube_title: str) -> Dict[str, Any]:
+    """Check that thumbnail text complements the YouTube title instead of repeating it."""
+    get = (lambda k: config.get(k)) if isinstance(config, dict) else (lambda k: getattr(config, k, None))
+    t1 = str(get("title_line1") or "").strip()
+    t2 = str(get("title_line2") or "").strip()
+    thumb_text = f"{t1}{t2}".strip()
+    clean_title = youtube_title.strip()
+
+    warnings: List[str] = []
+    overlap_ratio = 0.0
+    if thumb_text and clean_title:
+        if len(thumb_text) >= 6 and thumb_text in clean_title:
+            overlap_ratio = 1.0
+            warnings.append(
+                f"Thumbnail headline '{thumb_text}' repeats the YouTube title verbatim. "
+                "Use the thumbnail for a short visual hook and the title for context."
+            )
+        else:
+            # Character-bigram Jaccard / containment check works cleanly for Japanese & English
+            def _bigrams(s: str) -> set[str]:
+                s_clean = "".join(s.split())
+                return {s_clean[i : i + 2] for i in range(max(0, len(s_clean) - 1))}
+
+            tb = _bigrams(thumb_text)
+            yb = _bigrams(clean_title)
+            if tb and yb:
+                overlap_ratio = len(tb & yb) / len(tb)
+                if overlap_ratio >= 0.65:
+                    warnings.append(
+                        f"Thumbnail headline overlaps {overlap_ratio:.0%} with YouTube title '{clean_title[:30]}...'. "
+                        "Differentiate the thumbnail hook from the title to maximize curiosity gap."
+                    )
+
+    if len(clean_title) > 55:
+        warnings.append(
+            f"YouTube title is {len(clean_title)} chars (recommended <= 55 chars to avoid mobile feed truncation)."
+        )
+
+    return {
+        "passed": len(warnings) == 0,
+        "overlap_ratio": round(overlap_ratio, 2),
+        "title_chars": len(clean_title),
+        "warnings": warnings,
+    }

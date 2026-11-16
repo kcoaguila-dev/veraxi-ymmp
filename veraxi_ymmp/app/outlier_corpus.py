@@ -515,3 +515,53 @@ def cmd_corpus(argv: List[str]) -> None:
     print(f"  Outliers (>={args.min_ratio}x): {len(corpus['outliers'])}")
     for row in corpus["outliers"][:10]:
         print(f"    {row['ratio_vs_mean']:.1f}x  {row['views']:,} views  {row['title']}")
+
+
+def cmd_benchmark(argv: list[str]) -> None:
+    """CLI handler for `veraxi-ymmp benchmark` (rival transcript & numeric density)."""
+    from veraxi_ymmp.editorial.rival_benchmark import (
+        analyze_numeric_density,
+        benchmark_rival_source,
+        format_benchmark_comparison_markdown,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="veraxi-ymmp benchmark",
+        description=(
+            "Benchmark rival video transcripts (.srt/.vtt/.txt or YouTube URLs via "
+            "youtube-transcript-api/yt-dlp) against a local project's script.json."
+        ),
+    )
+    parser.add_argument("targets", nargs="*", help="Rival .srt/.vtt/.txt files or YouTube URLs/IDs")
+    parser.add_argument("--project", help="Local project dir or script.json to compare against")
+    parser.add_argument("--out", help="Optional Markdown file path to save the report")
+    args = parser.parse_args(argv)
+
+    if not args.targets and not args.project:
+        parser.error("Provide at least one rival target or --project.")
+
+    project_name: Optional[str] = None
+    project_density = None
+    if args.project:
+        p = Path(args.project)
+        script_path = p / "script.json" if p.is_dir() else p
+        if not script_path.exists():
+            print(f"benchmark: error: script not found: {script_path}", file=sys.stderr)
+            raise SystemExit(2)
+        project_name = script_path.parent.name
+        cuts = json.loads(script_path.read_text(encoding="utf-8"))
+        project_density = analyze_numeric_density([(str(c.get("text", "")), None, None) for c in cuts])
+
+    rivals = []
+    for t in args.targets:
+        try:
+            rivals.append(benchmark_rival_source(t))
+        except Exception as exc:
+            print(f"benchmark: error processing {t}: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+
+    md = format_benchmark_comparison_markdown(project_name, project_density, rivals)
+    if args.out:
+        Path(args.out).write_text(md, encoding="utf-8")
+        print(f"Benchmark report written: {args.out}")
+    print(md)
