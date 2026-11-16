@@ -147,3 +147,38 @@ def test_visual_qa_over_desktop_limit_fails(tmp_path: Path):
     report = validate_thumbnail_visual_qa(out_img, max_bytes=1024)
     assert report["checks"]["file_size_valid"] is False
     assert report["passed"] is False
+
+
+def test_generate_thumbnail_variants_logs_distinct_mobile_and_desktop_warnings(
+    tmp_path: Path, monkeypatch, caplog
+):
+    """Variant generation logs mobile advisory (>2MB) and desktop warning (>50MB) separately."""
+    import os
+    from veraxi_ymmp.core.constants import THUMBNAIL_DESKTOP_MAX_BYTES, THUMBNAIL_MOBILE_MAX_BYTES
+    from veraxi_ymmp.graphics import thumbnail as thumb_mod
+
+    cfg_a = ThumbnailConfig(title_line1="Test A", title_line2="Line 2")
+    cfg_b = ThumbnailConfig(title_line1="Test B", title_line2="Line 2")
+
+    def _fake_generate(cfg: ThumbnailConfig, out_path: Path) -> Path:
+        out_path.write_bytes(b"\0")
+        return out_path
+
+    orig_stat = Path.stat
+
+    def _fake_stat(self: Path, *args, **kwargs):
+        res = orig_stat(self, *args, **kwargs)
+        if self.name == "thumbnail_a.png":
+            return os.stat_result((res.st_mode, *res[1:6], THUMBNAIL_MOBILE_MAX_BYTES + 1024, *res[7:]))
+        if self.name == "thumbnail_b.png":
+            return os.stat_result((res.st_mode, *res[1:6], THUMBNAIL_DESKTOP_MAX_BYTES + 1024, *res[7:]))
+        return res
+
+    monkeypatch.setattr(thumb_mod, "generate_thumbnail", _fake_generate)
+    monkeypatch.setattr(Path, "stat", _fake_stat)
+    with caplog.at_level("WARNING"):
+        thumb_mod.generate_thumbnail_variants({"A": cfg_a, "B": cfg_b}, tmp_path)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("2MB mobile-app limit" in m and "variant A" in m for m in messages)
+    assert any("50MB YouTube desktop limit" in m and "variant B" in m for m in messages)

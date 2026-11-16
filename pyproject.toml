@@ -71,7 +71,7 @@ capture = [
     "playwright>=1.40.0",
 ]
 youtube = [
-    "google-api-python-client>=2.100",
+    "google-api-python-client>=2.200",
     "google-auth>=2.20",
     "google-auth-oauthlib>=1.0",
     "google-auth-httplib2>=0.2"
