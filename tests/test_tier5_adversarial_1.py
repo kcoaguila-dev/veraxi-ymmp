@@ -577,25 +577,31 @@ class TestThumbnailAdversarialAndBoundaries:
     """Stress tests for thumbnail size limits, formats, corrupt payloads, and missing files."""
 
     def test_thumbnail_at_exact_2mb_boundary(self, tmp_path: Path) -> None:
-        """File at exactly 2,097,152 bytes (2 MB limit) passes."""
+        """File at exactly THUMBNAIL_MAX_SIZE_BYTES (50MB desktop limit) passes."""
         exact_thumb = tmp_path / "exact_limit.png"
-        exact_thumb.write_bytes(b"\x00" * THUMBNAIL_MAX_SIZE_BYTES)
+        # Sparse write: the adapter only stats the size, so don't
+        # materialize THUMBNAIL_MAX_SIZE_BYTES (50MB) of zeros on disk.
+        with open(exact_thumb, "wb") as f:
+            f.seek(THUMBNAIL_MAX_SIZE_BYTES - 1)
+            f.write(b"\0")
 
         adapter = MockYouTubeAdapter()
         assert adapter.upload_thumbnail("vid_exact", exact_thumb) is True
 
     def test_thumbnail_at_2mb_plus_one_byte_raises(self, tmp_path: Path) -> None:
-        """File at 2,097,153 bytes (2 MB + 1 byte) strictly rejected with ValueError."""
+        """File at THUMBNAIL_MAX_SIZE_BYTES + 1 byte strictly rejected with ValueError."""
         oversized = tmp_path / "oversized.png"
-        oversized.write_bytes(b"\x00" * (THUMBNAIL_MAX_SIZE_BYTES + 1))
+        with open(oversized, "wb") as f:
+            f.seek(THUMBNAIL_MAX_SIZE_BYTES)
+            f.write(b"\0")
 
         adapter = MockYouTubeAdapter()
         with pytest.raises(ValueError) as exc_info:
             adapter.upload_thumbnail("vid_oversized", oversized)
-        assert "exceeds YouTube 2MB limit" in str(exc_info.value)
+        assert "exceeds YouTube 50MB desktop limit" in str(exc_info.value)
 
     def test_zero_byte_thumbnail(self, tmp_path: Path) -> None:
-        """Zero-byte thumbnail file passes size ceiling check (0 <= 2MB)."""
+        """Zero-byte thumbnail file passes size ceiling check (0 <= 50MB)."""
         empty_thumb = tmp_path / "empty_thumb.png"
         empty_thumb.write_bytes(b"")
 
