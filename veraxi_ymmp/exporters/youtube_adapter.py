@@ -3,7 +3,7 @@
 Provides:
 - YouTubeAdapter: Production adapter implementing VideoPublisher and VideoAnalyticsProvider
   with resumable chunked video upload, exponential backoff retry on HTTP 5xx,
-  thumbnail upload with 2MB validation, and OAuth2 token discovery.
+  thumbnail upload with 50MB validation, and OAuth2 token discovery.
 - MockYouTubeAdapter: Pure standard library mock adapter implementing VideoPublisher
   and VideoAnalyticsProvider for 100% offline testing with deterministic chunk simulation,
   failure injection, and synthetic retention curves.
@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from veraxi_ymmp.core.constants import THUMBNAIL_DESKTOP_MAX_BYTES
 from veraxi_ymmp.core.logging import logger
 from veraxi_ymmp.core.ports import (
     ProgressCallback,
@@ -32,7 +33,7 @@ from veraxi_ymmp.core.ports import (
 CHUNK_SIZE_DEFAULT: int = 8 * 1024 * 1024  # 8 MB (32 * 256 KB)
 MOCK_CHUNK_SIZE_DEFAULT: int = 1 * 1024 * 1024  # 1 MB (4 * 256 KB)
 CHUNK_MULTIPLE: int = 256 * 1024  # 256 KB YouTube required chunk multiple
-THUMBNAIL_MAX_SIZE_BYTES: int = 2 * 1024 * 1024  # 2 MB YouTube thumbnail limit
+THUMBNAIL_MAX_SIZE_BYTES: int = THUMBNAIL_DESKTOP_MAX_BYTES  # 50 MB desktop / API limit (Oct 2025); the 2 MB limit applies only to mobile-app uploads
 MAX_RETRIES_DEFAULT: int = 5
 BASE_RETRY_DELAY: float = 1.0
 MAX_RETRY_DELAY: float = 60.0
@@ -84,7 +85,7 @@ class YouTubeAdapter:
     Implements VideoPublisher and VideoAnalyticsProvider protocols with:
     - Lazy loading of googleapiclient and google.oauth2
     - Resumable chunked upload with exponential backoff on HTTP 5xx
-    - Named keyword arguments for thumbnail upload with 2MB validation
+    - Named keyword arguments for thumbnail upload with 50MB validation
     - Multi-stage OAuth2 / token discovery without hardcoded secrets
     """
 
@@ -337,13 +338,13 @@ class YouTubeAdapter:
         )
 
     def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
-        """Upload custom thumbnail for a video with keyword arguments and 2MB validation."""
+        """Upload custom thumbnail for a video with keyword arguments and 50MB validation."""
         if not thumbnail_path.exists():
             raise FileNotFoundError(f"Thumbnail not found: {thumbnail_path}")
 
         file_size = thumbnail_path.stat().st_size
         if file_size > THUMBNAIL_MAX_SIZE_BYTES:
-            raise ValueError(f"Thumbnail size ({file_size} bytes) exceeds YouTube 2MB limit.")
+            raise ValueError(f"Thumbnail size ({file_size} bytes) exceeds YouTube 50MB desktop limit.")
 
         MediaFileUpload = self._get_media_file_upload_cls()
 
@@ -733,13 +734,13 @@ class MockYouTubeAdapter:
             )
 
     def upload_thumbnail(self, video_id: str, thumbnail_path: Path) -> bool:
-        """Simulate thumbnail upload with 2MB validation and history logging."""
+        """Simulate thumbnail upload with 50MB validation and history logging."""
         self.call_log.append(f"upload_thumbnail:{video_id}")
         if not thumbnail_path.exists():
             raise FileNotFoundError(f"Thumbnail not found: {thumbnail_path}")
         file_size = thumbnail_path.stat().st_size
         if file_size > THUMBNAIL_MAX_SIZE_BYTES:
-            raise ValueError(f"Thumbnail size ({file_size} bytes) exceeds YouTube 2MB limit.")
+            raise ValueError(f"Thumbnail size ({file_size} bytes) exceeds YouTube 50MB desktop limit.")
         self.thumbnail_history.append({"video_id": video_id, "thumbnail_path": thumbnail_path, "timestamp": time.time()})
         self.uploaded_thumbnails[video_id] = thumbnail_path
         return True
