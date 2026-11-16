@@ -107,10 +107,12 @@ def default_pattern_library() -> Dict[str, Any]:
         "thumbnail_visual_benchmark": {
             "source_channels": ["ずんだMarket", "ずんだもんの企業栄枯盛衰"],
             "scene_grounded_bg": True,
+            "forbid_ai_generated_images": True,
+            "allowed_bg_sources": ["real_photo", "official_logo", "sec_ir_screenshot", "programmatic_slate"],
             "recommended_thumb_chars": 8,
             "zero_badge_overlay": True,
             "dominant_text_colors": ["yellow", "white"],
-            "note": "Derived from inspecting top long-form Zundamon finance outliers (24k-42k views).",
+            "note": "Derived from inspecting top long-form Zundamon finance outliers (24k-42k views). Never use AI-generated images.",
         },
         "recent_outlier_hooks": [],
     }

@@ -81,6 +81,7 @@ When executing complex tasks via `/teamwork-preview`, the orchestrator structure
 #### 3. Creative & Graphics Designer (`graphics/`)
 - **Scope:** Generates B-roll slides, infographics, citation cards, and YouTube thumbnails (`broll.py`, `infographic.py`, `thumbnail.py`).
 - **Slide & Thumbnail Guardrails:**
+  - **Zero AI-Generated Images (Hard Ban):** NEVER use `image-generator` or any generative-AI image tool for thumbnails or B-roll backgrounds. Only official brand logos (`*logo*.png`), verified real-world photos/SEC/IR screenshots, or programmatic dark-slate/data-chart graphics are permitted.
   - Pro Dark Slate Theme (`#0F172A` / `#1E293B`).
   - 1-Slide-1-Impact: Total characters across slide $\le 100$. Maximum 6 text elements. Zero nested bullets.
   - Visual Parity: Every number on a slide or thumbnail must match a `Verdict.SUPPORTED` claim in `claims.json`.
