@@ -71,6 +71,13 @@ def resolve_background_image(base: Optional[Path] = None) -> Path:
         return resolved
     return (base / FALLBACK_BG_IMAGE_PATH) if base is not None else Path(FALLBACK_BG_IMAGE_PATH)
 
+# YouTube thumbnail upload limits (Oct 2025 rules): desktop / Data API
+# uploads accept up to 50MB and YouTube recommends a 3840x2160 master;
+# the mobile app still rejects files over 2MB, so exceeding 2MB is an
+# advisory warning for desktop/API publishing, never a hard failure.
+THUMBNAIL_DESKTOP_MAX_BYTES: int = 50 * 1024 * 1024
+THUMBNAIL_MOBILE_MAX_BYTES: int = 2 * 1024 * 1024
+
 # Canvas and layout defaults
 DEFAULT_CANVAS_WIDTH: int = 1920
 DEFAULT_CANVAS_HEIGHT: int = 1080
