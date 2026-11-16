@@ -373,7 +373,7 @@ class TestMockYouTubeAdapterSimulation:
             f.seek(THUMBNAIL_MAX_SIZE_BYTES)
             f.write(b"\0")
 
-        with pytest.raises(ValueError, match="exceeds YouTube 2MB limit"):
+        with pytest.raises(ValueError, match="exceeds YouTube 50MB desktop limit"):
             adapter.upload_thumbnail("video_001", over_2mb)
 
     def test_simulated_variant_metrics(self) -> None:
@@ -742,3 +742,15 @@ class TestThumbnailABCoordinator:
             publisher=adapter,
         )
         assert rot.to_variant_id == "B"
+
+
+class TestThumbnailDesktopLimit:
+    def test_upload_thumbnail_accepts_above_mobile_limit(self, tmp_path: Path) -> None:
+        """3MB is over the mobile-app limit but fine for desktop/API upload."""
+        adapter = MockYouTubeAdapter()
+        thumb = tmp_path / "master_3mb.png"
+        with open(thumb, "wb") as f:
+            f.seek(3 * 1024 * 1024 - 1)
+            f.write(b"\0")
+        assert thumb.stat().st_size == 3 * 1024 * 1024
+        assert adapter.upload_thumbnail("video_001", thumb) is True
