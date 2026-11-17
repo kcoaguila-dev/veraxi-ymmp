@@ -155,3 +155,31 @@ def test_render_from_manifest_with_official_types(tmp_path: Path) -> None:
     assert len(generated) == 2
     assert (out_dir / "slide_official_img.png").is_file()
     assert (out_dir / "slide_official_stat.png").is_file()
+
+
+def test_wikimedia_license_filter_and_spotlight_slide(tmp_path: Path) -> None:
+    from veraxi_ymmp.graphics.official_assets import _is_safe_wikimedia_license
+
+    assert _is_safe_wikimedia_license("CC0")
+    assert _is_safe_wikimedia_license("Public domain")
+    assert _is_safe_wikimedia_license("CC BY 4.0")
+    assert not _is_safe_wikimedia_license("CC BY-SA 4.0")
+    assert not _is_safe_wikimedia_license("CC BY-NC 2.0")
+
+    photo = tmp_path / "ceo.png"
+    Image.new("RGBA", (800, 600), (30, 60, 120, 255)).save(photo)
+    manifest = [
+        {
+            "type": "spotlight",
+            "filename": "slide_spotlight.png",
+            "title": "Dario Amodei CEO",
+            "image": str(photo),
+            "source": "Wikimedia Commons (CC BY 4.0)",
+            "highlight_box": [0.1, 0.2, 0.5, 0.3],
+            "theme_color": "amber",
+        }
+    ]
+    generated = render_from_manifest(manifest, tmp_path / "broll")
+    assert len(generated) == 1
+    with Image.open(generated[0]) as im:
+        assert im.size == (1920, 1080)

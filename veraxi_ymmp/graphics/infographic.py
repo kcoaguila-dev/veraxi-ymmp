@@ -15,7 +15,9 @@ Adheres strictly to Clean Architecture, Pro Dark Slate (#0F172A), and cognitive 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
+from PIL import Image
 
 
 from veraxi_ymmp.graphics.broll import (
@@ -452,4 +454,58 @@ def render_infographic_slide(
             is_vertical=is_vertical,
         )
         return True
+    elif stype in ("spotlight", "portrait", "evidence_image"):
+        render_spotlight_slide(
+            out_path=dest,
+            title=spec.get("title", ""),
+            image_path=spec.get("image_path", spec.get("image", spec.get("asset", ""))),
+            source_citation=spec.get("source_citation", spec.get("source", "")),
+            highlight_box=spec.get("highlight_box"),
+            theme_color=theme_color,
+            is_vertical=is_vertical,
+        )
+        return True
     return False
+
+
+def render_spotlight_slide(
+    out_path: Union[str, Path],
+    title: str,
+    image_path: str,
+    source_citation: str = "",
+    highlight_box: Optional[Sequence[float]] = None,
+    theme_color: Tuple[int, int, int] = ACCENT_BLUE,
+    is_vertical: bool = False,
+) -> Path:
+    """Render a documentary real-photo/filing spotlight slide without AI-slop pill badges."""
+    img, draw, fonts = create_slide_base(title, step_tag="", theme_color=theme_color, is_vertical=is_vertical)
+    x1, x2 = (56, 1024) if is_vertical else (70, 1340)
+
+    fx1, fy1, fx2, fy2 = (x1, 120, x2, 690) if not is_vertical else (x1, 108, x2, 650)
+    draw.rounded_rectangle([fx1, fy1, fx2, fy2], radius=16, fill=COLOR_SURFACE, outline=COLOR_BORDER, width=2)
+
+    src = Path(image_path)
+    if src.exists():
+        photo = Image.open(src).convert("RGBA")
+        pw, ph = fx2 - fx1 - 24, fy2 - fy1 - 24
+        scale = min(pw / max(1, photo.width), ph / max(1, photo.height))
+        nw, nh = max(1, int(photo.width * scale)), max(1, int(photo.height * scale))
+        photo = photo.resize((nw, nh), Image.Resampling.LANCZOS)
+        px, py = fx1 + (fx2 - fx1 - nw) // 2, fy1 + (fy2 - fy1 - nh) // 2
+        img.paste(photo, (px, py), photo)
+        if highlight_box and len(highlight_box) == 4:
+            hx, hy, hw, hh = [float(v) for v in highlight_box]
+            bx1, by1 = int(px + hx * nw), int(py + hy * nh)
+            bx2, by2 = int(bx1 + hw * nw), int(by1 + hh * nh)
+            draw.rectangle([bx1, by1, bx2, by2], outline=theme_color, width=5)
+
+    if source_citation:
+        f_cite = _fit_font(draw, f"出典: {source_citation}", fonts["small"], max_width=float(x2 - x1), base_size=22, min_size=16)
+        draw.text((x1, fy2 + 26), f"出典: {source_citation}", font=f_cite, fill=COLOR_TEXT_SECONDARY, anchor="lm")
+
+    if not is_vertical:
+        img.putalpha(255)
+    out_file = Path(out_path).resolve()
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out_file)
+    return out_file

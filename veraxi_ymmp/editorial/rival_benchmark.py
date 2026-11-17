@@ -54,6 +54,21 @@ class NumericDensityReport:
 
 
 @dataclasses.dataclass
+class RivalHookAnalysis:
+    """Structural & psychological analysis of a rival video's opening 30 seconds."""
+
+    archetype: str
+    has_greeting: bool
+    hook_line_count: int
+    hook_chars: int
+    avg_chars_per_line: float
+    question_count: int
+    exclamation_count: int
+    loss_aversion_hits: List[str]
+    hook_lines: List[str]
+
+
+@dataclasses.dataclass
 class RivalBenchmarkReport:
     """Benchmark metrics extracted from a rival video's transcript/subtitles."""
 
@@ -66,6 +81,7 @@ class RivalBenchmarkReport:
     total_chars: int
     density: NumericDensityReport
     hook_preview: str
+    hook_analysis: Optional[RivalHookAnalysis] = None
 
 
 def _clean_text(text: str) -> str:
@@ -312,6 +328,88 @@ def _fetch_via_yt_dlp(
         return parse_subtitle_file(sub_files[0]), info
 
 
+_GREETING_TRIGGERS = (
+    "こんにちは",
+    "こんばんは",
+    "おはよう",
+    "よろしく",
+    "ゆっくりして",
+    "今回は",
+    "について解説",
+)
+_LOSS_AVERSION_TRIGGERS = (
+    "大損",
+    "破産",
+    "蒸発",
+    "ヤバい",
+    "やばい",
+    "危険",
+    "罠",
+    "養分",
+    "全財産",
+    "借金",
+    "暴落",
+    "消滅",
+    "地獄",
+    "失敗",
+    "終わり",
+    "後悔",
+    "爆弾",
+)
+
+
+def analyze_rival_hook(
+    segments: Sequence[Tuple[str, Optional[float], Optional[float]]],
+    window_seconds: float = 30.0,
+) -> RivalHookAnalysis:
+    """Extract and classify the opening hook (first `window_seconds` or 10 lines)."""
+    hook_lines: List[str] = []
+    for idx, (raw_text, start_sec, _) in enumerate(segments):
+        if start_sec is not None:
+            if start_sec > window_seconds:
+                break
+        elif idx >= 10:
+            break
+        cleaned = _clean_text(raw_text)
+        if cleaned:
+            hook_lines.append(cleaned)
+
+    joined = " ".join(hook_lines)
+    hook_chars = sum(len(line) for line in hook_lines)
+    line_count = len(hook_lines)
+    avg_chars = round(hook_chars / line_count, 1) if line_count else 0.0
+    question_count = joined.count("？") + joined.count("?")
+    exclamation_count = joined.count("！") + joined.count("!")
+
+    early_text = " ".join(hook_lines[:3])
+    has_greeting = any(g in early_text for g in _GREETING_TRIGGERS)
+    loss_hits = [kw for kw in _LOSS_AVERSION_TRIGGERS if kw in joined]
+    has_numbers = bool(extract_numbers(joined))
+
+    if has_greeting:
+        archetype = "slow_greeting_intro"
+    elif loss_hits:
+        archetype = "loss_aversion_in_media_res"
+    elif question_count >= 2:
+        archetype = "curiosity_question_hook"
+    elif has_numbers:
+        archetype = "data_shock_hook"
+    else:
+        archetype = "direct_premise_hook"
+
+    return RivalHookAnalysis(
+        archetype=archetype,
+        has_greeting=has_greeting,
+        hook_line_count=line_count,
+        hook_chars=hook_chars,
+        avg_chars_per_line=avg_chars,
+        question_count=question_count,
+        exclamation_count=exclamation_count,
+        loss_aversion_hits=loss_hits,
+        hook_lines=hook_lines,
+    )
+
+
 def benchmark_rival_source(target: str) -> RivalBenchmarkReport:
     """Benchmark a local `.srt`/`.vtt`/`.txt` file or YouTube URL/ID."""
     path = Path(target)
@@ -330,6 +428,7 @@ def benchmark_rival_source(target: str) -> RivalBenchmarkReport:
             title = str(info.get("title") or vid or target)
 
     density = analyze_numeric_density(segments)
+    hook_analysis = analyze_rival_hook(segments)
     total_chars = sum(len(_clean_text(t)) for t, _, _ in segments)
     duration = info.get("duration")
     if duration is None and segments:
@@ -337,12 +436,7 @@ def benchmark_rival_source(target: str) -> RivalBenchmarkReport:
         if ends:
             duration = max(ends)
 
-    hook_parts = [
-        _clean_text(t)
-        for t, s, _ in segments
-        if s is None or s <= 30.0
-    ]
-    hook_preview = " ".join(hook_parts[:6])[:180]
+    hook_preview = " ".join(hook_analysis.hook_lines[:6])[:180]
 
     return RivalBenchmarkReport(
         source_label=target,
@@ -354,7 +448,26 @@ def benchmark_rival_source(target: str) -> RivalBenchmarkReport:
         total_chars=total_chars,
         density=density,
         hook_preview=hook_preview,
+        hook_analysis=hook_analysis,
     )
+
+
+_INVESTMENT_ADVICE_RE = re.compile(
+    r"(?:買うべき|売るべき|待つべき|投資すべき|ホールドすべき|今が買い時|今すぐ買|手を出さない方が|買わない方がいい|売った方がいい)"
+)
+
+
+def find_investment_advice_cuts(dialogue_entries: Sequence[Dict[str, Any]]) -> List[Tuple[int, str]]:
+    """Flag directive buy/sell/wait investment-advice phrasing in explainer lines."""
+    hits: List[Tuple[int, str]] = []
+    for idx, entry in enumerate(dialogue_entries):
+        char_name = str(entry.get("character", ""))
+        if char_name == "ずんだもん":
+            continue
+        text = str(entry.get("text", ""))
+        if _INVESTMENT_ADVICE_RE.search(text):
+            hits.append((idx, char_name))
+    return hits
 
 
 def format_benchmark_comparison_markdown(
@@ -389,8 +502,19 @@ def format_benchmark_comparison_markdown(
         )
 
     if rivals:
-        lines.extend(["", "#### Rival Hook Previews (First 30s):"])
+        lines.extend(["", "#### Rival Hook Blueprints (First 30s):"])
         for r in rivals:
-            lines.append(f"- **{r.title}**: {r.hook_preview}")
+            ha = r.hook_analysis
+            if ha is None:
+                lines.append(f"- **{r.title}**: {r.hook_preview}")
+                continue
+            triggers = ", ".join(ha.loss_aversion_hits) if ha.loss_aversion_hits else "none"
+            lines.append(
+                f"- **{r.title}** (`{ha.archetype}`, greeting=`{ha.has_greeting}`, "
+                f"{ha.hook_line_count} lines, avg {ha.avg_chars_per_line} chars/line, "
+                f"?={ha.question_count}, != {ha.exclamation_count}, triggers=[{triggers}])"
+            )
+            for hl in ha.hook_lines[:10]:
+                lines.append(f"  > {hl}")
 
     return "\n".join(lines)

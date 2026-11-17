@@ -327,3 +327,65 @@ def test_find_unmapped_ascii_tokens_multi_domain() -> None:
     text_unmapped = "謎のアーキテクチャXYZFOOBARが暴走したのだ。"
     unmapped_bad = find_unmapped_ascii_tokens(text_unmapped)
     assert "XYZFOOBAR" in unmapped_bad
+
+
+def test_tune_audio_query_pitch_minasai() -> None:
+    from veraxi_ymmp.audio.phonetics import tune_audio_query_pitch
+
+    query = {
+        "accent_phrases": [
+            {
+                "moras": [
+                    {"text": "ミ", "pitch": 5.80},
+                    {"text": "ナ", "pitch": 5.50},
+                    {"text": "サ", "pitch": 5.45},
+                    {"text": "イ", "pitch": 5.40},
+                ],
+                "accent": 1,
+            }
+        ]
+    }
+    tuned = tune_audio_query_pitch(query)
+    p = tuned["accent_phrases"][0]
+    assert p["accent"] == 3
+    assert p["moras"][1]["pitch"] > p["moras"][0]["pitch"]
+    assert p["moras"][3]["pitch"] < p["moras"][2]["pitch"]
+
+
+def test_normalize_tts_text_okuribito() -> None:
+    from veraxi_ymmp.audio.phonetics import normalize_tts_text
+
+    assert normalize_tts_text("全財産突っ込んで億り人になるのだー！！") == (
+        "全財産突っ込んでおくりびとになるのだー！！"
+    )
+    assert normalize_tts_text("会社が吹き飛ぶ大赤字じゃないのだ！？") == (
+        "会社が吹き飛ぶおおあかじじゃないのだ！？"
+    )
+
+
+def test_tune_audio_query_pitch_teishutsu_shorui() -> None:
+    from veraxi_ymmp.audio.phonetics import tune_audio_query_pitch
+
+    query = {
+        "accent_phrases": [
+            {
+                "moras": [
+                    {"text": "テ", "pitch": 5.78},
+                    {"text": "エ", "pitch": 5.93},
+                    {"text": "シュ", "pitch": 0.0},
+                    {"text": "ツ", "pitch": 6.00},
+                    {"text": "ショ", "pitch": 6.06},
+                    {"text": "ル", "pitch": 6.05},
+                    {"text": "イ", "pitch": 5.97},
+                    {"text": "ノ", "pitch": 5.72},
+                ],
+                "accent": 5,
+            }
+        ]
+    }
+    tuned = tune_audio_query_pitch(query)
+    p = tuned["accent_phrases"][0]
+    assert p["accent"] == 8
+    assert p["moras"][2]["pitch"] == 0.0
+    assert p["moras"][4]["pitch"] < p["moras"][3]["pitch"]
+    assert p["moras"][7]["pitch"] > p["moras"][4]["pitch"]

@@ -523,6 +523,34 @@ def tune_audio_query_pitch(audio_query: Dict[str, Any]) -> Dict[str, Any]:
             moras[0]["vowel_length"] = 0.13
             moras[1]["vowel_length"] = 0.15
 
+        # Fix '見なさい' (OpenJTalk often tags it accent=1 MI-na-sa-i instead of accent=3 mi-NA-SA-i)
+        if mora_texts == ["ミ", "ナ", "サ", "イ"] and p.get("accent") == 1:
+            p["accent"] = 3
+            base_p = max((m.get("pitch", 5.5) for m in moras), default=5.5)
+            moras[0]["pitch"] = round(base_p - 0.14, 3)
+            moras[1]["pitch"] = round(base_p + 0.06, 3)
+            moras[2]["pitch"] = round(base_p + 0.04, 3)
+            moras[3]["pitch"] = round(base_p - 0.16, 3)
+
+        # Fix '提出書類...' (OpenJTalk fuses 提出+書類 into accent=5 ていしゅつしょ＼るい;
+        # reshape into flat Heiban compound without inserting a pause)
+        if (
+            len(mora_texts) >= 7
+            and mora_texts[0] == "テ"
+            and mora_texts[1] in ("エ", "イ")
+            and mora_texts[2:7] == ["シュ", "ツ", "ショ", "ル", "イ"]
+            and p.get("accent") == 5
+        ):
+            p["accent"] = len(moras)
+            base_p = moras[3].get("pitch", 0.0) or max(
+                (m.get("pitch", 0.0) for m in moras[:4] if m.get("pitch", 0.0) > 0),
+                default=5.8,
+            )
+            offsets = {4: -0.12, 5: -0.02, 6: 0.04}
+            for idx in range(4, len(moras)):
+                if moras[idx].get("pitch", 0.0) > 0:
+                    moras[idx]["pitch"] = round(base_p + offsets.get(idx, 0.05), 3)
+
         # Anti-glitch safeguard: clamp extreme runaway spikes (> 6.30 log-F0) that cause vocoder breakdown
         # Preserves natural anime character high-register inflection peaks (5.85 - 6.15 log-F0)
         for m in moras:

@@ -202,6 +202,13 @@ def check_cognitive_load(
         if any(slop in t for slop in ["3つのポイント", "３つのポイント", "3大視点", "３大視点", "3大潮流", "３大潮流", "3大原則", "本日のポイント"]):
             raise ValueError(f"AI Slop Violation on slide '{slide_title}': Generic presentation boilerplate detected in '{t}'.")
 
+def _is_actual_vs_comparison(title: str, hero_metric: str, show_vs: Optional[bool]) -> bool:
+    """Return True only when a clash slide compares actual competing entities."""
+    if show_vs is not None:
+        return bool(show_vs)
+    return bool(re.search(r"(?:\bvs\b|対)", f"{title} {hero_metric}", re.IGNORECASE))
+
+
 def render_clash_slide(
     out_path: Union[str, Path],
     title: str,
@@ -213,6 +220,7 @@ def render_clash_slide(
     impact_text: str = "",
     theme_color: Tuple[int, int, int] = ACCENT_AMBER,
     is_vertical: bool = False,
+    show_vs: Optional[bool] = None,
 ) -> None:
     """
     Renders a High-Contrast Dual Combatant Clash Board (Broadcast Studio Tier).
@@ -291,27 +299,16 @@ def render_clash_slide(
             else:
                 draw.text((bx1 + 26, mid_y1 + 200), bsub, font=fn_sub, fill=(226, 232, 240, 255), anchor="lm")
 
-    # Center VS Badge
-    vs_cx = (left_x2 + right_x1) // 2
-    vs_cy = (mid_y1 + mid_y2) // 2
-    draw.ellipse([vs_cx - 38, vs_cy - 38, vs_cx + 38, vs_cy + 38], fill=(239, 68, 68, 255), outline=(255, 255, 255, 255), width=2)
-    draw.text((vs_cx, vs_cy), "VS", font=fonts["card_title"], fill=(255, 255, 255, 255), anchor="mm")
+    # Center VS Badge (only when explicitly requested or title/headline indicates an actual rivalry)
+    if _is_actual_vs_comparison(title, hero_metric, show_vs):
+        vs_cx, vs_cy = (left_x2 + right_x1) // 2, (mid_y1 + mid_y2) // 2
+        draw.ellipse([vs_cx - 38, vs_cy - 38, vs_cx + 38, vs_cy + 38], fill=(239, 68, 68, 255), outline=(255, 255, 255, 255), width=2)
+        draw.text((vs_cx, vs_cy), "VS", font=fonts["card_title"], fill=(255, 255, 255, 255), anchor="mm")
 
     # 3. Bottom Impact Banner
     if impact_text:
         bot_y1, bot_y2 = (560, 670) if not is_vertical else (525, 680)
-        cy = (bot_y1 + bot_y2) // 2
-        draw.rounded_rectangle([x1, bot_y1, x2, bot_y2], radius=14, fill=(30, 41, 59, 255), outline=(239, 68, 68, 255), width=2)
-        draw.rounded_rectangle([x1, bot_y1, x1 + 10, bot_y2], radius=4, fill=(239, 68, 68, 255))
-        if impact_tag:
-            tag_w = max(draw.textlength(impact_tag, font=fonts["badge"]) + 32, 90)
-            draw.rounded_rectangle([x1 + 24, bot_y1 + 20, x1 + 24 + tag_w, bot_y2 - 20], radius=8, fill=(239, 68, 68, 255))
-            draw.text((x1 + 24 + tag_w // 2, cy), impact_tag, font=fonts["badge"], fill=(255, 255, 255, 255), anchor="mm")
-            txt_x = x1 + 44 + tag_w
-        else:
-            txt_x = x1 + 32
-        fn_imp = _fit_font(draw, impact_text, fonts["title"], max_width=float(x2 - txt_x - 24), base_size=30, min_size=20)
-        draw.text((txt_x, cy), impact_text, font=fn_imp, fill=COLOR_TEXT_PRIMARY, anchor="lm")
+        _draw_bottom_banner(draw, fonts, x1, x2, bot_y1, bot_y2, (239, 68, 68, 255), impact_tag, impact_text, fonts["title"], min_tag_w=90, tag_gap=44, no_tag_pad=32, bar_w=10, tag_text_col=(255, 255, 255, 255))
 
     if not is_vertical:
         img.putalpha(255)
@@ -569,6 +566,28 @@ def render_vs_slide(
     img.save(out_path)
     logger.info("Saved: %s", out_path)
 
+def _draw_bottom_banner(
+    draw: Any, fonts: dict, x1: int, x2: int, bot_y1: int, bot_y2: int,
+    accent: Tuple[int, ...], tag: str, text: str, base_font: Any,
+    min_tag_w: int = 80, tag_gap: int = 40, no_tag_pad: int = 28, bar_w: int = 8,
+    tag_text_col: Optional[Tuple[int, ...]] = None,
+) -> None:
+    """Draws a bottom accent banner with an optional left tag pill."""
+    cy = (bot_y1 + bot_y2) / 2
+    draw.rounded_rectangle([x1, bot_y1, x2, bot_y2], radius=14, fill=COLOR_SURFACE, outline=accent, width=2)
+    draw.rounded_rectangle([x1, bot_y1, x1 + bar_w, bot_y2], radius=4, fill=accent)
+    if tag.strip():
+        tag_w = max(draw.textlength(tag, font=fonts["badge"]) + 32, min_tag_w)
+        draw.rounded_rectangle([x1 + 24, bot_y1 + 20, x1 + 24 + tag_w, bot_y2 - 20], radius=8, fill=accent)
+        tcol = tag_text_col if tag_text_col is not None else get_pill_text_color(accent[:3])  # type: ignore[arg-type]
+        draw.text((x1 + 24 + tag_w / 2, cy), tag, font=fonts["badge"], fill=tcol, anchor="mm")
+        txt_x = x1 + tag_gap + tag_w
+    else:
+        txt_x = x1 + no_tag_pad
+    c_font = _fit_font(draw, text, base_font, max_width=float(x2 - txt_x - 24), base_size=30, min_size=20)
+    draw.text((txt_x, cy), text, font=c_font, fill=COLOR_TEXT_PRIMARY, anchor="lm")
+
+
 def render_overview_slide(
     out_path: Path,
     title: str,
@@ -669,17 +688,7 @@ def render_overview_slide(
     if has_banner:
         banner_accent = norm_cards[0][3] if norm_cards else theme_color
         bot_y1, bot_y2 = (580, 676) if is_vertical else (670, 755)
-        bot_cy = (bot_y1 + bot_y2) / 2
-        draw.rounded_rectangle([x1, bot_y1, x2, bot_y2], radius=14, fill=COLOR_SURFACE, outline=banner_accent, width=2)
-        draw.rounded_rectangle([x1, bot_y1, x1 + 8, bot_y2], radius=4, fill=banner_accent)
-
-        tag_w = max(draw.textlength(conclusion_tag, font=fonts["badge"]) + 32, 80)
-        draw.rounded_rectangle([x1 + 24, bot_y1 + 20, x1 + 24 + tag_w, bot_y2 - 20], radius=8, fill=banner_accent)
-        banner_txt_col = get_pill_text_color(banner_accent)
-        draw.text((x1 + 24 + tag_w / 2, bot_cy), conclusion_tag, font=fonts["badge"], fill=banner_txt_col, anchor="mm")
-        c_txt_x = x1 + 40 + tag_w
-        c_font = _fit_font(draw, conclusion_text, fonts["footer"], max_width=x2 - c_txt_x - 24, base_size=30, min_size=20)
-        draw.text((c_txt_x, bot_cy), conclusion_text, font=c_font, fill=COLOR_TEXT_PRIMARY, anchor="lm")
+        _draw_bottom_banner(draw, fonts, x1, x2, bot_y1, bot_y2, banner_accent, conclusion_tag, conclusion_text, fonts["footer"])
 
     if not is_vertical:
         img.putalpha(255)
@@ -826,6 +835,7 @@ def render_from_manifest(
                 impact_tag=str(spec.get("impact_tag") or spec.get("bottom_tag") or ""),
                 impact_text=str(spec.get("impact_text") or spec.get("bottom_text") or ""),
                 theme_color=theme_color, is_vertical=spec_vertical,
+                show_vs=spec.get("show_vs"),
             )
         elif stype == "vs":
             def _norm_box(b: Any) -> Tuple[str, str, List[str]]:
@@ -869,7 +879,7 @@ def render_from_manifest(
                 verification_badge=spec.get("verification_badge", "VERIFIED"), theme_color=theme_color,
                 category_tag=spec.get("category_tag", ""), is_vertical=spec_vertical,
             )
-        elif stype in ("matrix", "flow", "architecture", "value_chain", "domino", "causality", "chain"):
+        elif stype in ("matrix", "flow", "architecture", "value_chain", "domino", "causality", "chain", "spotlight", "portrait", "evidence_image"):
             from veraxi_ymmp.graphics.infographic import render_infographic_slide
             render_infographic_slide(stype, spec, dest, theme_color, spec_vertical)
         generated.append(dest)

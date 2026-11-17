@@ -143,3 +143,27 @@ def test_thumbnail_title_pairing_and_logo_discovery(tmp_path: Path) -> None:
     logo = assets / "acme_logo.png"
     logo.write_bytes(b"fake")
     assert discover_project_brand_logo(tmp_path) == str(logo)
+
+
+def test_analyze_rival_hook_classification() -> None:
+    """Classifies rival 30s hooks into loss-aversion vs slow-greeting archetypes."""
+    from veraxi_ymmp.editorial.rival_benchmark import analyze_rival_hook
+
+    loss_hook = analyze_rival_hook([
+        ("全財産突っ込んで億り人になるのだー！！", 0.0, 3.0),
+        ("その全財産、一瞬で蒸発しますわよ。", 3.0, 6.0),
+        ("はあ！？養分になるのだ！？", 6.0, 9.0),
+        ("ここは30秒以降なので含まれない", 35.0, 38.0),
+    ])
+    assert loss_hook.archetype == "loss_aversion_in_media_res"
+    assert not loss_hook.has_greeting
+    assert loss_hook.hook_line_count == 3
+    assert "全財産" in loss_hook.loss_aversion_hits
+    assert "蒸発" in loss_hook.loss_aversion_hits
+
+    slow_hook = analyze_rival_hook([
+        ("皆さんこんにちは！今日は解説します。", 0.0, 4.0),
+        ("ゆっくりしていってね。", 4.0, 7.0),
+    ])
+    assert slow_hook.archetype == "slow_greeting_intro"
+    assert slow_hook.has_greeting

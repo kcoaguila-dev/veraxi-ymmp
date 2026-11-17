@@ -123,3 +123,10 @@ Top YouTube explainer channels (ゆっくり解説, ずんだもん解説) succe
 4. **Varying Affirmations & Dynamic Banter (定型相槌の重複禁止):**
    - Repeating `「その通りですわ」` multiple times across a video sounds mechanical.
    - Use lively, varied conversational reactions: `「甘いですわね」`, `「仰る通りですわ」`, `「核心を突きましたわね」`, `「愚問ですわ」`, `「まさにその通りなのだ！」`.
+
+---
+
+## 12. Non-Financial-Advice Framing Invariant (投資助言・売買推奨の禁止)
+- **Zero Directive Buy/Sell/Wait Advice:** NEVER tell viewers what they *should* buy, sell, hold, or wait for (`「〜を買うべき」`, `「〜を売るべき」`, `「〜を割るまで待つべき」`, `「今が買い時」` are banned in explainer/analyst lines).
+- **Third-Party Attribution:** Always attribute valuation thresholds and risk stances to the cited primary source or analyst (e.g. `「ダモダラン教授は、本質的価値の1.45兆ドルを下回らない限り割に合わないと分析していますわ。」`).
+- **Editorial Stance:** Present primary-source facts, structural incentives, and valuation math objectively—never act as a licensed investment advisor.

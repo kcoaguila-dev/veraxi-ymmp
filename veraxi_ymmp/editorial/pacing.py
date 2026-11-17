@@ -535,15 +535,11 @@ def audit_script_pacing(
 
     # 13b. Check Zero-B-Roll Invariant
     if len(dialogue_entries) >= 10 and not any(bool(e.get("image")) for e in dialogue_entries):
-        violations.append(
-            PacingRuleViolation(
-                rule_name="ZERO_BROLL_PRESENTATION_VIOLATION",
-                severity="ERROR",
-                character=None,
-                message="Video script has 0 B-roll slides assigned across the entire timeline.",
-                remedy="Retention pacing requires visual stimuli refresh. Assign B-roll slides starting at Cut #3 or after Cold Open hook.",
-            )
-        )
+        violations.append(PacingRuleViolation(rule_name="ZERO_BROLL_PRESENTATION_VIOLATION", severity="ERROR", character=None, message="Video script has 0 B-roll slides assigned across the entire timeline.", remedy="Retention pacing requires visual stimuli refresh. Assign B-roll slides starting at Cut #3 or after Cold Open hook."))
+
+    from veraxi_ymmp.editorial.rival_benchmark import find_investment_advice_cuts
+    if advice_cuts := find_investment_advice_cuts(dialogue_entries):
+        violations.append(PacingRuleViolation(rule_name="INVESTMENT_ADVICE_FRAMING", severity="WARNING", character=None, message=f"Directive investment-advice phrasing at {len(advice_cuts)} cut(s): " + ", ".join(f"#{i} ({c})" for i, c in advice_cuts[:4]), remedy="Attribute valuation thresholds to the cited analyst/source instead of telling viewers what they should buy, sell, or wait for."))
 
     # 14. Check Slide Stagnation & Visual Cadence
     current_img: Optional[str] = None

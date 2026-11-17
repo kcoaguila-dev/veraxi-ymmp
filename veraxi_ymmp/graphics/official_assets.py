@@ -697,3 +697,85 @@ def render_official_data_slide(
     out_file.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_file)
     return out_file
+
+
+_SAFE_WIKIMEDIA_LICENSES = ("cc0", "public domain", "cc by 4.0", "cc by 3.0", "cc by 2.0", "cc-by-4.0", "cc-by-3.0")
+_BLOCKED_WIKIMEDIA_LICENSES = ("sa", "nc", "nd", "fair use", "copyrighted")
+
+
+def _is_safe_wikimedia_license(license_name: str) -> bool:
+    low = license_name.strip().lower()
+    if not low or any(b in low for b in _BLOCKED_WIKIMEDIA_LICENSES):
+        return False
+    return any(s in low for s in _SAFE_WIKIMEDIA_LICENSES)
+
+
+def fetch_wikimedia_asset(
+    query: str,
+    out_dir: Union[str, Path],
+    filename: Optional[str] = None,
+    timeout: int = 15,
+) -> Optional[Dict[str, str]]:
+    """Fetch a CC0/Public-Domain/CC-BY image from Wikimedia Commons and log attribution."""
+    import json
+    import re
+    import urllib.request
+    from urllib.parse import urlencode
+
+    params = urlencode({
+        "action": "query",
+        "format": "json",
+        "generator": "search",
+        "gsrsearch": f"filetype:bitmap {query}",
+        "gsrnamespace": 6,
+        "gsrlimit": 8,
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata",
+        "iiurlwidth": 1280,
+    })
+    api_url = f"https://commons.wikimedia.org/w/api.php?{params}"
+    req = urllib.request.Request(api_url, headers={"User-Agent": "VeraxiYMMP/1.0 (https://github.com/veraxi)"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+
+    pages = payload.get("query", {}).get("pages", {})
+    for page in sorted(pages.values(), key=lambda p: p.get("index", 999)):
+        info_list = page.get("imageinfo") or []
+        if not info_list:
+            continue
+        info = info_list[0]
+        meta = info.get("extmetadata", {})
+        lic = str(meta.get("LicenseShortName", {}).get("value", ""))
+        if not _is_safe_wikimedia_license(lic):
+            continue
+        img_url = str(info.get("thumburl") or info.get("url") or "")
+        if not img_url:
+            continue
+
+        target_dir = Path(out_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", query.strip().lower()).strip("_") or "asset"
+        ext = ".png" if img_url.lower().endswith(".png") else ".jpg"
+        out_name = filename or f"{safe_stem}{ext}"
+        out_path = target_dir / out_name
+
+        img_req = urllib.request.Request(img_url, headers={"User-Agent": "VeraxiYMMP/1.0"})
+        with urllib.request.urlopen(img_req, timeout=timeout) as img_resp:
+            out_path.write_bytes(img_resp.read())
+
+        author_raw = str(meta.get("Artist", {}).get("value", "Wikimedia Commons"))
+        author = re.sub(r"<[^>]+>", "", author_raw).strip()[:80]
+        record = {
+            "filename": out_name,
+            "query": query,
+            "title": str(page.get("title", "")),
+            "author": author,
+            "license": lic,
+            "url": str(info.get("descriptionurl") or img_url),
+        }
+        credits_path = target_dir / "license_credits.json"
+        existing = json.loads(credits_path.read_text(encoding="utf-8")) if credits_path.exists() else []
+        existing = [r for r in existing if r.get("filename") != out_name] + [record]
+        credits_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+        return record
+    return None
