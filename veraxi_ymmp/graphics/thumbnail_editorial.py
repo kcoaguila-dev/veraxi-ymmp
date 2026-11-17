@@ -91,11 +91,14 @@ def compose_dual_brand_logo(
     def _dark_mode(im: Image.Image) -> Image.Image:
         im = im.convert("RGBA")
         px = im.load()
-        for y in range(im.height):
-            for x in range(im.width):
-                r, g, b, a = px[x, y]
-                if a > 20 and max(r, g, b) < 150 and (max(r, g, b) - min(r, g, b)) < 25:
-                    px[x, y] = (245, 248, 255, a)
+        if px is not None:
+            for y in range(im.height):
+                for x in range(im.width):
+                    pixel = px[x, y]
+                    if isinstance(pixel, tuple) and len(pixel) >= 4:
+                        r, g, b, a = int(pixel[0]), int(pixel[1]), int(pixel[2]), int(pixel[3])
+                        if a > 20 and max(r, g, b) < 150 and (max(r, g, b) - min(r, g, b)) < 25:
+                            px[x, y] = (245, 248, 255, a)
         bbox = im.getbbox()
         return im.crop(bbox) if bbox else im
 
@@ -108,6 +111,7 @@ def compose_dual_brand_logo(
     canvas = Image.new("RGBA", (l_r.width + r_r.width + vs_w + gap * 2, target_h + 24), (0, 0, 0, 0))
     canvas.paste(l_r, (0, 6), l_r)
     draw = ImageDraw.Draw(canvas)
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
     try:
         font = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 46)
     except Exception:
@@ -256,7 +260,8 @@ def render_editorial_spotlight_layout(
             canvas.paste(sym_faded, (780, 170), sym_faded)
 
     subject_str = getattr(config, "subject_image_path", None)
-    has_subject = bool(subject_str and Path(subject_str).exists())
+    subject_path = Path(subject_str) if isinstance(subject_str, (str, Path)) and subject_str else None
+    has_subject = bool(subject_path and subject_path.exists())
 
     # 2. Right-side Mascot Sticker (single high-emotion close-up reaction)
     char_name = getattr(config, "character", "ずんだもん") or "ずんだもん"
@@ -283,10 +288,10 @@ def render_editorial_spotlight_layout(
 
     # 3. Left-top Subject Anchor Card (CEO Portrait / Real Subject Photo)
     card_x, card_y, card_w, card_h = 70, 65, 500, 470
-    if has_subject:
+    if has_subject and subject_path is not None:
         _draw_rounded_card_photo(
             canvas,
-            Path(subject_str),
+            subject_path,
             box=(card_x, card_y, card_w, card_h),
             radius=28,
             border_color=(217, 119, 87, 255),

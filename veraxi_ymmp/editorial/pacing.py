@@ -821,7 +821,10 @@ def audit_script_pacing(
 
     _, numeric_violations = audit_script_numeric_density(dialogue_entries)
     for nv in numeric_violations:
-        violations.append(PacingRuleViolation(**nv))
+        violations.append(PacingRuleViolation(
+            str(nv.get("rule_name") or ""), str(nv.get("severity") or "WARNING"),
+            nv.get("character"), str(nv.get("message") or ""), str(nv.get("remedy") or ""),
+        ))
 
     # Calculate overall retention health score (100 base, subtract penalties)
     score = 100
